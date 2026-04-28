@@ -8,22 +8,26 @@ import base64
 from functools import lru_cache
 from threading import Timer
 
-def get_credentials():
-    """Récupère les credentials depuis Render ou fichier local"""
-    # Essayer depuis variable d'environnement (Render)
-    if os.environ.get('GOOGLE_CREDENTIALS'):
+def get_credentials_info():
+    """Récupère les credentials Google Sheets depuis une variable env (Render) ou un fichier (local)."""
+    # 1. Variable d'environnement (PRIORITAIRE pour Render)
+    creds_env = os.environ.get('GOOGLE_CREDENTIALS')
+    if creds_env:
         try:
-            creds_json = base64.b64decode(os.environ.get('GOOGLE_CREDENTIALS')).decode()
+            # Décoder le Base64 que vous allez mettre sur Render
+            creds_json = base64.b64decode(creds_env).decode('utf-8')
             return json.loads(creds_json)
-        except:
-            pass
-    
-    # Fallback sur le fichier local
-    if os.path.exists(Config.GOOGLE_SHEETS_CREDENTIALS):
-        with open(Config.GOOGLE_SHEETS_CREDENTIALS, 'r') as f:
+        except Exception as e:
+            print(f"⚠️ Erreur lors du décodage de GOOGLE_CREDENTIALS: {e}", file=sys.stderr)
+
+    # 2. Fallback sur le fichier local (pour votre environnement de développement)
+    local_creds_path = 'credentials.json' # Assurez-vous que le chemin est correct
+    if os.path.exists(local_creds_path):
+        with open(local_creds_path, 'r') as f:
+            print("ℹ️ Utilisation des credentials depuis le fichier local.", file=sys.stderr)
             return json.load(f)
-    
-    raise Exception("Credentials non trouvés")
+
+    raise Exception("Aucun credential Google Sheets trouvé (variable GOOGLE_CREDENTIALS ou fichier credentials.json).")
 
 class SheetsHelper:
     def __init__(self):
