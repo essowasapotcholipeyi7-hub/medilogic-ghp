@@ -138,8 +138,30 @@ def index():
         email = request.form.get('email')
         password = request.form.get('password')
         
-        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+        # 🔥 Chercher d'abord dans les utilisateurs (users)
+        users = sheets_helper.get_all_records('users')
+        for user in users:
+            if user.get('email') == email:
+                if user.get('mot_de_passe') == hash_password(password):
+                    # Récupérer la structure du user
+                    structure_id = user.get('structure_id')
+                    structures = sheets_helper.get_all_records('structures', use_prefix=False)
+                    structure = next((s for s in structures if s.get('ID') == structure_id), {})
+                    
+                    if structure.get('statut') == 'active':
+                        session['user_id'] = user.get('ID')
+                        session['user_name'] = user.get('nom')
+                        session['structure_id'] = structure_id
+                        session['structure_nom'] = structure.get('nom')
+                        session['is_admin'] = (user.get('role') == 'admin')  # 🔥 True ou False
+                        flash(f'Bienvenue {user.get("nom")}', 'success')
+                        return redirect(url_for('dashboard'))
+                    else:
+                        flash('Structure non activée', 'warning')
+                        return redirect(url_for('index'))
         
+        # Si pas dans users, chercher dans structures (admin global)
+        structures = sheets_helper.get_all_records('structures', use_prefix=False)
         for structure in structures:
             if structure.get('email') == email:
                 if structure.get('mot_de_passe') == hash_password(password):
@@ -148,6 +170,7 @@ def index():
                         session['user_name'] = structure.get('nom')
                         session['structure_id'] = structure.get('ID')
                         session['structure_nom'] = structure.get('nom')
+                        session['is_admin'] = True  # Le propriétaire est admin
                         flash(f'Bienvenue {structure.get("nom")}', 'success')
                         return redirect(url_for('dashboard'))
                     else:
@@ -1837,4 +1860,7 @@ def admin_logout():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut
+    port = int(os.environ.get("PORT", 5000))
+    # Bind sur l'interface réseau 0.0.0.0 pour être accessible publiquement
+    app.run(host='0.0.0.0', port=port, debug=False) # Mettez debug=False en production

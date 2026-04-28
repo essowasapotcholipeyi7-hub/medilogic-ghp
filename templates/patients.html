@@ -5,16 +5,7 @@
 {% block content %}
 <div class="row">
     <div class="col-md-3 mb-4">
-        <div class="sidebar">
-            <h5 class="mb-3"><i class="fas fa-chart-line"></i> Menu</h5>
-            <div class="nav flex-column">
-                <a class="nav-link" href="{{ url_for('dashboard') }}"><i class="fas fa-tachometer-alt"></i> Tableau de bord</a>
-                <a class="nav-link active" href="{{ url_for('patients') }}"><i class="fas fa-users"></i> Patients</a>
-                <a class="nav-link" href="{{ url_for('actes_vente') }}"><i class="fas fa-stethoscope"></i> Actes & Vente</a>
-                <a class="nav-link" href="{{ url_for('pharma_vente') }}"><i class="fas fa-pills"></i> Pharmacie</a>
-                <a class="nav-link" href="{{ url_for('admin_structure') }}"><i class="fas fa-cog"></i> Administration</a>
-            </div>
-        </div>
+        {% include 'sidebar_menu.html' %}
     </div>
 
     <div class="col-md-9">
