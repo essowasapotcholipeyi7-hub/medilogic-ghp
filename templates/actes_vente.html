@@ -1,0 +1,490 @@
+{% extends "base.html" %}
+
+{% block title %}Actes & Vente{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3 mb-4">
+        <div class="sidebar">
+            <h5 class="mb-3"><i class="fas fa-chart-line"></i> Menu</h5>
+            <div class="nav flex-column">
+                <a class="nav-link" href="{{ url_for('dashboard') }}"><i class="fas fa-tachometer-alt"></i> Tableau de bord</a>
+                <a class="nav-link" href="{{ url_for('patients') }}"><i class="fas fa-users"></i> Patients</a>
+                <a class="nav-link active" href="{{ url_for('actes_vente') }}"><i class="fas fa-stethoscope"></i> Actes & Vente</a>
+                <a class="nav-link" href="{{ url_for('pharma_vente') }}"><i class="fas fa-pills"></i> Pharmacie</a>
+                <a class="nav-link" href="{{ url_for('admin_structure') }}"><i class="fas fa-cog"></i> Administration</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-9">
+        <!-- Info patient sélectionné -->
+        <div class="alert alert-info" id="patientInfo" style="display:none;">
+            <div class="row">
+                <div class="col-md-5">
+                    <strong><i class="fas fa-user"></i> Patient :</strong> <span id="selectedPatientName"></span>
+                </div>
+                <div class="col-md-3">
+                    <strong><i class="fas fa-shield-alt"></i> Assurance :</strong> <span id="selectedAssurance"></span>
+                </div>
+                <div class="col-md-4">
+                    <strong><i class="fas fa-percent"></i> Taux :</strong> <span id="selectedTaux"></span>%
+                    <button class="btn btn-sm btn-warning float-end" onclick="changePatient()">
+                        <i class="fas fa-exchange-alt"></i> Changer
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Message si aucun patient sélectionné -->
+        <div class="alert alert-warning" id="noPatientAlert">
+            <i class="fas fa-exclamation-triangle"></i> 
+            Veuillez d'abord sélectionner un patient dans la <a href="{{ url_for('patients') }}">liste des patients</a>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header bg-primary text-white">
+                <h5><i class="fas fa-stethoscope"></i> Actes médicaux</h5>
+            </div>
+            <div class="card-body">
+                <!-- Barre de recherche -->
+                <div class="row mb-3">
+                    <div class="col-md-6 mx-auto">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0">
+                                <i class="fas fa-search text-primary"></i>
+                            </span>
+                            <input type="text" id="searchActeInput" class="form-control border-start-0" 
+                                   placeholder="Rechercher un acte médical..." 
+                                   onkeyup="filterActes()">
+                            <button class="btn btn-outline-secondary" onclick="clearActeSearch()" type="button">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="text-muted small mt-1">
+                            <i class="fas fa-info-circle"></i> <span id="acteResultCount">0</span> acte(s) trouvé(s)
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label">Sélectionner un acte</label>
+                        <select class="form-control" id="acteSelect" size="8">
+                            <option value="">-- Choisir un acte --</option>
+                            {% for acte in actes %}
+                            <option value="{{ acte.ID }}" data-prix="{{ acte.prix }}" data-nom="{{ acte.nom }}">
+                                {{ acte.nom }} - {{ acte.prix }} FCFA
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Quantité</label>
+                        <input type="number" class="form-control" id="quantite" value="1" min="1">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">&nbsp;</label>
+                        <button class="btn btn-success w-100" onclick="ajouterActe()">
+                            <i class="fas fa-cart-plus"></i> Ajouter
+                        </button>
+                    </div>
+                </div>
+                
+                <hr>
+
+                <h6>Panier des actes</h6>
+                <div class="table-responsive">
+                    <table class="table table-bordered" id="panierTable">
+                        <thead>
+                            <tr>
+                                <th>Acte</th>
+                                <th>Prix unitaire (FCFA)</th>
+                                <th>Quantité</th>
+                                <th>Total (FCFA)</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="panierBody">
+                            <tr><td colspan="5" class="text-center">Aucun acte dans le panier</td></tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="3" class="text-end">Sous-total :</th>
+                                <th id="sousTotal" class="text-end">0 FCFA</th>
+                                <th></th>
+                            </tr>
+                            <tr>
+                                <th colspan="3" class="text-end text-success">Prise en charge (assurance) :</th>
+                                <th id="priseEnCharge" class="text-end text-success">0 FCFA</th>
+                                <th></th>
+                            </tr>
+                            <tr>
+                                <th colspan="3" class="text-end text-danger">À payer par le patient :</th>
+                                <th id="netAPayer" class="text-end text-danger">0 FCFA</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Mode de paiement</label>
+                        <select class="form-control" id="modePaiement">
+                            <option value="especes">💰 Espèces</option>
+                            <option value="carte">💳 Carte bancaire</option>
+                            <option value="Moov_money">📱 FLOOZ</option>
+                            <option value="Mixx_By_Yas">📱 MIXX By YAS</option>
+                            <option value="cheque">📝 Chèque</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Type de document</label>
+                        <select class="form-control" id="typeDocument">
+                            <option value="recu_client">📄 Reçu Patient</option>
+                            <option value="recu_structure">📋 Reçu Structure (copie)</option>
+                            <option value="facture_client">📑 Facture Patient</option>
+                            <option value="facture_structure">🗄️ Facture Structure (archive)</option>
+                            <option value="les_deux">📄+📑 Les deux (Patient+Structure)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">&nbsp;</label>
+                        <button class="btn btn-primary w-100" onclick="finaliserVente()" id="finaliserBtn" disabled>
+                            <i class="fas fa-receipt"></i> Finaliser la vente
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let panier = [];
+let patientId = null;
+let patientTaux = 0;
+let patientName = '';
+
+// ========== RECHERCHE D'ACTES ==========
+function filterActes() {
+    const searchTerm = document.getElementById('searchActeInput').value.toLowerCase().trim();
+    const select = document.getElementById('acteSelect');
+    const options = select.options;
+    let visibleCount = 0;
+    
+    for (let i = 1; i < options.length; i++) {
+        const option = options[i];
+        const text = option.text.toLowerCase();
+        
+        if (searchTerm === '' || text.includes(searchTerm)) {
+            option.style.display = '';
+            visibleCount++;
+        } else {
+            option.style.display = 'none';
+        }
+    }
+    
+    document.getElementById('acteResultCount').innerText = visibleCount;
+}
+
+function clearActeSearch() {
+    document.getElementById('searchActeInput').value = '';
+    filterActes();
+}
+
+// ========== GESTION PATIENT ==========
+function checkSelectedPatient() {
+    patientId = sessionStorage.getItem('selectedPatientId');
+    patientName = sessionStorage.getItem('selectedPatientName');
+    let assurance = sessionStorage.getItem('selectedPatientAssurance');
+    let taux = sessionStorage.getItem('selectedPatientTaux');
+    
+    if (!patientId || patientId === 'null' || patientId === 'undefined') {
+        patientId = localStorage.getItem('selectedPatientId');
+        patientName = localStorage.getItem('selectedPatientName');
+        assurance = localStorage.getItem('selectedPatientAssurance');
+        taux = localStorage.getItem('selectedPatientTaux');
+    }
+    
+    if (patientId && patientId !== 'null' && patientId !== 'undefined' && patientId !== '') {
+        patientTaux = parseFloat(taux) || 0;
+        document.getElementById('selectedPatientName').innerText = patientName || 'Patient';
+        
+        // 🔥 GESTION DES ASSURANCES (y compris personnalisées)
+        let assuranceText = 'Non assuré';
+        let assuranceClass = 'bg-secondary';
+        
+        if (assurance === 'amu_cnss') {
+            assuranceText = 'AMU-CNSS';
+            assuranceClass = 'bg-success';
+        } else if (assurance === 'amu_inam') {
+            assuranceText = 'AMU-INAM';
+            assuranceClass = 'bg-primary';
+        } else if (assurance === 'autre') {
+            assuranceText = 'Autre assurance';
+            assuranceClass = 'bg-info';
+        } else if (assurance && assurance !== 'non_assure' && assurance !== 'null') {
+            // 🔥 C'est une assurance personnalisée (ex: "CNPS", "MUTUELLE", "ALLIANZ")
+            assuranceText = assurance;
+            assuranceClass = 'bg-info';
+        }
+        
+        const assuranceSpan = document.getElementById('selectedAssurance');
+        assuranceSpan.innerHTML = assuranceText;
+        assuranceSpan.className = `badge ${assuranceClass} px-3 py-2`;
+        
+        document.getElementById('selectedTaux').innerHTML = patientTaux;
+        document.getElementById('patientInfo').style.display = 'block';
+        document.getElementById('noPatientAlert').style.display = 'none';
+    } else {
+        document.getElementById('patientInfo').style.display = 'none';
+        document.getElementById('noPatientAlert').style.display = 'block';
+    }
+}
+
+function changePatient() {
+    window.location.href = "/patients";
+}
+
+// ========== GESTION PANIER ==========
+function ajouterActe() {
+    let select = document.getElementById('acteSelect');
+    let selectedIndex = select.selectedIndex;
+    
+    if (selectedIndex === 0 || !select.value) {
+        alert('Veuillez sélectionner un acte');
+        return;
+    }
+    
+    let selectedOption = select.options[selectedIndex];
+    let acteId = select.value;
+    let acteNom = selectedOption.getAttribute('data-nom');
+    let actePrix = parseFloat(selectedOption.getAttribute('data-prix'));
+    let quantite = parseInt(document.getElementById('quantite').value);
+    
+    if (isNaN(actePrix) || !acteNom) {
+        alert('Erreur: Données de l\'acte invalides');
+        return;
+    }
+    
+    let existant = panier.find(item => item.id == acteId);
+    if (existant) {
+        existant.quantite += quantite;
+        existant.total = existant.prix * existant.quantite;
+    } else {
+        panier.push({
+            id: acteId,
+            nom: acteNom,
+            prix: actePrix,
+            quantite: quantite,
+            total: actePrix * quantite
+        });
+    }
+    
+    afficherPanier();
+    select.selectedIndex = 0;
+    document.getElementById('quantite').value = '1';
+}
+
+function modifierPrix(index, nouveauPrix) {
+    let prix = parseFloat(nouveauPrix);
+    if (isNaN(prix) || prix <= 0) {
+        alert('Veuillez entrer un prix valide');
+        afficherPanier();
+        return;
+    }
+    panier[index].prix = prix;
+    panier[index].total = prix * panier[index].quantite;
+    afficherPanier();
+}
+
+function modifierQuantiteDirect(index, nouvelleQuantite) {
+    let qte = parseInt(nouvelleQuantite);
+    if (isNaN(qte) || qte < 1) qte = 1;
+    panier[index].quantite = qte;
+    panier[index].total = panier[index].prix * qte;
+    afficherPanier();
+}
+
+function afficherPanier() {
+    let tbody = document.getElementById('panierBody');
+    tbody.innerHTML = '';
+    
+    if (panier.length === 0) {
+        tbody.innerHTML = '<td><td colspan="5" class="text-center">Aucun acte dans le panier</td></tr>';
+        document.getElementById('finaliserBtn').disabled = true;
+        document.getElementById('sousTotal').innerHTML = '0 FCFA';
+        document.getElementById('priseEnCharge').innerHTML = '0 FCFA';
+        document.getElementById('netAPayer').innerHTML = '0 FCFA';
+        return;
+    }
+    
+    let sousTotal = 0;
+    for (let index = 0; index < panier.length; index++) {
+        let item = panier[index];
+        sousTotal += item.total;
+        
+        let row = tbody.insertRow();
+        
+        let cellNom = row.insertCell(0);
+        cellNom.innerHTML = item.nom;
+        
+        let cellPrix = row.insertCell(1);
+        cellPrix.className = 'text-center';
+        cellPrix.innerHTML = '<input type="number" class="form-control form-control-sm" value="' + item.prix + '" style="width: 110px; text-align: center;" onchange="modifierPrix(' + index + ', this.value)">';
+        
+        let cellQuantite = row.insertCell(2);
+        cellQuantite.className = 'text-center';
+        cellQuantite.innerHTML = '<div class="input-group" style="width: 120px; margin: 0 auto;">' +
+            '<button class="btn btn-sm btn-secondary" onclick="modifQuantite(' + index + ', -1)">-</button>' +
+            '<input type="number" class="form-control form-control-sm text-center" value="' + item.quantite + '" style="width: 50px; text-align: center;" onchange="modifierQuantiteDirect(' + index + ', this.value)">' +
+            '<button class="btn btn-sm btn-secondary" onclick="modifQuantite(' + index + ', 1)">+</button>' +
+            '</div>';
+        
+        let cellTotal = row.insertCell(3);
+        cellTotal.className = 'text-end';
+        cellTotal.innerHTML = item.total.toLocaleString() + ' FCFA';
+        
+        let cellAction = row.insertCell(4);
+        cellAction.className = 'text-center';
+        cellAction.innerHTML = '<button class="btn btn-sm btn-danger" onclick="supprimerActe(' + index + ')"><i class="fas fa-trash"></i></button>';
+    }
+    
+    let priseEnCharge = (sousTotal * patientTaux) / 100;
+    let netAPayer = sousTotal - priseEnCharge;
+    
+    document.getElementById('sousTotal').innerHTML = sousTotal.toLocaleString() + ' FCFA';
+    document.getElementById('priseEnCharge').innerHTML = priseEnCharge.toLocaleString() + ' FCFA';
+    document.getElementById('netAPayer').innerHTML = netAPayer.toLocaleString() + ' FCFA';
+    document.getElementById('finaliserBtn').disabled = false;
+}
+
+function modifQuantite(index, delta) {
+    let newQuantite = panier[index].quantite + delta;
+    if (newQuantite < 1) return;
+    panier[index].quantite = newQuantite;
+    panier[index].total = panier[index].prix * newQuantite;
+    afficherPanier();
+}
+
+function supprimerActe(index) {
+    panier.splice(index, 1);
+    afficherPanier();
+}
+
+// ========== FORMATER LA DATE AU FORMAT ISO ==========
+function getCurrentDateTime() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+// ========== FINALISATION VENTE ==========
+function finaliserVente() {
+    console.log('=== FINALISATION VENTE ACTES ===');
+    console.log('Panier:', panier);
+    console.log('Patient ID:', patientId);
+    console.log('Patient Name:', patientName);
+    console.log('Patient Taux:', patientTaux);
+    
+    if (panier.length === 0) {
+        alert('Le panier est vide');
+        return;
+    }
+    
+    if (!patientId || patientId === 'null' || patientId === 'undefined') {
+        alert('Veuillez sélectionner un patient');
+        return;
+    }
+    
+    // ⚡ DÉSACTIVER LE BOUTON ET AFFICHER CHARGEMENT
+    const btn = document.getElementById('finaliserBtn');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement en cours...';
+    
+    // ========== CALCUL DES MONTANTS ==========
+    let sousTotal = panier.reduce((sum, item) => sum + item.total, 0);
+    let priseEnCharge = (sousTotal * patientTaux) / 100;
+    let netAPayer = sousTotal - priseEnCharge;
+    
+    console.log('Calculs:', {sousTotal, priseEnCharge, netAPayer});
+    
+    // ========== FORMATEUR LES ACTES ==========
+    let actesData = panier.map(item => ({
+        id: parseInt(item.id),
+        nom: item.nom,
+        prix: parseFloat(item.prix),
+        quantite: parseInt(item.quantite),
+        total: parseFloat(item.total)
+    }));
+    
+    // ========== CONSTRUCTION DE L'OBJET VENTE ==========
+    let vente = {
+        patient_id: parseInt(patientId),
+        patient_nom: patientName,
+        actes: actesData,
+        sous_total: parseFloat(sousTotal),
+        prise_en_charge: parseFloat(priseEnCharge),
+        net_a_payer: parseFloat(netAPayer),
+        mode_paiement: document.getElementById('modePaiement').value,
+        taux_assurance: parseFloat(patientTaux)
+    };
+    
+    console.log('Objet vente envoyé:', vente);
+    
+    let typeDocument = document.getElementById('typeDocument').value;
+    
+    // ========== ENVOI AU SERVEUR ==========
+    fetch('/api/ventes/actes', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(vente)
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Réponse API:', data);
+        if(data.success) {
+            if (typeDocument === 'recu_client') {
+                window.location.href = `/recu/${data.vente_id}/actes`;
+            } else if (typeDocument === 'recu_structure') {
+                window.location.href = `/recu_structure/${data.vente_id}/actes`;
+            } else if (typeDocument === 'facture_client') {
+                window.location.href = `/facture/${data.vente_id}/actes`;
+            } else if (typeDocument === 'facture_structure') {
+                window.location.href = `/facture_structure/${data.vente_id}/actes`;
+            } else if (typeDocument === 'les_deux') {
+                window.open(`/recu/${data.vente_id}/actes`, '_blank');
+                window.open(`/recu_structure/${data.vente_id}/actes`, '_blank');
+                window.location.href = "/dashboard";
+            } else {
+                window.location.href = "/dashboard";
+            }
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    })
+    .catch(error => {
+        console.error('Erreur fetch:', error);
+        alert('Erreur lors de la vente: ' + error);
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    });
+}
+
+// ========== INITIALISATION ==========
+window.onload = function() {
+    checkSelectedPatient();
+    filterActes();
+};
+</script>
+{% endblock %}

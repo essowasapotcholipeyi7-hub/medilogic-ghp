@@ -1,0 +1,664 @@
+{% extends "base.html" %}
+
+{% block title %}Historique des ventes{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3 mb-4">
+        <div class="sidebar">
+            <h5 class="mb-3"><i class="fas fa-chart-line"></i> Menu</h5>
+            <div class="nav flex-column">
+                <a class="nav-link" href="{{ url_for('dashboard') }}"><i class="fas fa-tachometer-alt"></i> Tableau de bord</a>
+                <a class="nav-link" href="{{ url_for('patients') }}"><i class="fas fa-users"></i> Patients</a>
+                <a class="nav-link" href="{{ url_for('actes_vente') }}"><i class="fas fa-stethoscope"></i> Actes & Vente</a>
+                <a class="nav-link" href="{{ url_for('pharma_vente') }}"><i class="fas fa-pills"></i> Pharmacie</a>
+                <a class="nav-link active" href="{{ url_for('historique_ventes') }}"><i class="fas fa-history"></i> Historique</a>
+                <a class="nav-link" href="{{ url_for('admin_structure') }}"><i class="fas fa-cog"></i> Administration</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-9">
+        <!-- STATISTIQUES -->
+        <div class="card mb-3">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-chart-pie"></i> Statistiques des ventes</h5>
+                <button class="btn btn-light btn-sm" onclick="imprimerStats()">
+                    <i class="fas fa-print"></i> Imprimer stats
+                </button>
+            </div>
+            <div class="card-body">
+                <!-- Filtres période pour stats -->
+                <div class="row mb-3">
+                    <div class="col-md-8">
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-outline-primary btn-sm" onclick="changerPeriodeStats('aujourdhui')">📅 Aujourd'hui</button>
+                            <button class="btn btn-outline-primary btn-sm" onclick="changerPeriodeStats('semaine')">📆 Cette semaine</button>
+                            <button class="btn btn-outline-primary btn-sm" onclick="changerPeriodeStats('mois')">📅 Ce mois</button>
+                            <button class="btn btn-outline-primary btn-sm" onclick="changerPeriodeStats('annee')">📊 Cette année</button>
+                            <button class="btn btn-outline-primary btn-sm" onclick="changerPeriodeStats('tous')">📋 Toutes</button>
+                            <button class="btn btn-outline-primary btn-sm" onclick="changerPeriodeStats('personnalise')">📅 Personnalisée</button>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <span id="periodeStatsLabel" class="badge bg-info">Toutes les ventes</span>
+                    </div>
+                </div>
+                
+                <!-- Filtres date personnalisée -->
+                <div id="statsDateRange" style="display: none;" class="row mb-3">
+                    <div class="col-md-5">
+                        <label class="form-label">Date début</label>
+                        <input type="date" id="statsDateDebut" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">Date fin</label>
+                        <input type="date" id="statsDateFin" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button class="btn btn-primary btn-sm" onclick="appliquerStatsPersonnalise()">Appliquer</button>
+                    </div>
+                </div>
+                
+                <!-- Cartes stats -->
+                <div class="row">
+                    <div class="col-md-3 text-center">
+                        <div class="border rounded p-2">
+                            <small class="text-muted">Total ventes</small>
+                            <h3 class="text-primary mb-0" id="statTotalVentes">0</h3>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <div class="border rounded p-2">
+                            <small class="text-muted">Chiffre d'affaires</small>
+                            <h3 class="text-success mb-0" id="statCA">0 F</h3>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <div class="border rounded p-2">
+                            <small class="text-muted">Actes médicaux</small>
+                            <h3 class="text-info mb-0" id="statActes">0</h3>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <div class="border rounded p-2">
+                            <small class="text-muted">Ventes pharmacie</small>
+                            <h3 class="text-warning mb-0" id="statPharma">0</h3>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Top actes et produits -->
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-body p-2">
+                                <h6><i class="fas fa-stethoscope"></i> Top 5 actes les plus vendus</h6>
+                                <table class="table table-sm table-borderless" id="topActesTable">
+                                    <tbody>
+                                        <tr><td colspan="3" class="text-muted">Chargement...</td>49
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-body p-2">
+                                <h6><i class="fas fa-pills"></i> Top 5 produits les plus vendus</h6>
+                                <table class="table table-sm table-borderless" id="topProduitsTable">
+                                    <tbody>
+                                        <tr><td colspan="3" class="text-muted">Chargement...</td>49
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FILTRES -->
+        <div class="card mb-3">
+            <div class="card-header bg-secondary text-white">
+                <h5><i class="fas fa-filter"></i> Filtres</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <select id="periodeFiltre" class="form-control" onchange="changerPeriodeFiltre()">
+                            <option value="tous">📋 Toutes les ventes</option>
+                            <option value="aujourdhui">📅 Aujourd'hui</option>
+                            <option value="semaine">📆 Cette semaine</option>
+                            <option value="mois">📅 Ce mois</option>
+                            <option value="annee">📊 Cette année</option>
+                            <option value="personnalise">📅 Période personnalisée</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select id="searchType" class="form-control" onchange="filtrerHistorique()">
+                            <option value="">📋 Tous les types</option>
+                            <option value="actes">🏥 Actes médicaux</option>
+                            <option value="pharma">💊 Pharmacie</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3" id="dateDebutGroup" style="display: none;">
+                        <input type="date" id="filtreDateDebut" class="form-control" placeholder="Date début">
+                    </div>
+                    <div class="col-md-3" id="dateFinGroup" style="display: none;">
+                        <input type="date" id="filtreDateFin" class="form-control" placeholder="Date fin">
+                    </div>
+                    <div class="col-md-6 mt-2">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white">
+                                <i class="fas fa-search text-primary"></i>
+                            </span>
+                            <input type="text" id="searchGlobal" class="form-control" 
+                                   placeholder="🔍 Rechercher par acte, produit ou patient..." 
+                                   onkeyup="filtrerHistorique()">
+                            <button class="btn btn-outline-secondary" onclick="clearSearch()" type="button">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="text-muted small mt-1">
+                            <i class="fas fa-info-circle"></i> Exemples: "consultation", "ECG", "vaccination"
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-md-12">
+                        <button class="btn btn-secondary btn-sm" onclick="resetFiltres()">🔄 Réinitialiser</button>
+                        <span class="ms-3 text-muted"><span id="resultCount">0</span> résultat(s) trouvé(s)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LISTE DES VENTES -->
+        <div class="card">
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-history"></i> Liste des ventes</h5>
+                <button class="btn btn-light btn-sm" onclick="imprimerHistorique()">
+                    <i class="fas fa-print"></i> Imprimer
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="ventesTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>N°</th>
+                                <th>Date</th>
+                                <th>Patient</th>
+                                <th>Type</th>
+                                <th>Détail</th>
+                                <th>Montant</th>
+                                <th>Assurance</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ventesList">
+                            {% for vente in ventes %}
+                            <tr data-date="{{ vente.date[:10] if vente.date else '' }}" data-type="{{ vente.type }}" data-montant="{{ vente.net_a_payer|default(0) }}" data-patient="{{ vente.patient_nom|lower if vente.patient_nom else '' }}" data-detail="{{ vente.acte_nom if vente.type == 'actes' else vente.produit_nom|default('')|lower }}">
+                                <td>{{ vente.ID }}</td>
+                                <td>{{ vente.date[:16] if vente.date else '-' }}</td>
+                                <td>{{ vente.patient_nom if vente.patient_nom else '-' }}</td>
+                                <td>
+                                    {% if vente.type == 'actes' %}
+                                        <span class="badge bg-primary">🏥 Acte</span>
+                                    {% else %}
+                                        <span class="badge bg-success">💊 Pharmacie</span>
+                                    {% endif %}
+                                 </td>
+                                <td>
+                                    {% if vente.type == 'actes' %}
+                                        <small>{{ vente.acte_nom }}</small>
+                                    {% else %}
+                                        <small>{{ vente.produit_nom }}</small>
+                                    {% endif %}
+                                 </td>
+                                <td>{{ vente.net_a_payer|round(0)|int }} FCFA</td>
+                                <td>{{ vente.taux_assurance|default(0) }}%</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="reimprimer({{ vente.ID }}, '{{ vente.type }}')">
+                                        <i class="fas fa-print"></i>
+                                    </button>
+                                 </td>
+                             </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center">Aucune vente enregistrée</td>
+                             </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pour choisir le document -->
+<div class="modal fade" id="documentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Choisir le document à imprimer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-primary" onclick="printDocument('recu_client')">
+                        <i class="fas fa-receipt"></i> Reçu Patient
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="printDocument('recu_structure')">
+                        <i class="fas fa-copy"></i> Reçu Structure (copie)
+                    </button>
+                    <button class="btn btn-outline-success" onclick="printDocument('facture_client')">
+                        <i class="fas fa-file-invoice"></i> Facture Patient
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="printDocument('facture_structure')">
+                        <i class="fas fa-archive"></i> Facture Structure (archive)
+                    </button>
+                    <hr>
+                    <button class="btn btn-info" onclick="printDocument('les_deux')">
+                        <i class="fas fa-layer-group"></i> Les deux (Patient + Structure)
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentVenteId = null;
+let currentVenteType = null;
+let periodeStatsCourante = 'tous';
+
+// ========== STATISTIQUES ==========
+function changerPeriodeStats(periode) {
+    periodeStatsCourante = periode;
+    const statsDateRange = document.getElementById('statsDateRange');
+    
+    if (periode === 'personnalise') {
+        statsDateRange.style.display = 'flex';
+        return;
+    } else {
+        statsDateRange.style.display = 'none';
+    }
+    
+    let debut, fin;
+    const aujourdhui = new Date();
+    aujourdhui.setHours(0, 0, 0, 0);
+    
+    switch(periode) {
+        case 'aujourdhui':
+            debut = new Date(aujourdhui);
+            fin = new Date(aujourdhui);
+            fin.setHours(23, 59, 59);
+            document.getElementById('periodeStatsLabel').innerText = 'Aujourd\'hui';
+            break;
+        case 'semaine':
+            debut = new Date(aujourdhui);
+            debut.setDate(debut.getDate() - debut.getDay());
+            fin = new Date(aujourdhui);
+            fin.setDate(fin.getDate() + (6 - fin.getDay()));
+            fin.setHours(23, 59, 59);
+            document.getElementById('periodeStatsLabel').innerText = 'Cette semaine';
+            break;
+        case 'mois':
+            debut = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth(), 1);
+            fin = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth() + 1, 0);
+            fin.setHours(23, 59, 59);
+            document.getElementById('periodeStatsLabel').innerText = 'Ce mois';
+            break;
+        case 'annee':
+            debut = new Date(aujourdhui.getFullYear(), 0, 1);
+            fin = new Date(aujourdhui.getFullYear(), 11, 31);
+            fin.setHours(23, 59, 59);
+            document.getElementById('periodeStatsLabel').innerText = 'Cette année';
+            break;
+        default:
+            debut = new Date(0);
+            fin = new Date();
+            document.getElementById('periodeStatsLabel').innerText = 'Toutes les ventes';
+    }
+    
+    calculerStats(debut, fin);
+}
+
+function appliquerStatsPersonnalise() {
+    const dateDebut = document.getElementById('statsDateDebut').value;
+    const dateFin = document.getElementById('statsDateFin').value;
+    
+    if (!dateDebut || !dateFin) {
+        alert('Veuillez sélectionner les deux dates');
+        return;
+    }
+    
+    const debut = new Date(dateDebut);
+    debut.setHours(0, 0, 0, 0);
+    const fin = new Date(dateFin);
+    fin.setHours(23, 59, 59);
+    
+    document.getElementById('periodeStatsLabel').innerText = `${dateDebut} au ${dateFin}`;
+    calculerStats(debut, fin);
+}
+
+function calculerStats(debut, fin) {
+    const rows = document.querySelectorAll('#ventesList tr');
+    let totalVentes = 0;
+    let totalCA = 0;
+    let totalActes = 0;
+    let totalPharma = 0;
+    const actesCount = {};
+    const produitsCount = {};
+    
+    rows.forEach(row => {
+        if (row.cells.length < 2) return;
+        
+        const dateVente = row.getAttribute('data-date') || '';
+        if (dateVente) {
+            const date = new Date(dateVente);
+            if (date < debut || date > fin) return;
+        }
+        
+        const type = row.getAttribute('data-type') || '';
+        const montant = parseFloat(row.getAttribute('data-montant')) || 0;
+        const detail = row.getAttribute('data-detail') || '';
+        
+        totalVentes++;
+        totalCA += montant;
+        
+        if (type === 'actes') {
+            totalActes++;
+            if (detail) {
+                actesCount[detail] = (actesCount[detail] || 0) + 1;
+            }
+        } else if (type === 'pharma') {
+            totalPharma++;
+            if (detail) {
+                produitsCount[detail] = (produitsCount[detail] || 0) + 1;
+            }
+        }
+    });
+    
+    document.getElementById('statTotalVentes').innerText = totalVentes;
+    document.getElementById('statCA').innerHTML = totalCA.toLocaleString() + ' F';
+    document.getElementById('statActes').innerText = totalActes;
+    document.getElementById('statPharma').innerText = totalPharma;
+    
+    // Top actes
+    const topActes = Object.entries(actesCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const topActesHtml = topActes.map(([nom, quantite], index) => `
+        <tr>
+            <td>${index + 1}. ${nom}</td>
+            <td class="text-end">${quantite} vendu(s)</td>
+         </tr>
+    `).join('');
+    document.getElementById('topActesTable').innerHTML = topActesHtml || '<tr><td colspan="2" class="text-muted">Aucune donnée</td></tr>';
+    
+    // Top produits
+    const topProduits = Object.entries(produitsCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const topProduitsHtml = topProduits.map(([nom, quantite], index) => `
+        <tr>
+            <td>${index + 1}. ${nom}</td>
+            <td class="text-end">${quantite} vendu(s)</td>
+         </tr>
+    `).join('');
+    document.getElementById('topProduitsTable').innerHTML = topProduitsHtml || '<tr><td colspan="2" class="text-muted">Aucune donnée</td></tr>';
+}
+
+// ========== FILTRES HISTORIQUE ==========
+function changerPeriodeFiltre() {
+    const periode = document.getElementById('periodeFiltre').value;
+    const dateDebutGroup = document.getElementById('dateDebutGroup');
+    const dateFinGroup = document.getElementById('dateFinGroup');
+    
+    if (periode === 'personnalise') {
+        dateDebutGroup.style.display = 'block';
+        dateFinGroup.style.display = 'block';
+    } else {
+        dateDebutGroup.style.display = 'none';
+        dateFinGroup.style.display = 'none';
+        document.getElementById('filtreDateDebut').value = '';
+        document.getElementById('filtreDateFin').value = '';
+    }
+    filtrerHistorique();
+}
+
+function filtrerHistorique() {
+    const periode = document.getElementById('periodeFiltre').value;
+    const searchType = document.getElementById('searchType').value;
+    const searchGlobal = document.getElementById('searchGlobal').value.toLowerCase().trim();
+    
+    let debut, fin;
+    const aujourdhui = new Date();
+    aujourdhui.setHours(0, 0, 0, 0);
+    
+    if (periode === 'personnalise') {
+        const dateDebut = document.getElementById('filtreDateDebut').value;
+        const dateFin = document.getElementById('filtreDateFin').value;
+        if (dateDebut && dateFin) {
+            debut = new Date(dateDebut);
+            debut.setHours(0, 0, 0, 0);
+            fin = new Date(dateFin);
+            fin.setHours(23, 59, 59);
+        } else {
+            debut = null;
+            fin = null;
+        }
+    } else {
+        switch(periode) {
+            case 'aujourdhui':
+                debut = new Date(aujourdhui);
+                fin = new Date(aujourdhui);
+                fin.setHours(23, 59, 59);
+                break;
+            case 'semaine':
+                debut = new Date(aujourdhui);
+                debut.setDate(debut.getDate() - debut.getDay());
+                fin = new Date(aujourdhui);
+                fin.setDate(fin.getDate() + (6 - fin.getDay()));
+                fin.setHours(23, 59, 59);
+                break;
+            case 'mois':
+                debut = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth(), 1);
+                fin = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth() + 1, 0);
+                fin.setHours(23, 59, 59);
+                break;
+            case 'annee':
+                debut = new Date(aujourdhui.getFullYear(), 0, 1);
+                fin = new Date(aujourdhui.getFullYear(), 11, 31);
+                fin.setHours(23, 59, 59);
+                break;
+            default:
+                debut = null;
+                fin = null;
+        }
+    }
+    
+    const rows = document.querySelectorAll('#ventesList tr');
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+        if (row.cells.length < 2) return;
+        
+        let visible = true;
+        
+        // Filtre période
+        if (debut && fin) {
+            const dateVente = row.getAttribute('data-date') || '';
+            if (dateVente) {
+                const date = new Date(dateVente);
+                if (date < debut || date > fin) visible = false;
+            }
+        }
+        
+        // Filtre type (actes/pharma)
+        if (visible && searchType) {
+            const type = row.getAttribute('data-type') || '';
+            if (type !== searchType) visible = false;
+        }
+        
+        // Filtre global (recherche dans tout)
+        if (visible && searchGlobal) {
+            const patient = row.getAttribute('data-patient') || '';
+            const detail = row.getAttribute('data-detail') || '';
+            const montant = row.cells[5]?.innerText || '';
+            
+            const texteComplet = `${patient} ${detail} ${montant}`.toLowerCase();
+            
+            if (!texteComplet.includes(searchGlobal)) {
+                visible = false;
+            }
+        }
+        
+        row.style.display = visible ? '' : 'none';
+        if (visible) visibleCount++;
+    });
+    
+    document.getElementById('resultCount').innerText = visibleCount;
+}
+
+function clearSearch() {
+    document.getElementById('searchGlobal').value = '';
+    filtrerHistorique();
+}
+
+function resetFiltres() {
+    document.getElementById('periodeFiltre').value = 'tous';
+    document.getElementById('searchType').value = '';
+    document.getElementById('searchGlobal').value = '';
+    document.getElementById('filtreDateDebut').value = '';
+    document.getElementById('filtreDateFin').value = '';
+    document.getElementById('dateDebutGroup').style.display = 'none';
+    document.getElementById('dateFinGroup').style.display = 'none';
+    filtrerHistorique();
+}
+
+// ========== RÉIMPRESSION ==========
+function reimprimer(venteId, type) {
+    currentVenteId = venteId;
+    currentVenteType = type;
+    new bootstrap.Modal(document.getElementById('documentModal')).show();
+}
+
+function printDocument(docType) {
+    let url = '';
+    if (docType === 'recu_client') url = `/recu/${currentVenteId}/${currentVenteType}`;
+    else if (docType === 'recu_structure') url = `/recu_structure/${currentVenteId}/${currentVenteType}`;
+    else if (docType === 'facture_client') url = `/facture/${currentVenteId}/${currentVenteType}`;
+    else if (docType === 'facture_structure') url = `/facture_structure/${currentVenteId}/${currentVenteType}`;
+    else if (docType === 'les_deux') {
+        window.open(`/recu/${currentVenteId}/${currentVenteType}`, '_blank');
+        window.open(`/recu_structure/${currentVenteId}/${currentVenteType}`, '_blank');
+        bootstrap.Modal.getInstance(document.getElementById('documentModal')).hide();
+        return;
+    }
+    window.open(url, '_blank');
+    bootstrap.Modal.getInstance(document.getElementById('documentModal')).hide();
+}
+
+// ========== IMPRESSION ==========
+function imprimerHistorique() {
+    const visibleRows = document.querySelectorAll('#ventesList tr:not([style*="display: none"])');
+    let printWindow = window.open('', '_blank');
+    
+    let html = `<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Historique des ventes</title>
+        <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; }
+            h2 { color: #667eea; text-align: center; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #667eea; color: white; }
+            .footer { margin-top: 30px; text-align: center; font-size: 11px; color: #999; }
+            @media print { button { display: none; } }
+        </style>
+    </head>
+    <body>
+        <h2>📋 HISTORIQUE DES VENTES</h2>
+        <div style="text-align:center">${new Date().toLocaleString()}</div>
+        <table>
+            <thead><tr><th>N°</th><th>Date</th><th>Patient</th><th>Type</th><th>Détail</th><th>Montant</th><th>Assurance</th></tr><</thead>
+            <tbody>`;
+    
+    visibleRows.forEach(row => {
+        const cells = row.cells;
+        if (cells.length > 1) {
+            html += `<tr>
+                <td>${cells[0]?.innerText || ''}</td>
+                <td>${cells[1]?.innerText || ''}</td>
+                <td>${cells[2]?.innerText || ''}</td>
+                <td>${cells[3]?.innerText || ''}</td>
+                <td>${cells[4]?.innerText || ''}</td>
+                <td>${cells[5]?.innerText || ''}</td>
+                <td>${cells[6]?.innerText || ''}</td>
+             </tr>`;
+        }
+    });
+    
+    html += `</tbody>
+        </table>
+        <div class="footer">Medilogic-GHP - Tous droits réservés</div>
+        <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);};<\/script>
+    </body>
+    </html>`;
+    
+    printWindow.document.write(html);
+    printWindow.document.close();
+}
+
+function imprimerStats() {
+    let printWindow = window.open('', '_blank');
+    let html = `<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Statistiques des ventes</title>
+        <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; }
+            h2 { color: #667eea; text-align: center; }
+            .stats { display: flex; gap: 20px; justify-content: center; margin: 30px 0; flex-wrap: wrap; }
+            .stat { text-align: center; padding: 15px; border: 1px solid #ddd; border-radius: 10px; min-width: 150px; }
+            .stat h3 { margin: 0; color: #667eea; font-size: 28px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; }
+            th { background-color: #667eea; color: white; }
+        </style>
+    </head>
+    <body>
+        <h2>📊 STATISTIQUES DES VENTES</h2>
+        <div style="text-align:center">${document.getElementById('periodeStatsLabel').innerText} - ${new Date().toLocaleString()}</div>
+        <div class="stats">
+            <div class="stat"><div>Total ventes</div><h3>${document.getElementById('statTotalVentes').innerText}</h3></div>
+            <div class="stat"><div>Chiffre d'affaires</div><h3>${document.getElementById('statCA').innerText}</h3></div>
+            <div class="stat"><div>Actes</div><h3>${document.getElementById('statActes').innerText}</h3></div>
+            <div class="stat"><div>Pharmacie</div><h3>${document.getElementById('statPharma').innerText}</h3></div>
+        </div>
+        <h4>Top actes</h4>
+        <table><thead><tr><th>Acte</th><th>Quantité</th></tr></thead><tbody>${document.getElementById('topActesTable').innerHTML}</tbody></table>
+        <h4>Top produits</h4>
+        <table><thead><tr><th>Produit</th><th>Quantité</th></tr></thead><tbody>${document.getElementById('topProduitsTable').innerHTML}</tbody></table>
+        <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);};<\/script>
+    </body>
+    </html>`;
+    
+    printWindow.document.write(html);
+    printWindow.document.close();
+}
+
+// ========== INITIALISATION ==========
+document.addEventListener('DOMContentLoaded', function() {
+    changerPeriodeStats('tous');
+    filtrerHistorique();
+});
+</script>
+{% endblock %}

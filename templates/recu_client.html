@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Reçu Patient #{{ vente_id }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card" id="recuContenu">
+            <div class="card-body" style="font-family: 'Segoe UI', Arial, sans-serif;">
+                <!-- En-tête -->
+                <div class="text-center mb-3">
+                    <h4 style="margin:0;">{{ structure_nom or "Medilogic-GHP" }}</h4>
+                    <small>{{ structure_adresse or "" }} | Tél: {{ structure_telephone or "" }}</small>
+                    <hr>
+                    <h3 style="color:#28a745;">REÇU</h3>
+                    <p>N° {{ "%06d" % vente_id }} | {{ date_actuelle or "" }}</p>
+                    <hr>
+                </div>
+
+                <!-- Infos patient -->
+                <div class="mb-3">
+                    <strong>Patient :</strong> {{ patient_nom }}<br>
+                    <strong>Assurance :</strong> {{ type_assurance }} ({{ taux_assurance }}%)<br>
+                    {% if numero_assure and numero_assure != '' %}
+                    <strong>N° Assuré :</strong> {{ numero_assure }}<br>
+                    {% endif %}
+                    <strong>Paiement :</strong> {{ mode_paiement }}<br>
+                </div>
+
+                <!-- Tableau des articles -->
+                <table style="width:100%; border-collapse: collapse; font-size: 12px;">
+                    <thead>
+                        <tr style="background:#f8f9fa;">
+                            <th style="padding:8px; text-align:left;">Article</th>
+                            <th style="padding:8px; text-align:center;">Qté</th>
+                            <th style="padding:8px; text-align:right;">P.U.</th>
+                            <th style="padding:8px; text-align:right;">Total</th>
+                          </tr>
+                    </thead>
+                    <tbody>
+                        {% for article in articles %}
+                        <tr style="border-bottom:1px solid #eee;">
+                            <td style="padding:6px;">{{ article.nom }}</td>
+                            <td style="text-align:center;">{{ article.quantite }}</td>
+                            <td style="text-align:right;">{{ article.prix_unitaire|default(0)|round(0)|int }} F</td>
+                            <td style="text-align:right;">{{ article.total|default(0)|round(0)|int }} F</td>
+                          </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <hr>
+                
+                <!-- Totaux -->
+                <div style="margin-top:10px;">
+                    <div style="display:flex; justify-content:space-between;">
+                        <span>Sous-total :</span>
+                        <span><strong>{{ sous_total|default(0)|round(0)|int }} FCFA</strong></span>
+                    </div>
+                    {% if prise_en_charge > 0 %}
+                    <div style="display:flex; justify-content:space-between; color:#28a745;">
+                        <span>Prise en charge ({{ taux_assurance }}%) :</span>
+                        <span>- {{ prise_en_charge|default(0)|round(0)|int }} FCFA</span>
+                    </div>
+                    {% endif %}
+                    <div style="display:flex; justify-content:space-between; font-weight:bold; margin-top:8px; padding-top:8px; border-top:2px solid #ddd;">
+                        <span>NET À PAYER :</span>
+                        <span style="color:#dc3545;">{{ net_a_payer|default(0)|round(0)|int }} FCFA</span>
+                    </div>
+                </div>
+
+                <hr>
+                <div class="text-center small text-muted">
+                    Merci de votre visite !
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-3 no-print">
+            <button onclick="window.print()" class="btn btn-primary btn-sm">Imprimer</button>
+            <button onclick="telechargerPDF()" class="btn btn-success btn-sm">PDF</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary btn-sm">Retour</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function telechargerPDF() {
+    const element = document.getElementById('factureContenu');
+    const nomFichier = '{{ nom_fichier }}' || `facture_${Date.now()}`;
+    
+    const opt = {
+        margin: [0.5, 0.5, 0.5, 0.5],
+        filename: `${nomFichier}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+}
+</script>
+{% endblock %}

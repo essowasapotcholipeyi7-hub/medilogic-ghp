@@ -1,0 +1,626 @@
+{% extends "base.html" %}
+
+{% block title %}Administration Structure{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3 mb-4">
+        <div class="sidebar">
+            <h5 class="mb-3"><i class="fas fa-chart-line"></i> Menu</h5>
+            <div class="nav flex-column">
+                <a class="nav-link" href="{{ url_for('dashboard') }}"><i class="fas fa-tachometer-alt"></i> Tableau de bord</a>
+                <a class="nav-link" href="{{ url_for('patients') }}"><i class="fas fa-users"></i> Patients</a>
+                <a class="nav-link" href="{{ url_for('actes_vente') }}"><i class="fas fa-stethoscope"></i> Actes & Vente</a>
+                <a class="nav-link" href="{{ url_for('pharma_vente') }}"><i class="fas fa-pills"></i> Pharmacie</a>
+                <a class="nav-link" href="{{ url_for('historique_ventes') }}"><i class="fas fa-history"></i> Historique</a>
+                <a class="nav-link active" href="{{ url_for('admin_structure') }}"><i class="fas fa-cog"></i> Administration</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-9">
+        <!-- Onglets -->
+        <ul class="nav nav-tabs mb-3" id="adminTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="users-tab" data-bs-toggle="tab" data-bs-target="#users" type="button" role="tab">
+                    <i class="fas fa-users"></i> Utilisateurs
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="actes-tab" data-bs-toggle="tab" data-bs-target="#actes" type="button" role="tab">
+                    <i class="fas fa-stethoscope"></i> Actes médicaux
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="produits-tab" data-bs-toggle="tab" data-bs-target="#produits" type="button" role="tab">
+                    <i class="fas fa-pills"></i> Produits pharmacie
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="structure-tab" data-bs-toggle="tab" data-bs-target="#structure" type="button" role="tab">
+                    <i class="fas fa-building"></i> Ma structure
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+
+            <!-- ========== ONGLET UTILISATEURS ========== -->
+            <div class="tab-pane fade show active" id="users" role="tabpanel">
+                <div class="card">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-users"></i> Gestion des utilisateurs</h5>
+                        <button class="btn btn-light btn-sm" onclick="showAddUserModal()">
+                            <i class="fas fa-plus"></i> Nouvel utilisateur
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Nom</th>
+                                        <th>Email</th>
+                                        <th>Rôle</th>
+                                        <th>Date création</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="usersList">
+                                    {% for user in users %}
+                                    <tr>
+                                        <td>{{ user.ID }}</td>
+                                        <td>{{ user.nom }}</td>
+                                        <td>{{ user.email }}</td>
+                                        <td>
+                                            {% if user.role == 'admin' %}
+                                                <span class="badge bg-danger">Administrateur</span>
+                                            {% elif user.role == 'medecin' %}
+                                                <span class="badge bg-primary">Médecin</span>
+                                            {% elif user.role == 'pharmacien' %}
+                                                <span class="badge bg-success">Pharmacien</span>
+                                            {% elif user.role == 'caissier' %}
+                                                <span class="badge bg-info">Caissier</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">{{ user.role }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ user.created_at[:10] if user.created_at else '-' }}</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-danger" onclick="deleteUser({{ user.ID }})">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center">Aucun utilisateur</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ONGLET ACTES MÉDICAUX AVEC RECHERCHE ========== -->
+            <div class="tab-pane fade" id="actes" role="tabpanel">
+                <div class="card">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-stethoscope"></i> Catalogue des actes</h5>
+                        <button class="btn btn-light btn-sm" onclick="showAddActeModal()">
+                            <i class="fas fa-plus"></i> Nouvel acte
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <!-- Barre de recherche -->
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                <input type="text" class="form-control" id="searchActe" placeholder="Rechercher par nom ou code..." onkeyup="filterActes()">
+                                <button class="btn btn-outline-secondary" onclick="clearSearchActe()">✖</button>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="actesTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Code</th>
+                                        <th>Nom</th>
+                                        <th>Prix (FCFA)</th>
+                                        <th>Description</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="actesList">
+                                    {% for acte in actes %}
+                                    <tr class="acte-row">
+                                        <td>{{ acte.ID }}</td>
+                                        <td><span class="badge bg-secondary">ACT-{{ acte.ID }}</span></td>
+                                        <td><strong>{{ acte.nom }}</strong></td>
+                                        <td>{{ acte.prix }} FCFA</td>
+                                        <td>{{ acte.description or '-' }}</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-warning" onclick='editActe({{ acte.ID }}, "{{ acte.nom|replace("'", "\\'") }}", {{ acte.prix }}, "{{ acte.description|replace("'", "\\'")|default('') }}")'>
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger" onclick="deleteActe({{ acte.ID }})">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center">Aucun acte</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ONGLET PRODUITS PHARMACIE AVEC RECHERCHE ========== -->
+            <div class="tab-pane fade" id="produits" role="tabpanel">
+                <div class="card">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-pills"></i> Catalogue des produits</h5>
+                        <button class="btn btn-light btn-sm" onclick="showAddProduitModal()">
+                            <i class="fas fa-plus"></i> Nouveau produit
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <!-- Barre de recherche -->
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                <input type="text" class="form-control" id="searchProduit" placeholder="Rechercher par nom, code ou référence..." onkeyup="filterProduits()">
+                                <button class="btn btn-outline-secondary" onclick="clearSearchProduit()">✖</button>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="produitsTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Code</th>
+                                        <th>Nom</th>
+                                        <th>Prix (FCFA)</th>
+                                        <th>Stock</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="produitsList">
+                                    {% for produit in produits %}
+                                    <tr class="produit-row">
+                                        <td>{{ produit.ID }}</td>
+                                        <td><span class="badge bg-secondary">PRD-{{ produit.ID }}</span></td>
+                                        <td><strong>{{ produit.nom }}</strong></td>
+                                        <td>{{ produit.prix_vente }} FCFA</td>
+                                        <td>
+                                            {% if produit.quantite_stock|int <= 10 %}
+                                                <span class="badge bg-danger">{{ produit.quantite_stock }} unités</span>
+                                            {% elif produit.quantite_stock|int <= 30 %}
+                                                <span class="badge bg-warning">{{ produit.quantite_stock }} unités</span>
+                                            {% else %}
+                                                <span class="badge bg-success">{{ produit.quantite_stock }} unités</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-warning" onclick='editProduit({{ produit.ID }}, "{{ produit.nom|replace("'", "\\'") }}", {{ produit.prix_vente }}, {{ produit.quantite_stock }})'>
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger" onclick="deleteProduit({{ produit.ID }})">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center">Aucun produit</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ONGLET MA STRUCTURE ========== -->
+            <div class="tab-pane fade" id="structure" role="tabpanel">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5><i class="fas fa-building"></i> Informations de ma structure</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="structureForm">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Nom de la structure</label>
+                                    <input type="text" class="form-control" id="structureNom" value="{{ structure_info.get('nom', '') if structure_info else '' }}">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="structureEmail" value="{{ structure_info.get('email', '') if structure_info else '' }}">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Téléphone</label>
+                                    <input type="tel" class="form-control" id="structureTelephone" value="{{ structure_info.get('telephone', '') if structure_info else '' }}">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Adresse</label>
+                                    <input type="text" class="form-control" id="structureAdresse" value="{{ structure_info.get('adresse', '') if structure_info else '' }}">
+                                </div>
+                                <div class="col-md-12 mb-3">
+                                    <label class="form-label">Logo URL</label>
+                                    <input type="text" class="form-control" id="structureLogo" value="{{ structure_info.get('logo_url', '') if structure_info else '' }}" placeholder="https://...">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Mettre à jour</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ajouter/Modifier Utilisateur -->
+<div class="modal fade" id="userModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="userModalTitle">Ajouter un utilisateur</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="userForm">
+                    <input type="hidden" id="userId">
+                    <div class="mb-3">
+                        <label class="form-label">Nom complet</label>
+                        <input type="text" class="form-control" id="userNom" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" id="userEmail" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Mot de passe</label>
+                        <input type="password" class="form-control" id="userPassword" placeholder="Laisser vide pour ne pas changer">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Rôle</label>
+                        <select class="form-control" id="userRole">
+                            <option value="caissier">Caissier</option>
+                            <option value="medecin">Médecin</option>
+                            <option value="pharmacien">Pharmacien</option>
+                            <option value="admin">Administrateur</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="saveUser()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Acte -->
+<div class="modal fade" id="acteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="acteModalTitle">Ajouter un acte</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="acteForm">
+                    <input type="hidden" id="acteId">
+                    <div class="mb-3">
+                        <label class="form-label">Nom de l'acte</label>
+                        <input type="text" class="form-control" id="acteNom" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Code</label>
+                        <input type="text" class="form-control" id="acteCode" placeholder="ACT-XXX">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Prix (FCFA)</label>
+                        <input type="number" class="form-control" id="actePrix" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="acteDescription" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="saveActe()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Produit -->
+<div class="modal fade" id="produitModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="produitModalTitle">Ajouter un produit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="produitForm">
+                    <input type="hidden" id="produitId">
+                    <div class="mb-3">
+                        <label class="form-label">Nom du produit</label>
+                        <input type="text" class="form-control" id="produitNom" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Code</label>
+                        <input type="text" class="form-control" id="produitCode" placeholder="PRD-XXX">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Prix de vente (FCFA)</label>
+                        <input type="number" class="form-control" id="produitPrix" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Stock initial</label>
+                        <input type="number" class="form-control" id="produitStock" value="0">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="saveProduit()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ========== RECHERCHE POUR ACTES ==========
+function filterActes() {
+    let input = document.getElementById('searchActe');
+    let filter = input.value.toLowerCase();
+    let table = document.getElementById('actesTable');
+    let rows = table.getElementsByTagName('tr');
+    
+    for (let i = 1; i < rows.length; i++) {
+        let row = rows[i];
+        let idCell = row.cells[0];
+        let codeCell = row.cells[1];
+        let nameCell = row.cells[2];
+        
+        if (idCell && nameCell && codeCell) {
+            let idValue = idCell.textContent || idCell.innerText;
+            let codeValue = codeCell.textContent || codeCell.innerText;
+            let nameValue = nameCell.textContent || nameCell.innerText;
+            
+            if (idValue.toLowerCase().indexOf(filter) > -1 ||
+                codeValue.toLowerCase().indexOf(filter) > -1 ||
+                nameValue.toLowerCase().indexOf(filter) > -1) {
+                row.style.display = "";
+            } else {
+                row.style.display = "none";
+            }
+        }
+    }
+}
+
+function clearSearchActe() {
+    document.getElementById('searchActe').value = '';
+    filterActes();
+}
+
+// ========== RECHERCHE POUR PRODUITS ==========
+function filterProduits() {
+    let input = document.getElementById('searchProduit');
+    let filter = input.value.toLowerCase();
+    let table = document.getElementById('produitsTable');
+    let rows = table.getElementsByTagName('tr');
+    
+    for (let i = 1; i < rows.length; i++) {
+        let row = rows[i];
+        let idCell = row.cells[0];
+        let codeCell = row.cells[1];
+        let nameCell = row.cells[2];
+        
+        if (idCell && nameCell && codeCell) {
+            let idValue = idCell.textContent || idCell.innerText;
+            let codeValue = codeCell.textContent || codeCell.innerText;
+            let nameValue = nameCell.textContent || nameCell.innerText;
+            
+            if (idValue.toLowerCase().indexOf(filter) > -1 ||
+                codeValue.toLowerCase().indexOf(filter) > -1 ||
+                nameValue.toLowerCase().indexOf(filter) > -1) {
+                row.style.display = "";
+            } else {
+                row.style.display = "none";
+            }
+        }
+    }
+}
+
+function clearSearchProduit() {
+    document.getElementById('searchProduit').value = '';
+    filterProduits();
+}
+
+// ========== GESTION UTILISATEURS ==========
+function showAddUserModal() {
+    document.getElementById('userModalTitle').innerText = 'Ajouter un utilisateur';
+    document.getElementById('userId').value = '';
+    document.getElementById('userForm').reset();
+    new bootstrap.Modal(document.getElementById('userModal')).show();
+}
+
+function saveUser() {
+    const data = {
+        id: document.getElementById('userId').value,
+        nom: document.getElementById('userNom').value,
+        email: document.getElementById('userEmail').value,
+        password: document.getElementById('userPassword').value,
+        role: document.getElementById('userRole').value
+    };
+    
+    fetch('/api/admin/users', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if(data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    });
+}
+
+function deleteUser(id) {
+    if(confirm('Supprimer cet utilisateur ?')) {
+        fetch(`/api/admin/users/${id}`, {method: 'DELETE'})
+        .then(response => response.json())
+        .then(data => {
+            if(data.success) location.reload();
+            else alert('Erreur');
+        });
+    }
+}
+
+// ========== GESTION ACTES ==========
+function showAddActeModal() {
+    document.getElementById('acteModalTitle').innerText = 'Ajouter un acte';
+    document.getElementById('acteId').value = '';
+    document.getElementById('acteForm').reset();
+    new bootstrap.Modal(document.getElementById('acteModal')).show();
+}
+
+function editActe(id, nom, prix, description) {
+    document.getElementById('acteModalTitle').innerText = 'Modifier l\'acte';
+    document.getElementById('acteId').value = id;
+    document.getElementById('acteNom').value = nom;
+    document.getElementById('actePrix').value = prix;
+    document.getElementById('acteDescription').value = description || '';
+    new bootstrap.Modal(document.getElementById('acteModal')).show();
+}
+
+function saveActe() {
+    const data = {
+        id: document.getElementById('acteId').value,
+        nom: document.getElementById('acteNom').value,
+        code: document.getElementById('acteCode').value,
+        prix: document.getElementById('actePrix').value,
+        description: document.getElementById('acteDescription').value
+    };
+    
+    fetch('/api/admin/actes', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if(data.success) location.reload();
+        else alert('Erreur: ' + data.error);
+    });
+}
+
+function deleteActe(id) {
+    if(confirm('Supprimer cet acte ?')) {
+        fetch(`/api/admin/actes/${id}`, {method: 'DELETE'})
+        .then(response => response.json())
+        .then(data => {
+            if(data.success) location.reload();
+            else alert('Erreur');
+        });
+    }
+}
+
+// ========== GESTION PRODUITS ==========
+function showAddProduitModal() {
+    document.getElementById('produitModalTitle').innerText = 'Ajouter un produit';
+    document.getElementById('produitId').value = '';
+    document.getElementById('produitForm').reset();
+    new bootstrap.Modal(document.getElementById('produitModal')).show();
+}
+
+function editProduit(id, nom, prix, stock) {
+    document.getElementById('produitModalTitle').innerText = 'Modifier le produit';
+    document.getElementById('produitId').value = id;
+    document.getElementById('produitNom').value = nom;
+    document.getElementById('produitPrix').value = prix;
+    document.getElementById('produitStock').value = stock;
+    new bootstrap.Modal(document.getElementById('produitModal')).show();
+}
+
+function saveProduit() {
+    const data = {
+        id: document.getElementById('produitId').value,
+        nom: document.getElementById('produitNom').value,
+        code: document.getElementById('produitCode').value,
+        prix: document.getElementById('produitPrix').value,
+        stock: document.getElementById('produitStock').value
+    };
+    
+    fetch('/api/admin/produits', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if(data.success) location.reload();
+        else alert('Erreur: ' + data.error);
+    });
+}
+
+function deleteProduit(id) {
+    if(confirm('Supprimer ce produit ?')) {
+        fetch(`/api/admin/produits/${id}`, {method: 'DELETE'})
+        .then(response => response.json())
+        .then(data => {
+            if(data.success) location.reload();
+            else alert('Erreur');
+        });
+    }
+}
+
+// ========== GESTION STRUCTURE ==========
+document.getElementById('structureForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = {
+        nom: document.getElementById('structureNom').value,
+        email: document.getElementById('structureEmail').value,
+        telephone: document.getElementById('structureTelephone').value,
+        adresse: document.getElementById('structureAdresse').value,
+        logo_url: document.getElementById('structureLogo').value
+    };
+    
+    fetch('/api/admin/structure', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if(data.success) {
+            alert('Informations mises à jour');
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    });
+});
+</script>
+{% endblock %}

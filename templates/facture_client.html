@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Facture #{{ vente_id }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-lg" id="factureContenu">
+            <div class="card-body" style="font-family: 'Segoe UI', Arial, sans-serif;">
+                <!-- En-tête professionnel -->
+                <div class="row" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
+                    <div class="col-7">
+                        <h2 style="margin: 0;">{{ structure_nom or "Medilogic-GHP" }}</h2>
+                        <p style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;">
+                            <i class="fas fa-map-marker-alt"></i> {{ structure_adresse or "" }}<br>
+                            <i class="fas fa-phone"></i> {{ structure_telephone or "" }} | 
+                            <i class="fas fa-envelope"></i> {{ structure_email or "" }}
+                        </p>
+                    </div>
+                    <div class="col-5 text-end">
+                        <h1 style="font-size: 32px; margin: 0;">FACTURE</h1>
+                        <p style="margin: 5px 0 0 0;">N° {{ "%06d" % vente_id }}</p>
+                        <p>Date: {{ date_actuelle or "" }}</p>
+                    </div>
+                </div>
+
+                <!-- Infos patient -->
+                <div class="row mb-4">
+                    <div class="col-6">
+                        <div style="border-left: 4px solid #667eea; padding-left: 15px;">
+                            <h5>Facturé à :</h5>
+                            <p style="margin: 0;"><strong>{{ patient_nom or "Patient" }}</strong><br>
+                            {% if numero_assure and numero_assure != '' %}
+                            N° Assuré: {{ numero_assure }}<br>
+                            {% endif %}
+                            Tél: {{ patient_telephone or "Non renseigné" }}</p>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div style="border-left: 4px solid #28a745; padding-left: 15px;">
+                            <h5>Informations assurance :</h5>
+                            <p style="margin: 0;"><strong>{{ type_assurance or "Non assuré" }}</strong><br>
+                            Taux de prise en charge: {{ taux_assurance|default(0) }}%</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Détails facture -->
+                <table style="width:100%; border-collapse: collapse; margin: 20px 0;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6;">Désignation</th>
+                            <th style="padding: 12px; text-align: center; border-bottom: 2px solid #dee2e6;">Qté</th>
+                            <th style="padding: 12px; text-align: right; border-bottom: 2px solid #dee2e6;">Prix unitaire</th>
+                            <th style="padding: 12px; text-align: right; border-bottom: 2px solid #dee2e6;">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for article in articles %}
+                        <tr style="border-bottom: 1px solid #dee2e6;">
+                            <td style="padding: 10px;">{{ article.nom }}</td>
+                            <td style="padding: 10px; text-align: center;">{{ article.quantite }}</td>
+                            <td style="padding: 10px; text-align: right;">{{ article.prix_unitaire|default(0)|round(0)|int }} FCFA</td>
+                            <td style="padding: 10px; text-align: right;">{{ article.total|default(0)|round(0)|int }} FCFA</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <!-- Totaux -->
+                {% set sous_total_val = sous_total|default(0) %}
+                {% set prise_en_charge_val = prise_en_charge|default(0) %}
+                {% set net_a_payer_val = net_a_payer|default(0) %}
+                
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; width: 300px; margin-left: auto;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>Sous-total HT :</span> <span>{{ sous_total_val|round(0)|int }} FCFA</span>
+                    </div>
+                    {% if prise_en_charge_val > 0 %}
+                    <div style="display: flex; justify-content: space-between; color: #28a745;">
+                        <span>Prise en charge ({{ taux_assurance|default(0) }}%) :</span> <span>- {{ prise_en_charge_val|round(0)|int }} FCFA</span>
+                    </div>
+                    {% endif %}
+                    <div style="display: flex; justify-content: space-between; font-size: 18px; margin-top: 10px; padding-top: 10px; border-top: 2px solid #dee2e6;">
+                        <span><strong>NET À PAYER :</strong></span>
+                        <span><strong style="color: #dc3545;">{{ net_a_payer_val|round(0)|int }} FCFA</strong></span>
+                    </div>
+                </div>
+
+                <!-- Mode de paiement -->
+                <div class="text-end mt-3">
+                    <span style="background: #e9ecef; padding: 5px 15px; border-radius: 20px;">
+                        <i class="fas fa-credit-card"></i> Paiement : {{ mode_paiement or "Espèces" }}
+                    </span>
+                </div>
+
+                <hr class="mt-4">
+                <div class="text-center text-muted" style="font-size: 11px;">
+                    Merci de votre confiance ! Règlement à réception de facture.<br>
+                    {{ structure_nom or "Medilogic-GHP" }} - 
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-3 no-print">
+            <button onclick="window.print()" class="btn btn-primary"><i class="fas fa-print"></i> Imprimer</button>
+            <button onclick="telechargerPDF()" class="btn btn-success"><i class="fas fa-download"></i> PDF</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Retour</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function telechargerPDF() {
+    const element = document.getElementById('factureContenu');
+    const nomFichier = '{{ nom_fichier }}' || `facture_${Date.now()}`;
+    
+    const opt = {
+        margin: [0.5, 0.5, 0.5, 0.5],
+        filename: `${nomFichier}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+}
+</script>
+{% endblock %}

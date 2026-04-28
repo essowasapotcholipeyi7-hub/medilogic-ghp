@@ -1,0 +1,485 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion des patients{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3 mb-4">
+        <div class="sidebar">
+            <h5 class="mb-3"><i class="fas fa-chart-line"></i> Menu</h5>
+            <div class="nav flex-column">
+                <a class="nav-link" href="{{ url_for('dashboard') }}"><i class="fas fa-tachometer-alt"></i> Tableau de bord</a>
+                <a class="nav-link active" href="{{ url_for('patients') }}"><i class="fas fa-users"></i> Patients</a>
+                <a class="nav-link" href="{{ url_for('actes_vente') }}"><i class="fas fa-stethoscope"></i> Actes & Vente</a>
+                <a class="nav-link" href="{{ url_for('pharma_vente') }}"><i class="fas fa-pills"></i> Pharmacie</a>
+                <a class="nav-link" href="{{ url_for('admin_structure') }}"><i class="fas fa-cog"></i> Administration</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center flex-wrap">
+                <h5 class="mb-0"><i class="fas fa-users"></i> Liste des patients</h5>
+                <div class="mt-2 mt-md-0">
+                    <button class="btn btn-light btn-sm me-2" onclick="exportToCSV()">
+                        <i class="fas fa-file-excel"></i> Exporter
+                    </button>
+                    <button class="btn btn-light btn-sm" onclick="showAddModal()">
+                        <i class="fas fa-plus"></i> Nouveau patient
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Barre de recherche -->
+                <div class="row mb-3">
+                    <div class="col-md-8 mx-auto">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0">
+                                <i class="fas fa-search text-primary"></i>
+                            </span>
+                            <input type="text" id="searchInput" class="form-control border-start-0" 
+                                   placeholder="Rechercher par nom, prénom, téléphone ou numéro d'assuré..." 
+                                   onkeyup="filterPatients()">
+                            <button class="btn btn-outline-secondary" onclick="clearSearch()" type="button">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="text-muted small mt-1">
+                            <i class="fas fa-info-circle"></i> <span id="resultCount">0</span> patient(s) trouvé(s)
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-hover" id="patientsTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nom complet</th>
+                                <th>Téléphone</th>
+                                <th>Assurance</th>
+                                <th>Taux</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="patientsList">
+                            {% for patient in patients %}
+                            <tr class="patient-row">
+                                <td>{{ patient.ID }}</td>
+                                <td>{{ patient.nom }} {{ patient.prenom }}</td>
+                                <td>{{ patient.telephone }}</td>
+                                <td>
+                                    {% if patient.type_assurance == 'non_assure' %}
+                                        <span class="badge bg-secondary">Non assuré</span>
+                                    {% elif patient.type_assurance == 'amu_cnss' %}
+                                        <span class="badge bg-success">AMU-CNSS</span>
+                                    {% elif patient.type_assurance == 'amu_inam' %}
+                                        <span class="badge bg-primary">AMU-INAM</span>
+                                    {% else %}
+                                        <span class="badge bg-info">{{ patient.type_assurance }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ patient.taux_prise_charge or 0 }}%</td>
+                                <td>
+                                    <button class="btn btn-sm btn-success" onclick='selectPatient({{ patient.ID }}, "{{ patient.nom }} {{ patient.prenom }}", "{{ patient.type_assurance }}", {{ patient.taux_prise_charge or 0 }})'>
+                                        <i class="fas fa-check"></i> Sélectionner
+                                    </button>
+                                    <button class="btn btn-sm btn-warning" onclick="editPatient({{ patient.ID }})">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-info" onclick="envoyerLienPatient({{ patient.ID }}, '{{ patient.nom }} {{ patient.prenom }}', '{{ patient.telephone }}')">
+                                        <i class="fab fa-whatsapp"></i> Lien RDV
+                                    </button>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center">Aucun patient</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <nav>
+                            <ul class="pagination justify-content-center" id="pagination"></ul>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ajout Patient -->
+<div class="modal fade" id="patientModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-user-plus"></i> Ajouter un patient</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="patientForm">
+                    <div class="mb-3">
+                        <label class="form-label">Nom *</label>
+                        <input type="text" class="form-control" id="nom" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Prénom</label>
+                        <input type="text" class="form-control" id="prenom">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Téléphone *</label>
+                        <input type="tel" class="form-control" id="telephone" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Adresse</label>
+                        <input type="text" class="form-control" id="adresse">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Date de naissance</label>
+                        <input type="date" class="form-control" id="date_naissance">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Type d'assurance *</label>
+                        <select class="form-control" id="type_assurance" onchange="toggleTaux()">
+                            <option value="non_assure">Non assuré (0%)</option>
+                            <option value="amu_cnss">AMU-CNSS (80%)</option>
+                            <option value="amu_inam">AMU-INAM (80%)</option>
+                            <option value="autre">Autre assurance</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="taux_div">
+                        <label class="form-label">Taux de prise en charge (%)</label>
+                        <input type="number" class="form-control" id="taux_prise_charge" value="0" min="0" max="100" step="5">
+                        <small class="text-muted">Modifiable selon la convention</small>
+                    </div>
+                    
+                    <div class="mb-3" id="numero_assure_div" style="display:none;">
+                        <label class="form-label">Numéro d'assuré</label>
+                        <input type="text" class="form-control" id="numero_assure" placeholder="Numéro de carte d'assurance">
+                    </div>
+                    
+                    <div class="mb-3" id="autre_assurance_div" style="display:none;">
+                        <label class="form-label">Nom de l'assurance</label>
+                        <input type="text" class="form-control" id="autre_assurance" placeholder="Ex: CNPS, MUTUELLE, ALLIANZ...">
+                        <small class="text-muted">Précisez le nom de l'assurance</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-info" onclick="savePatient()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Variables pour la pagination
+let allPatients = [];
+let currentPage = 1;
+let rowsPerPage = 10;
+let currentFiltered = [];
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    // Collecter toutes les lignes de patients
+    const rows = document.querySelectorAll('#patientsList tr.patient-row');
+    rows.forEach(row => {
+        const cells = row.cells;
+        allPatients.push({
+            element: row,
+            id: cells[0].innerText,
+            nom: cells[1].innerText.toLowerCase(),
+            telephone: cells[2].innerText,
+            assurance: cells[3].innerText.toLowerCase(),
+            taux: cells[4].innerText
+        });
+    });
+    
+    currentFiltered = [...allPatients];
+    updateResultCount();
+    displayPage(1);
+});
+
+// Fonction de filtrage
+function filterPatients() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+    
+    if (searchTerm === '') {
+        currentFiltered = [...allPatients];
+    } else {
+        currentFiltered = allPatients.filter(patient => 
+            patient.nom.includes(searchTerm) || 
+            patient.telephone.includes(searchTerm) ||
+            patient.assurance.includes(searchTerm)
+        );
+    }
+    
+    currentPage = 1;
+    updateResultCount();
+    displayPage(currentPage);
+}
+
+// Mettre à jour le compteur
+function updateResultCount() {
+    const countSpan = document.getElementById('resultCount');
+    if (countSpan) {
+        countSpan.textContent = currentFiltered.length;
+    }
+}
+
+// Afficher une page spécifique
+function displayPage(page) {
+    const start = (page - 1) * rowsPerPage;
+    const end = start + rowsPerPage;
+    const pagePatients = currentFiltered.slice(start, end);
+    
+    // Cacher toutes les lignes
+    allPatients.forEach(patient => {
+        patient.element.style.display = 'none';
+    });
+    
+    // Afficher les lignes de la page
+    pagePatients.forEach(patient => {
+        patient.element.style.display = '';
+    });
+    
+    updatePagination();
+}
+
+// Mettre à jour la pagination
+function updatePagination() {
+    const totalPages = Math.ceil(currentFiltered.length / rowsPerPage);
+    const pagination = document.getElementById('pagination');
+    
+    if (!pagination) return;
+    
+    let html = '';
+    
+    // Bouton Précédent
+    html += '<li class="page-item ' + (currentPage === 1 ? 'disabled' : '') + '">';
+    html += '<a class="page-link" href="#" onclick="changePage(' + (currentPage - 1) + '); return false;">«</a>';
+    html += '</li>';
+    
+    // Numéros de pages
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+            html += '<li class="page-item ' + (i === currentPage ? 'active' : '') + '">';
+            html += '<a class="page-link" href="#" onclick="changePage(' + i + '); return false;">' + i + '</a>';
+            html += '</li>';
+        } else if (i === currentPage - 3 || i === currentPage + 3) {
+            html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+        }
+    }
+    
+    // Bouton Suivant
+    html += '<li class="page-item ' + (currentPage === totalPages ? 'disabled' : '') + '">';
+    html += '<a class="page-link" href="#" onclick="changePage(' + (currentPage + 1) + '); return false;">»</a>';
+    html += '</li>';
+    
+    pagination.innerHTML = html;
+}
+
+// Changer de page
+function changePage(page) {
+    const totalPages = Math.ceil(currentFiltered.length / rowsPerPage);
+    if (page < 1 || page > totalPages) return;
+    currentPage = page;
+    displayPage(currentPage);
+}
+
+// Effacer la recherche
+function clearSearch() {
+    document.getElementById('searchInput').value = '';
+    filterPatients();
+}
+
+// Exporter vers CSV
+function exportToCSV() {
+    let csvContent = "ID,Nom complet,Téléphone,Assurance,Taux prise en charge\n";
+    
+    currentFiltered.forEach(patient => {
+        const cells = patient.element.cells;
+        csvContent += cells[0].innerText + "," + cells[1].innerText + "," + cells[2].innerText + "," + cells[3].innerText + "," + cells[4].innerText + "\n";
+    });
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.setAttribute('download', 'patients_list.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+let selectedPatientId = null;
+let selectedPatientName = null;
+let selectedPatientAssurance = null;
+let selectedPatientTaux = null;
+
+// Gestion des taux
+function toggleTaux() {
+    const type = document.getElementById('type_assurance').value;
+    const tauxInput = document.getElementById('taux_prise_charge');
+    const numeroDiv = document.getElementById('numero_assure_div');
+    const autreAssuranceDiv = document.getElementById('autre_assurance_div');
+    
+    if (type === 'non_assure') {
+        tauxInput.value = 0;
+        tauxInput.readOnly = true;
+        numeroDiv.style.display = 'none';
+        autreAssuranceDiv.style.display = 'none';
+    } else if (type === 'amu_cnss') {
+        tauxInput.value = 80;
+        tauxInput.readOnly = false;
+        numeroDiv.style.display = 'block';
+        autreAssuranceDiv.style.display = 'none';
+    } else if (type === 'amu_inam') {
+        tauxInput.value = 80;
+        tauxInput.readOnly = false;
+        numeroDiv.style.display = 'block';
+        autreAssuranceDiv.style.display = 'none';
+    } else if (type === 'autre') {
+        tauxInput.value = 80;
+        tauxInput.readOnly = false;
+        numeroDiv.style.display = 'block';
+        autreAssuranceDiv.style.display = 'block';
+    }
+}
+
+function showAddModal() {
+    document.getElementById('patientForm').reset();
+    document.getElementById('taux_prise_charge').value = 0;
+    document.getElementById('numero_assure_div').style.display = 'none';
+    document.getElementById('autre_assurance_div').style.display = 'none';
+    new bootstrap.Modal(document.getElementById('patientModal')).show();
+}
+
+function savePatient() {
+    let typeAssurance = document.getElementById('type_assurance').value;
+    let autreAssurance = document.getElementById('autre_assurance').value;
+    
+    if (typeAssurance === 'autre' && autreAssurance.trim() !== '') {
+        typeAssurance = autreAssurance.trim();
+    }
+    
+    const patient = {
+        nom: document.getElementById('nom').value,
+        prenom: document.getElementById('prenom').value,
+        telephone: document.getElementById('telephone').value,
+        adresse: document.getElementById('adresse').value,
+        date_naissance: document.getElementById('date_naissance').value,
+        type_assurance: typeAssurance,
+        taux_prise_charge: document.getElementById('taux_prise_charge').value,
+        numero_assure: document.getElementById('numero_assure').value
+    };
+    
+    fetch('/api/patients', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(patient)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if(data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur lors de l\'enregistrement');
+    });
+}
+
+function envoyerLienPatient(id, nom, telephone) {
+    // Nettoyer le numéro
+    let tel = telephone.toString().replace(/\s/g, '').replace(/^\+/, '');
+    if (!tel.startsWith('228') && !tel.startsWith('229') && !tel.startsWith('221')) {
+        tel = '228' + tel;
+    }
+    
+    // Créer le token et le lien
+    let token = btoa(`${id}_${Date.now()}`);
+    let lien = `${window.location.origin}/patient/rendez_vous/${id}/${token}`;
+    
+    // 🔥 Récupérer le nom de la structure depuis le backend
+    fetch('/api/structure/nom')
+        .then(response => response.json())
+        .then(data => {
+            let structureNom = data.nom || 'Notre établissement';
+            
+            // Message avec le nom de la structure
+            let message = `🏥 *${structureNom}*%0A%0A`;
+            message += `Bonjour *${nom}*,%0A%0A`;
+            message += `Voici votre lien pour consulter vos rendez-vous :%0A`;
+            message += `${lien}%0A%0A`;
+            message += `📅 Vous pourrez voir :%0A`;
+            message += `- La date et l'heure de vos rendez-vous%0A`;
+            message += `- Le motif%0A`;
+            message += `- Le statut (confirmé, programmé, etc.)%0A%0A`;
+            message += `🔒 Ce lien est personnel et sécurisé.%0A%0A`;
+            message += `📞 Pour modifier ou annuler, veuillez nous contacter.`;
+            
+            let whatsappUrl = `https://wa.me/${tel}?text=${message}`;
+            window.open(whatsappUrl, '_blank');
+        })
+        .catch(() => {
+            // Fallback si erreur
+            let message = `🏥 *Medilogic-GHP*%0A%0A`;
+            message += `Bonjour *${nom}*,%0A%0A`;
+            message += `Voici votre lien pour consulter vos rendez-vous :%0A`;
+            message += `${lien}%0A%0A`;
+            message += `📅 Vous pourrez voir :%0A`;
+            message += `- La date et l'heure de vos rendez-vous%0A`;
+            message += `- Le motif%0A`;
+            message += `- Le statut (confirmé, programmé, etc.)%0A%0A`;
+            message += `🔒 Ce lien est personnel et sécurisé.%0A%0A`;
+            message += `📞 Pour modifier ou annuler, veuillez nous contacter.`;
+            
+            let whatsappUrl = `https://wa.me/${tel}?text=${message}`;
+            window.open(whatsappUrl, '_blank');
+        });
+}
+
+function selectPatient(id, nom, assurance, taux) {
+    // Stocker les données du patient
+    sessionStorage.setItem('selectedPatientId', id);
+    sessionStorage.setItem('selectedPatientName', nom);
+    sessionStorage.setItem('selectedPatientAssurance', assurance);
+    sessionStorage.setItem('selectedPatientTaux', taux);
+    
+    // Afficher un message de confirmation
+    alert(`✅ Patient sélectionné : ${nom}\nAssurance : ${assurance}\nTaux : ${taux}%`);
+    
+    // 🔥 PROPOSER LE CHOIX
+    let choix = confirm(
+        "Où voulez-vous aller ?\n\n" +
+        "✅ OK → Vente d'actes médicaux\n" +
+        "❌ Annuler → Vente pharmacie"
+    );
+    
+    if (choix) {
+        window.location.href = '/actes_vente';
+    } else {
+        window.location.href = '/pharma_vente';
+    }
+}
+
+function editPatient(id) {
+    alert('Fonction de modification à venir');
+}
+</script>
+{% endblock %}
