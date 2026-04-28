@@ -4,8 +4,26 @@ from config import Config
 import json
 import os
 import time
+import base64
 from functools import lru_cache
 from threading import Timer
+
+def get_credentials():
+    """Récupère les credentials depuis Render ou fichier local"""
+    # Essayer depuis variable d'environnement (Render)
+    if os.environ.get('GOOGLE_CREDENTIALS'):
+        try:
+            creds_json = base64.b64decode(os.environ.get('GOOGLE_CREDENTIALS')).decode()
+            return json.loads(creds_json)
+        except:
+            pass
+    
+    # Fallback sur le fichier local
+    if os.path.exists(Config.GOOGLE_SHEETS_CREDENTIALS):
+        with open(Config.GOOGLE_SHEETS_CREDENTIALS, 'r') as f:
+            return json.load(f)
+    
+    raise Exception("Credentials non trouvés")
 
 class SheetsHelper:
     def __init__(self):
@@ -13,21 +31,23 @@ class SheetsHelper:
         self.structure_prefix = None
         self.structure_id = None
         
-        # 🔥 CACHE pour réduire les appels API
+        # CACHE pour réduire les appels API
         self._cache = {}
-        self._cache_duration = 10  # Cache valide 10 secondes
-        self._batch_operations = []  # Pour les opérations groupées
+        self._cache_duration = 10
+        self._batch_operations = []
         self._batch_timer = None
         
         try:
-            if os.path.exists(Config.GOOGLE_SHEETS_CREDENTIALS) and Config.SPREADSHEET_ID:
-                creds = ServiceAccountCredentials.from_json_keyfile_name(Config.GOOGLE_SHEETS_CREDENTIALS, self.scope)
+            if Config.SPREADSHEET_ID:
+                # Récupère les credentials (variable env ou fichier)
+                credentials_info = get_credentials_info()
+                creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_info, self.scope)
                 self.client = gspread.authorize(creds)
                 self.spreadsheet = self.client.open_by_key(Config.SPREADSHEET_ID)
                 print("✅ Connexion à Google Sheets réussie !")
                 self.init_structures_sheet()
             else:
-                raise Exception("Credentials manquant")
+                raise Exception("SPREADSHEET_ID manquant")
         except Exception as e:
             print(f"⚠️ Erreur: {e}")
             raise e
