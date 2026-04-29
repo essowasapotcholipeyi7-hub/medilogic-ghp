@@ -7,22 +7,30 @@
     <div class="col-md-8">
         <div class="card shadow-lg" id="factureContenu">
             <div class="card-body" style="font-family: 'Segoe UI', Arial, sans-serif;">
+
                 <!-- En-tête professionnel -->
-                <div class="row" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
-                    <div class="col-7">
-                        <h2 style="margin: 0;">{{ structure_nom or "Medilogic-GHP" }}</h2>
-                        <p style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;">
-                            <i class="fas fa-map-marker-alt"></i> {{ structure_adresse or "" }}<br>
-                            <i class="fas fa-phone"></i> {{ structure_telephone or "" }} | 
-                            <i class="fas fa-envelope"></i> {{ structure_email or "" }}
-                        </p>
-                    </div>
-                    <div class="col-5 text-end">
-                        <h1 style="font-size: 32px; margin: 0;">FACTURE</h1>
-                        <p style="margin: 5px 0 0 0;">N° {{ "%06d" % vente_id }}</p>
-                        <p>Date: {{ date_actuelle or "" }}</p>
-                    </div>
-                </div>
+<div class="row" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
+    <div class="col-7">
+        <div class="d-flex align-items-center gap-3">
+            {% if structure_logo %}
+            <img src="{{ structure_logo }}" alt="Logo" style="max-height: 80px; max-width: 150px; background: white; padding: 5px; border-radius: 8px;">
+            {% endif %}
+            <div>
+                <h2 style="margin: 0;">{{ structure_nom or "Medilogic-GHP" }}</h2>
+                <p style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;">
+                    <i class="fas fa-map-marker-alt"></i> {{ structure_adresse or "" }}<br>
+                    <i class="fas fa-phone"></i> {{ structure_telephone or "" }} | 
+                    <i class="fas fa-envelope"></i> {{ structure_email or "" }}
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-5 text-end">
+        <h1 style="font-size: 32px; margin: 0;">FACTURE</h1>
+        <p style="margin: 5px 0 0 0;">N° {{ "%06d" % vente_id }}</p>
+        <p>Date: {{ date_actuelle or "" }}</p>
+    </div>
+</div>
 
                 <!-- Infos patient -->
                 <div class="row mb-4">

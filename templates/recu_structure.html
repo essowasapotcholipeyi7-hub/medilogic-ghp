@@ -7,15 +7,27 @@
     <div class="col-md-6">
         <div class="card" id="recuContenu">
             <div class="card-body">
-                <div style="text-align:center; opacity:0.3; font-size:30px; font-weight:bold; margin-bottom:10px;">
-                    COPIÉ - ARCHIVE
-                </div>
-                
-                <div class="text-center">
-                    <h5>{{ structure_nom or "Medilogic-GHP" }}</h5>
-                    <p><strong>REÇU - COPIE STRUCTURE</strong></p>
-                    <p>N° {{ "%06d" % vente_id }} | {{ date_actuelle or "" }}</p>
-                </div>
+                <!-- En-tête professionnel -->
+<div class="row" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
+    <div class="col-7">
+        <div class="d-flex align-items-center gap-3">
+            {% if structure_logo %}
+            <img src="{{ structure_logo }}" alt="Logo" style="max-height: 80px; max-width: 150px; background: white; padding: 5px; border-radius: 8px;">
+            {% endif %}
+            <div>
+                <h2 style="margin: 0;">{{ structure_nom or "Medilogic-GHP" }}</h2>
+                <p style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;">
+                    <i class="fas fa-map-marker-alt"></i> {{ structure_adresse or "" }}<br>
+                    <i class="fas fa-phone"></i> {{ structure_telephone or "" }} | 
+                    <i class="fas fa-envelope"></i> {{ structure_email or "" }}
+                </p>
+            </div>
+        </div>
+    </div>
+    <h5 style="color:#6c757d;">REÇU STRUCTURE</h5>
+    <p>N° {{ "%06d" % vente_id }} | {{ date_actuelle or "" }}</p>
+    <hr>
+</div>
 
                 <div class="row mb-2">
                     <div class="col-6"><strong>Patient:</strong> {{ patient_nom }}</div>

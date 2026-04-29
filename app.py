@@ -128,6 +128,20 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# ========== ADMIN REQUIRED DECORATOR ==========
+def admin_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Veuillez vous connecter', 'warning')
+            return redirect(url_for('index'))
+        if not session.get('is_admin', False):
+            flash('Accès non autorisé. Réservé à l\'administrateur.', 'danger')
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -587,6 +601,7 @@ def facture(vente_id, type):
     # 🔥 AJOUTER CETTE LIGNE - Générer un nom de fichier
     patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
     nom_fichier = f"archive_facture_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    structure_logo = structure_info.get('logo_url', '')
     
     return render_template('facture_client.html',
                          vente_id=vente_id,
@@ -604,7 +619,8 @@ def facture(vente_id, type):
                          structure_telephone=structure_info.get('telephone', ''),
                          structure_email=structure_info.get('email', ''),
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
-                         nom_fichier=nom_fichier)
+                         nom_fichier=nom_fichier,
+                         structure_logo=structure_logo)
 
 
 @app.route('/admin_global')
@@ -796,7 +812,8 @@ def recu(vente_id, type):
     # 🔥 AJOUTER CETTE LIGNE - Générer un nom de fichier
     patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
     nom_fichier = f"archive_facture_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    
+    structure_logo=structure_info.get('logo_url', '')
+
     return render_template('recu_client.html',
                          vente_id=vente_id,
                          articles=articles,
@@ -812,7 +829,10 @@ def recu(vente_id, type):
                          structure_adresse=structure_info.get('adresse', ''),
                          structure_telephone=structure_info.get('telephone', ''),
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
-                         nom_fichier=nom_fichier)
+                         nom_fichier=nom_fichier,
+                         structure_logo=structure_logo)
+                       
+
 @app.route('/historique_ventes')
 @login_required
 def historique_ventes():
@@ -1010,10 +1030,40 @@ def api_delete_produit(produit_id):
 
 @app.route('/api/admin/structure', methods=['PUT'])
 @login_required
+@admin_required
 def api_update_structure():
     data = request.json
-    # À implémenter: mise à jour des infos structure
-    return jsonify({'success': True})
+    structure_id = session.get('structure_id')
+    
+    try:
+        sheet_structures = sheets_helper.spreadsheet.worksheet("structures")
+        cell = sheet_structures.find(str(structure_id), in_column=1)
+        
+        if cell:
+            row_num = cell.row
+            current_row = sheet_structures.row_values(row_num)
+            
+            # Mettre à jour les colonnes
+            current_row[1] = data.get('nom')      # nom
+            current_row[2] = data.get('email')    # email
+            current_row[3] = data.get('telephone') # telephone
+            current_row[4] = data.get('adresse')   # adresse
+            # colonne 10 = logo_url (index 9 en Python)
+            if len(current_row) > 9:
+                current_row[9] = data.get('logo_url', '')
+            else:
+                while len(current_row) <= 9:
+                    current_row.append('')
+                current_row[9] = data.get('logo_url', '')
+            
+            sheet_structures.update(f'A{row_num}:L{row_num}', [current_row])
+            return jsonify({'success': True})
+        else:
+            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 404
+            
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/admin/reset_password/<int:structure_id>', methods=['POST'])
 def reset_password(structure_id):
@@ -1159,6 +1209,7 @@ def recu_structure(vente_id, type):
     # 🔥 AJOUTER CETTE LIGNE - Générer un nom de fichier
     patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
     nom_fichier = f"archive_facture_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    structure_logo=structure_info.get('logo_url', '')
 
     return render_template('recu_structure.html',
                          vente_id=vente_id,
@@ -1172,7 +1223,9 @@ def recu_structure(vente_id, type):
                          mode_paiement=mode_paiement,
                          structure_nom=structure_info.get('nom', 'Medilogic-GHP'),
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
-                         nom_fichier=nom_fichier)
+                         nom_fichier=nom_fichier,
+                         structure_logo=structure_logo)
+                         
 
 # ========== FACTURE STRUCTURE (ARCHIVE) ==========
 @app.route('/facture_structure/<int:vente_id>/<string:type>')
@@ -1261,6 +1314,7 @@ def facture_structure(vente_id, type):
     # 🔥 AJOUTER CETTE LIGNE - Générer un nom de fichier
     patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
     nom_fichier = f"archive_facture_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    structure_logo=structure_info.get('logo_url', '')
 
     return render_template('facture_structure.html',
                          vente_id=vente_id,
@@ -1275,7 +1329,9 @@ def facture_structure(vente_id, type):
                          mode_paiement=mode_paiement,
                          structure_nom=structure_info.get('nom', 'Medilogic-GHP'),
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
-                         nom_fichier=nom_fichier)
+                         nom_fichier=nom_fichier,
+                         structure_logo=structure_logo)
+                     
 
 # ========== RENDEZ-VOUS ==========
 @app.route('/rendez_vous')
