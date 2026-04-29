@@ -61,6 +61,7 @@
                     <div><strong>Total: {{ sous_total|default(0)|round(0)|int }} FCFA</strong></div>
                     <div><strong>Net perçu: {{ net_a_payer|default(0)|round(0)|int }} FCFA</strong></div>
                     <div><strong>Prise en charge: {{ prise_en_charge|default(0)|round(0)|int }} FCFA</strong></div>
+                    <p><strong>Vendu par :</strong> {{ nom_caissier }}</p>
                 </div>
 
                 <div class="text-center mt-4 small">

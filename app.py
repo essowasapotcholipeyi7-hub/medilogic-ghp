@@ -602,6 +602,8 @@ def facture(vente_id, type):
     patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
     nom_fichier = f"archive_facture_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     structure_logo = structure_info.get('logo_url', '')
+    nom_caissier = session.get('user_name', '')
+
     
     return render_template('facture_client.html',
                          vente_id=vente_id,
@@ -620,7 +622,8 @@ def facture(vente_id, type):
                          structure_email=structure_info.get('email', ''),
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
                          nom_fichier=nom_fichier,
-                         structure_logo=structure_logo)
+                         structure_logo=structure_logo,
+                         nom_caissier=nom_caissier)
 
 
 @app.route('/admin_global')
@@ -813,6 +816,8 @@ def recu(vente_id, type):
     patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
     nom_fichier = f"archive_facture_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     structure_logo=structure_info.get('logo_url', '')
+    nom_caissier = session.get('user_name', '')
+
 
     return render_template('recu_client.html',
                          vente_id=vente_id,
@@ -830,7 +835,9 @@ def recu(vente_id, type):
                          structure_telephone=structure_info.get('telephone', ''),
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
                          nom_fichier=nom_fichier,
-                         structure_logo=structure_logo)
+                         structure_logo=structure_logo,
+                         nom_caissier=nom_caissier)
+
                        
 
 @app.route('/historique_ventes')
@@ -1215,6 +1222,8 @@ def recu_structure(vente_id, type):
     patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
     nom_fichier = f"archive_facture_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     structure_logo=structure_info.get('logo_url', '')
+    nom_caissier = session.get('user_name', '')
+
 
     return render_template('recu_structure.html',
                          vente_id=vente_id,
@@ -1229,8 +1238,9 @@ def recu_structure(vente_id, type):
                          structure_nom=structure_info.get('nom', 'Medilogic-GHP'),
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
                          nom_fichier=nom_fichier,
-                         structure_logo=structure_logo)
-                         
+                         structure_logo=structure_logo,
+                         nom_caissier=nom_caissier)
+
 
 # ========== FACTURE STRUCTURE (ARCHIVE) ==========
 @app.route('/facture_structure/<int:vente_id>/<string:type>')
@@ -1320,6 +1330,8 @@ def facture_structure(vente_id, type):
     patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
     nom_fichier = f"archive_facture_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     structure_logo=structure_info.get('logo_url', '')
+    nom_caissier = session.get('user_name', '')
+
 
     return render_template('facture_structure.html',
                          vente_id=vente_id,
@@ -1335,7 +1347,9 @@ def facture_structure(vente_id, type):
                          structure_nom=structure_info.get('nom', 'Medilogic-GHP'),
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
                          nom_fichier=nom_fichier,
-                         structure_logo=structure_logo)
+                         structure_logo=structure_logo,
+                         nom_caissier=nom_caissier)
+
                      
 
 # ========== RENDEZ-VOUS ==========
