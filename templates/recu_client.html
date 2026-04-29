@@ -24,10 +24,13 @@
             </div>
         </div>
     </div>
-    <h3 style="color:#28a745;">REÇU</h3>
-    <p>N° {{ "%06d" % vente_id }} | {{ date_actuelle or "" }}</p>
-    <hr>
+    <div class="col-5 text-end">
+        <h1 style="font-size: 36px; margin: 0;">REÇU</h1>
+        <p style="margin: 5px 0 0 0;">N° {{ "%06d" % vente_id }}</p>
+        <p>Date: {{ date_actuelle or "" }}</p>
+    </div>
 </div>
+<hr>
 
                 <!-- Infos patient -->
                 <div class="mb-3">
