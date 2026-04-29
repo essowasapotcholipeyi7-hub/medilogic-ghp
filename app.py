@@ -1043,20 +1043,25 @@ def api_update_structure():
             row_num = cell.row
             current_row = sheet_structures.row_values(row_num)
             
-            # Mettre à jour les colonnes
-            current_row[1] = data.get('nom')      # nom
-            current_row[2] = data.get('email')    # email
-            current_row[3] = data.get('telephone') # telephone
-            current_row[4] = data.get('adresse')   # adresse
-            # colonne 10 = logo_url (index 9 en Python)
-            if len(current_row) > 9:
-                current_row[9] = data.get('logo_url', '')
-            else:
-                while len(current_row) <= 9:
-                    current_row.append('')
-                current_row[9] = data.get('logo_url', '')
+            # 🔥 INDEX CORRECTS (0-based)
+            # A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8, J=9, K=10, L=11, M=12...
             
-            sheet_structures.update(f'A{row_num}:L{row_num}', [current_row])
+            # Mettre à jour les colonnes
+            current_row[1] = data.get('nom')           # colonne B (nom)
+            current_row[2] = data.get('email')         # colonne C (email)
+            current_row[3] = data.get('telephone')     # colonne D (téléphone)
+            current_row[4] = data.get('adresse')       # colonne E (adresse)
+            
+            # 🔥 LOGO_URL à l'index 11 (colonne L)
+            if len(current_row) > 11:
+                current_row[11] = data.get('logo_url', '')
+            else:
+                while len(current_row) <= 11:
+                    current_row.append('')
+                current_row[11] = data.get('logo_url', '')
+            
+            # Mettre à jour jusqu'à la colonne M (index 12)
+            sheet_structures.update(f'A{row_num}:M{row_num}', [current_row])
             return jsonify({'success': True})
         else:
             return jsonify({'success': False, 'error': 'Structure non trouvée'}), 404
