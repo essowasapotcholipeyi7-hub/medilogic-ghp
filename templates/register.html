@@ -44,16 +44,27 @@
                         </div>
                         
                         <div class="col-md-6 mb-3">
-                            <label for="password" class="form-label">Mot de passe *</label>
-                            <input type="password" class="form-control" id="password" name="password" 
-                                   placeholder="Minimum 6 caractères" required>
-                        </div>
-                        
-                        <div class="col-md-6 mb-3">
-                            <label for="confirm_password" class="form-label">Confirmer le mot de passe *</label>
-                            <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
-                        </div>
-                    </div>
+    <label for="password" class="form-label">Mot de passe *</label>
+    <input type="password" class="form-control" id="password" name="password" 
+           placeholder="Minimum 8 caractères" required
+           onkeyup="checkPasswordStrength()">
+    <div class="mt-2" id="password-strength"></div>
+    <small class="text-muted">
+        🔒 Le mot de passe doit contenir :<br>
+        ✓ Au moins 8 caractères<br>
+        ✓ Une lettre majuscule<br>
+        ✓ Une lettre minuscule<br>
+        ✓ Un chiffre<br>
+        ✓ Un symbole (!@#$%^&*)
+    </small>
+</div>
+
+<div class="col-md-6 mb-3">
+    <label for="confirm_password" class="form-label">Confirmer le mot de passe *</label>
+    <input type="password" class="form-control" id="confirm_password" name="confirm_password" required
+           onkeyup="checkPasswordMatch()">
+    <div class="mt-1" id="password-match" style="font-size: 12px;"></div>
+</div>
                     
                     <button type="submit" class="btn btn-success w-100">
                         <i class="fas fa-paper-plane"></i> Créer ma structure
@@ -67,4 +78,82 @@
         </div>
     </div>
 </div>
+
+<script>
+
+function checkFormValidity() {
+    const password = document.getElementById('password').value;
+    const confirm = document.getElementById('confirm_password').value;
+    const submitBtn = document.querySelector('button[type="submit"]');
+    
+    if (!submitBtn) return;
+    
+    let rules = {
+        length: password.length >= 8,
+        upper: /[A-Z]/.test(password),
+        lower: /[a-z]/.test(password),
+        digit: /[0-9]/.test(password),
+        symbol: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
+    };
+    
+    const passwordValid = rules.length && rules.upper && rules.lower && rules.digit && rules.symbol;
+    const passwordMatch = password === confirm && password !== '';
+    
+    submitBtn.disabled = !(passwordValid && passwordMatch);
+    submitBtn.style.opacity = submitBtn.disabled ? '0.6' : '1';
+    submitBtn.style.cursor = submitBtn.disabled ? 'not-allowed' : 'pointer';
+}
+function checkPasswordStrength() {
+    const password = document.getElementById('password').value;
+    const strengthDiv = document.getElementById('password-strength');
+    
+    let rules = {
+        length: password.length >= 8,
+        upper: /[A-Z]/.test(password),
+        lower: /[a-z]/.test(password),
+        digit: /[0-9]/.test(password),
+        symbol: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
+    };
+    
+    const allValid = rules.length && rules.upper && rules.lower && rules.digit && rules.symbol;
+    
+    if (password === '') {
+        strengthDiv.innerHTML = '';
+    } else if (allValid) {
+        strengthDiv.innerHTML = '<span style="color: green;">✅ Mot de passe fort !</span>';
+    } else {
+        let missing = [];
+        if (!rules.length) missing.push('8 caractères');
+        if (!rules.upper) missing.push('majuscule');
+        if (!rules.lower) missing.push('minuscule');
+        if (!rules.digit) missing.push('chiffre');
+        if (!rules.symbol) missing.push('symbole');
+        
+        strengthDiv.innerHTML = '<span style="color: orange;">⚠️ Manque : ' + missing.join(', ') + '</span>';
+    }
+    
+    checkFormValidity(); // ← Déplace-la ici (toujours appelée)
+}
+function checkPasswordMatch() {
+    const password = document.getElementById('password').value;
+    const confirm = document.getElementById('confirm_password').value;
+    const matchDiv = document.getElementById('password-match');
+    
+    if (confirm === '') {
+        matchDiv.innerHTML = '';
+    } else if (password === confirm) {
+        matchDiv.innerHTML = '<span style="color: green;">✅ Les mots de passe correspondent</span>';
+    } else {
+        matchDiv.innerHTML = '<span style="color: red;">❌ Les mots de passe ne correspondent pas</span>';
+    }
+    
+    checkFormValidity();
+}
+
+// Initialisation au chargement
+document.addEventListener('DOMContentLoaded', function() {
+    checkFormValidity();
+});
+}
+</script>
 {% endblock %}

@@ -200,6 +200,27 @@ def index():
     return render_template('index.html')
 
 # MODIFIER la route d'inscription
+
+def valider_mot_de_passe(password):
+    """Vérifie que le mot de passe respecte les règles de sécurité"""
+    if len(password) < 8:
+        return False, "Le mot de passe doit contenir au moins 8 caractères"
+    
+    if not any(c.isupper() for c in password):
+        return False, "Le mot de passe doit contenir au moins une majuscule"
+    
+    if not any(c.islower() for c in password):
+        return False, "Le mot de passe doit contenir au moins une minuscule"
+    
+    if not any(c.isdigit() for c in password):
+        return False, "Le mot de passe doit contenir au moins un chiffre"
+    
+    caracteres_speciaux = "!@#$%^&*()_+-=[]{}|;:,.<>?/"
+    if not any(c in caracteres_speciaux for c in password):
+        return False, "Le mot de passe doit contenir au moins un symbole (!@#$%^&*...)"
+    
+    return True, "OK"
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -210,6 +231,12 @@ def register():
         address = request.form.get('address')
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
+        
+        # 🔥 VALIDATION DU MOT DE PASSE
+        valide, message = valider_mot_de_passe(password)
+        if not valide:
+            flash(message, 'danger')
+            return redirect(url_for('register'))
         
         if password != confirm_password:
             flash('Les mots de passe ne correspondent pas', 'danger')
