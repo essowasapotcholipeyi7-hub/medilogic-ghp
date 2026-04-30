@@ -8,12 +8,15 @@ from datetime import datetime
 import json
 import os
 
-# 🔥 AJOUTE CES 4 LIGNES 🔥
+# ========== DÉTECTION ENVIRONNEMENT ==========
 IS_PRODUCTION = os.environ.get('RENDER') == 'true' or os.environ.get('PRODUCTION') == 'true'
+
 if IS_PRODUCTION:
-    BASE_URL = os.environ.get('RENDER_EXTERNAL_URL', 'https://ton-app.onrender.com')
+    BASE_URL = os.environ.get('RENDER_EXTERNAL_URL', 'https://medilogic-ghp.onrender.com')
 else:
     BASE_URL = 'http://127.0.0.1:5000'
+
+print(f"🔗 BASE_URL: {BASE_URL}")
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -23,9 +26,15 @@ app.secret_key = Config.SECRET_KEY
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', Config.MAIL_USERNAME if hasattr(Config, 'MAIL_USERNAME') else '')
-app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', Config.MAIL_PASSWORD if hasattr(Config, 'MAIL_PASSWORD') else '')
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', '')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', '')
 app.config['MAIL_DEFAULT_SENDER'] = app.config['MAIL_USERNAME']
+
+# Vérification
+if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
+    print("📧 Email configuré avec succès")
+else:
+    print("⚠️ Email non configuré (variables manquantes)")
 
 mail = Mail(app)
 
@@ -47,74 +56,74 @@ def get_next_id(records, id_field='ID'):
     except:
         return len(records) + 1
 
-def envoyer_email_activation(structure_nom, structure_email, structure_id, proprietaire):
-    """Envoie un email à l'admin pour l'activation d'une nouvelle structure"""
-    try:
-        sujet = f"🏥 Nouvelle inscription - {structure_nom}"
-        
-        lien_activation = f"{BASE_URL}/admin/activate/{structure_id}"
-        lien_admin = f"{BASE_URL}/admin_global"
-        
-        corps = f"""
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
-                .content {{ background: #f8f9fa; padding: 20px; border-radius: 0 0 10px 10px; }}
-                .info {{ background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }}
-                .btn {{ display: inline-block; background: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }}
-                .footer {{ text-align: center; font-size: 12px; color: #666; margin-top: 20px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h2>🏥 Nouvelle inscription</h2>
-                    <p>Medilogic-GHP</p>
-                </div>
-                <div class="content">
-                    <h3>Une nouvelle structure s'est inscrite !</h3>
-                    
-                    <div class="info">
-                        <p><strong>🏥 Structure :</strong> {structure_nom}</p>
-                        <p><strong>👤 Propriétaire :</strong> {proprietaire}</p>
-                        <p><strong>📧 Email :</strong> {structure_email}</p>
-                        <p><strong>📅 Date :</strong> {datetime.now().strftime('%d/%m/%Y à %H:%M')}</p>
+import threading
+
+def envoyer_email_async(structure_nom, structure_email, structure_id, proprietaire):
+    """Envoie l'email dans un thread séparé - ne bloque pas l'inscription"""
+    def _send():
+        try:
+            sujet = f"🏥 Nouvelle inscription - {structure_nom}"
+            
+            lien_activation = f"{BASE_URL}/admin/activate/{structure_id}"
+            lien_admin = f"{BASE_URL}/admin_global"
+            
+            corps = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; }}
+                    .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                    .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
+                    .content {{ background: #f8f9fa; padding: 20px; border-radius: 0 0 10px 10px; }}
+                    .info {{ background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }}
+                    .btn {{ display: inline-block; background: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h2>🏥 Nouvelle inscription</h2>
+                        <p>Medilogic-GHP</p>
                     </div>
-                    
-                    <div style="text-align: center;">
-                        <a href="{lien_activation}" class="btn" style="color: white; background: #28a745;">✅ Activer la structure</a>
-                        <br><br>
-                        <a href="{lien_admin}" style="color: #667eea;">📊 Aller à l'admin global</a>
+                    <div class="content">
+                        <h3>Une nouvelle structure s'est inscrite !</h3>
+                        <div class="info">
+                            <p><strong>🏥 Structure :</strong> {structure_nom}</p>
+                            <p><strong>👤 Propriétaire :</strong> {proprietaire}</p>
+                            <p><strong>📧 Email :</strong> {structure_email}</p>
+                            <p><strong>📅 Date :</strong> {datetime.now().strftime('%d/%m/%Y à %H:%M')}</p>
+                        </div>
+                        <div style="text-align: center;">
+                            <a href="{lien_activation}" class="btn" style="color: white; background: #28a745;">✅ Activer la structure</a>
+                            <br><br>
+                            <a href="{lien_admin}" style="color: #667eea;">📊 Aller à l'admin global</a>
+                        </div>
                     </div>
-                    
-                    <div class="info">
-                        <p><strong>⚠️ Attention :</strong> Cette structure ne pourra pas se connecter tant que vous ne l'aurez pas activée.</p>
+                    <div class="footer">
+                        <p>Medilogic-GHP - Application de gestion hospitalière</p>
                     </div>
                 </div>
-                <div class="footer">
-                    <p>Medilogic-GHP - Application de gestion hospitalière</p>
-                    <p>Cet email est automatique, merci de ne pas y répondre.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        
-        msg = Message(
-            subject=sujet,
-            recipients=[Config.ADMIN_EMAIL],
-            html=corps
-        )
-        
-        mail.send(msg)
-        print(f"📧 Email d'activation envoyé à {Config.ADMIN_EMAIL}")
-        return True
-    except Exception as e:
-        print(f"❌ Erreur envoi email: {e}")
-        return False
+            </body>
+            </html>
+            """
+            
+            msg = Message(
+                subject=sujet,
+                recipients=[Config.ADMIN_EMAIL],
+                html=corps
+            )
+            
+            mail.send(msg)
+            print(f"✅ Email d'activation envoyé à {Config.ADMIN_EMAIL}")
+            
+        except Exception as e:
+            print(f"⚠️ Email non envoyé: {e}")
+    
+    thread = threading.Thread(target=_send)
+    thread.daemon = True
+    thread.start()
+    print(f"📧 Envoi email en arrière-plan pour {structure_nom}")
+
 
 # ========== LOGIN REQUIRED DECORATOR ==========
 def login_required(f):
