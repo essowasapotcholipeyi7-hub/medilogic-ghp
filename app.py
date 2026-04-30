@@ -241,7 +241,7 @@ def register():
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
         
-        # 🔥 VALIDATION DU MOT DE PASSE
+        # VALIDATION DU MOT DE PASSE
         valide, message = valider_mot_de_passe(password)
         if not valide:
             flash(message, 'danger')
@@ -277,8 +277,8 @@ def register():
         sheets_helper.add_record('structures', new_structure, use_prefix=False)
         sheets_helper.init_structure_sheets(new_id)
         
-        # 🔥 ENVOYER L'EMAIL D'ACTIVATION 🔥
-        envoyer_email_activation(structure_name, email, new_id, proprietaire_nom)
+        # 🔥 ENVOYER L'EMAIL EN ARRIÈRE-PLAN 🔥
+        envoyer_email_async(structure_name, email, new_id, proprietaire_nom)
         
         flash(f'Structure "{structure_name}" créée avec succès ! En attente d\'activation.', 'success')
         return redirect(url_for('index'))
