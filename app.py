@@ -2179,26 +2179,6 @@ def api_update_patient(patient_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/test_db')
-def test_db():
-    try:
-        # Tester la connexion
-        result = db.execute_query("SELECT 1 as test")
-        if result and len(result) > 0:
-            return jsonify({'status': 'ok', 'message': 'Connexion OK'})
-        else:
-            return jsonify({'status': 'error', 'message': 'Pas de résultat'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-@app.route('/debug_db')
-def debug_db():
-    try:
-        # Tester la connexion
-        result = db.execute_query("SELECT 1 as test")
-        return jsonify({'status': 'ok', 'result': result})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut
     port = int(os.environ.get("PORT", 5000))
