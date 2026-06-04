@@ -7,3 +7,5 @@ python-dotenv==1.0.0
 flask-session==0.5.0
 flask-mail==0.9.1
 pandas
+openpyxl
+psycopg2-binary
