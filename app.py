@@ -2943,51 +2943,50 @@ def api_get_all_ventes():
         import json
         
         for v in ventes:
-            detail = ""
-            
-            # 🔥 Pour les actes - afficher TOUS les actes
-            if v.get('type') == 'actes' and v.get('actes'):
-                actes_data = v.get('actes')
-                if isinstance(actes_data, str):
-                    actes_data = json.loads(actes_data)
-                if actes_data:
-                    # Liste de tous les actes avec leur quantité
-                    articles = []
-                    for a in actes_data:
-                        nom = a.get('nom', 'Acte')
-                        qte = a.get('quantite', 1)
-                        if qte > 1:
-                            articles.append(f"{nom} x{qte}")
-                        else:
-                            articles.append(nom)
-                    detail = ", ".join(articles)
-            
-            # 🔥 Pour la pharmacie - afficher TOUS les produits
-            elif v.get('type') == 'pharma' and v.get('produits'):
-                produits_data = v.get('produits')
-                if isinstance(produits_data, str):
-                    produits_data = json.loads(produits_data)
-                if produits_data:
-                    # Liste de tous les produits avec leur quantité
-                    articles = []
-                    for p in produits_data:
-                        nom = p.get('nom', 'Produit')
-                        qte = p.get('quantite', 1)
-                        if qte > 1:
-                            articles.append(f"{nom} x{qte}")
-                        else:
-                            articles.append(nom)
-                    detail = ", ".join(articles)
-            
-            result.append({
-                'ID': v.get('id'),
-                'patient_nom': v.get('patient_nom', 'Patient'),
-                'type': v.get('type'),
-                'net_a_payer': float(v.get('net_a_payer', 0)),
-                'taux_assurance': v.get('taux_assurance', 0),
-                'date': str(v.get('date_vente', '')),
-                'detail': detail if detail else '-'
-            })
+            if isinstance(v, dict):
+                detail = ""
+                
+                # Pour les actes
+                if v.get('type') == 'actes' and v.get('actes'):
+                    actes_data = v.get('actes')
+                    if isinstance(actes_data, str):
+                        actes_data = json.loads(actes_data)
+                    if actes_data:
+                        articles = []
+                        for a in actes_data:
+                            nom = a.get('nom', 'Acte')
+                            qte = a.get('quantite', 1)
+                            if qte > 1:
+                                articles.append(f"{nom} x{qte}")
+                            else:
+                                articles.append(nom)
+                        detail = ", ".join(articles)
+                
+                # Pour la pharmacie
+                elif v.get('type') == 'pharma' and v.get('produits'):
+                    produits_data = v.get('produits')
+                    if isinstance(produits_data, str):
+                        produits_data = json.loads(produits_data)
+                    if produits_data:
+                        articles = []
+                        for p in produits_data:
+                            nom = p.get('nom', 'Produit')
+                            qte = p.get('quantite', 1)
+                            if qte > 1:
+                                articles.append(f"{nom} x{qte}")
+                            else:
+                                articles.append(nom)
+                        detail = ", ".join(articles)
+                
+                result.append({
+                    'ID': v.get('id'),
+                    'patient_nom': v.get('patient_nom', 'Patient'),
+                    'type': v.get('type'),
+                    'net_a_payer': float(v.get('net_a_payer', 0)),
+                    'taux_assurance': v.get('taux_assurance', 0),
+                    'date': str(v.get('date_vente', '')),
+                    'detail': detail if detail else '-'
+                })
         
         return jsonify(result)
         
