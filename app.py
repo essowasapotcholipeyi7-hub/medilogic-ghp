@@ -1671,50 +1671,130 @@ def facture_structure(vente_id, type):
 @app.route('/rendez_vous')
 @login_required
 def rendez_vous():
-    """Page de gestion des rendez-vous"""
+    """Page de gestion des rendez-vous avec données depuis Neon"""
     structure_id = session.get('structure_id')
     
-    # Récupérer les patients
-    patients = sheets_helper.get_all_records('patients')
-    patients = [p for p in patients if str(p.get('structure_id')) == str(structure_id)]
+    # 🔥 Récupérer les patients depuis NEON
+    patients = db.execute_query("""
+        SELECT id, nom, prenom, telephone 
+        FROM patients 
+        WHERE structure_id = %s 
+        ORDER BY nom
+    """, (structure_id,))
     
-    # Récupérer les rendez-vous
-    rendez_vous = sheets_helper.get_all_records('rendez_vous')
-    rendez_vous = [r for r in rendez_vous if str(r.get('structure_id')) == str(structure_id)]
-    rendez_vous.sort(key=lambda x: x.get('date_rendez_vous', ''))
+    patients_list = []
+    for p in patients:
+        if isinstance(p, dict):
+            patients_list.append({
+                'ID': p.get('id'),
+                'nom': f"{p.get('nom', '')} {p.get('prenom', '')}".strip(),
+                'telephone': p.get('telephone', '')
+            })
+        else:
+            patients_list.append({
+                'ID': p[0],
+                'nom': f"{p[1]} {p[2]}".strip(),
+                'telephone': p[3] if len(p) > 3 else ''
+            })
+    
+    # 🔥 Récupérer les rendez-vous depuis NEON
+    rendez_vous = db.execute_query("""
+        SELECT 
+            r.id, 
+            r.patient_id, 
+            r.date_rdv, 
+            r.heure_rdv, 
+            r.motif, 
+            r.statut,
+            p.nom,
+            p.prenom,
+            p.telephone
+        FROM rendez_vous r
+        LEFT JOIN patients p ON r.patient_id = p.id
+        WHERE r.structure_id = %s
+        ORDER BY r.date_rdv DESC, r.heure_rdv DESC
+    """, (structure_id,))
+    
+    rdv_list = []
+    for r in rendez_vous:
+        if isinstance(r, dict):
+            rdv_list.append({
+                'ID': r.get('id'),
+                'patient_id': r.get('patient_id'),
+                'patient_nom': f"{r.get('nom', '')} {r.get('prenom', '')}".strip(),
+                'patient_telephone': r.get('telephone', ''),
+                'date_rendez_vous': r.get('date_rdv'),
+                'heure_rendez_vous': r.get('heure_rdv'),
+                'motif': r.get('motif', ''),
+                'statut': r.get('statut', 'programme')
+            })
+        else:
+            rdv_list.append({
+                'ID': r[0],
+                'patient_id': r[1],
+                'patient_nom': f"{r[6]} {r[7]}".strip() if len(r) > 7 else 'Patient',
+                'patient_telephone': r[8] if len(r) > 8 else '',
+                'date_rendez_vous': r[2],
+                'heure_rendez_vous': r[3],
+                'motif': r[4] if len(r) > 4 else '',
+                'statut': r[5] if len(r) > 5 else 'programme'
+            })
     
     return render_template('rendez_vous.html', 
-                         patients=patients,
-                         rendez_vous=rendez_vous)
+                         patients=patients_list, 
+                         rendez_vous=rdv_list)
+
 
 @app.route('/api/rendez_vous', methods=['POST'])
 @login_required
 def api_add_rendez_vous():
+    """Ajouter un rendez-vous dans Neon"""
     try:
         data = request.json
         structure_id = session.get('structure_id')
         
-        rendez_vous = sheets_helper.get_all_records('rendez_vous')
-        new_id = get_next_id(rendez_vous, 'ID')
+        print("=" * 60)
+        print("📅 AJOUT RENDEZ-VOUS DANS NEON")
+        print(f"Patient ID: {data.get('patient_id')}")
+        print(f"Date: {data.get('date')}")
+        print(f"Heure: {data.get('heure')}")
+        print("=" * 60)
         
-        new_rdv = [
-            new_id,
+        if not structure_id:
+            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
+        
+        # 🔥 Insérer dans Neon
+        result = db.execute_query("""
+            INSERT INTO rendez_vous (
+                patient_id, 
+                structure_id, 
+                date_rdv, 
+                heure_rdv, 
+                motif, 
+                statut
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
             data.get('patient_id'),
-            data.get('patient_nom'),
-            data.get('patient_telephone'),
+            structure_id,
             data.get('date'),
             data.get('heure'),
-            data.get('motif'),
-            'programme',  # statut
-            datetime.now().isoformat(),
-            '',  # date_rappel
-            'non',  # rappel_envoye
-            structure_id
-        ]
+            data.get('motif', 'Consultation'),
+            'programme'
+        ))
         
-        sheets_helper.add_record('rendez_vous', new_rdv)
-        return jsonify({'success': True, 'id': new_id})
+        if result and len(result) > 0:
+            rdv_id = result[0]['id'] if isinstance(result[0], dict) else result[0][0]
+            print(f"✅ Rendez-vous ajouté avec ID: {rdv_id}")
+            return jsonify({'success': True, 'id': rdv_id})
+        else:
+            return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
+            
     except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -1730,45 +1810,47 @@ def api_reporter_rendez_vous():
         nouveau_motif = data.get('motif', '')
         envoyer_rappel = data.get('envoyer_rappel', True)
         
-        # Récupérer le rendez-vous
-        rendez_vous = sheets_helper.get_all_records('rendez_vous')
-        rdv = next((r for r in rendez_vous if r.get('ID') == rdv_id), None)
+        structure_id = session.get('structure_id')
         
-        if not rdv:
+        # 🔥 Récupérer le rendez-vous depuis Neon
+        rdv = db.execute_query("""
+            SELECT r.*, p.nom, p.prenom, p.telephone
+            FROM rendez_vous r
+            JOIN patients p ON r.patient_id = p.id
+            WHERE r.id = %s AND r.structure_id = %s
+        """, (rdv_id, structure_id))
+        
+        if not rdv or len(rdv) == 0:
             return jsonify({'success': False, 'error': 'Rendez-vous non trouvé'}), 404
         
-        patient_nom = rdv.get('patient_nom')
-        patient_tel = rdv.get('patient_telephone')
-        ancienne_date = rdv.get('date_rendez_vous')
-        ancienne_heure = rdv.get('heure_rendez_vous')
+        if isinstance(rdv[0], dict):
+            r = rdv[0]
+            patient_nom = f"{r.get('nom', '')} {r.get('prenom', '')}".strip()
+            patient_tel = r.get('telephone', '')
+            ancienne_date = r.get('date_rdv')
+            ancienne_heure = r.get('heure_rdv')
+        else:
+            r = rdv[0]
+            patient_nom = f"{r[8]} {r[9]}".strip() if len(r) > 9 else 'Patient'
+            patient_tel = r[10] if len(r) > 10 else ''
+            ancienne_date = r[3]
+            ancienne_heure = r[4]
         
-        # Récupérer la structure
-        structure_id = session.get('structure_id')
+        # Récupérer les infos de la structure
         structures = sheets_helper.get_all_records('structures', use_prefix=False)
-        structure_info = next((s for s in structures if s.get('ID') == structure_id), {})
+        structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
         structure_nom = structure_info.get('nom', 'Medilogic-GHP')
         structure_tel = structure_info.get('telephone', '')
         
-        # Mettre à jour dans Google Sheets
-        sheet_name = f"struct_{structure_id}_rendez_vous"
-        worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
-        cell = worksheet.find(str(rdv_id), in_column=1)
-        
-        if not cell:
-            return jsonify({'success': False, 'error': 'Rendez-vous non trouvé'}), 404
-        
-        row_num = cell.row
-        current_row = worksheet.row_values(row_num)
-        
-        # Mettre à jour date, heure, motif, statut
-        current_row[4] = nouvelle_date   # date_rendez_vous
-        current_row[5] = nouvelle_heure  # heure_rendez_vous
-        if nouveau_motif:
-            current_row[6] = nouveau_motif  # motif
-        current_row[7] = 'programme'    # statut (reprogrammé)
-        current_row[10] = 'non'          # rappel_envoye (remettre à zéro)
-        
-        worksheet.update(f'A{row_num}:L{row_num}', [current_row])
+        # 🔥 Mettre à jour dans Neon
+        db.execute_query("""
+            UPDATE rendez_vous 
+            SET date_rdv = %s, 
+                heure_rdv = %s, 
+                motif = %s, 
+                statut = 'programme'
+            WHERE id = %s AND structure_id = %s
+        """, (nouvelle_date, nouvelle_heure, nouveau_motif or 'Consultation', rdv_id, structure_id))
         
         # Envoyer WhatsApp si demandé
         whatsapp_url = None
@@ -1797,32 +1879,49 @@ def api_reporter_rendez_vous():
         
     except Exception as e:
         print(f"❌ Erreur report: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/rendez_vous/<int:rdv_id>/rappel', methods=['POST'])
 @login_required
 def api_envoyer_rappel(rdv_id):
     """Envoyer un rappel WhatsApp"""
     try:
-        rendez_vous = sheets_helper.get_all_records('rendez_vous')
-        rdv = next((r for r in rendez_vous if r.get('ID') == rdv_id), None)
+        structure_id = session.get('structure_id')
         
-        if not rdv:
+        # 🔥 Récupérer le rendez-vous depuis Neon
+        rdv = db.execute_query("""
+            SELECT r.*, p.nom, p.prenom, p.telephone
+            FROM rendez_vous r
+            JOIN patients p ON r.patient_id = p.id
+            WHERE r.id = %s AND r.structure_id = %s
+        """, (rdv_id, structure_id))
+        
+        if not rdv or len(rdv) == 0:
             return jsonify({'success': False, 'error': 'Rendez-vous non trouvé'}), 404
         
-        patient_nom = rdv.get('patient_nom')
-        patient_tel = rdv.get('patient_telephone')
-        date_rdv = rdv.get('date_rendez_vous')
-        heure_rdv = rdv.get('heure_rendez_vous')
-        motif = rdv.get('motif')
+        if isinstance(rdv[0], dict):
+            r = rdv[0]
+            patient_nom = f"{r.get('nom', '')} {r.get('prenom', '')}".strip()
+            patient_tel = r.get('telephone', '')
+            date_rdv = r.get('date_rdv')
+            heure_rdv = r.get('heure_rdv')
+            motif = r.get('motif', 'Consultation')
+        else:
+            r = rdv[0]
+            patient_nom = f"{r[8]} {r[9]}".strip() if len(r) > 9 else 'Patient'
+            patient_tel = r[10] if len(r) > 10 else ''
+            date_rdv = r[3]
+            heure_rdv = r[4]
+            motif = r[5] if len(r) > 5 else 'Consultation'
         
         # Récupérer les infos de la structure
-        structure_id = session.get('structure_id')
         structures = sheets_helper.get_all_records('structures', use_prefix=False)
-        structure_info = next((s for s in structures if s.get('ID') == structure_id), {})
+        structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
         structure_nom = structure_info.get('nom', 'Medilogic-GHP')
         
-        # 🔥 CORRECTION: Nettoyer le numéro en Python
         tel = str(patient_tel).replace(' ', '').replace('+', '')
         if not tel.startswith('228') and not tel.startswith('229') and not tel.startswith('221'):
             tel = '228' + tel
@@ -1844,25 +1943,26 @@ def api_envoyer_rappel(rdv_id):
         print(f"❌ Erreur rappel: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
 @app.route('/api/rendez_vous/<int:rdv_id>/confirmer', methods=['POST'])
 @login_required
 def api_confirmer_rendez_vous(rdv_id):
     """Confirmer un rendez-vous"""
     try:
         structure_id = session.get('structure_id')
-        sheet_name = f"struct_{structure_id}_rendez_vous"
-        worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
         
-        # Trouver la ligne du rendez-vous
-        cell = worksheet.find(str(rdv_id), in_column=1)
-        if cell:
-            row_num = cell.row
-            # Mettre à jour le statut (colonne 8 = statut)
-            worksheet.update_cell(row_num, 8, 'confirme')
-            return jsonify({'success': True, 'message': 'Rendez-vous confirmé'})
-        return jsonify({'success': False, 'error': 'Rendez-vous non trouvé'})
+        # 🔥 Mettre à jour dans Neon
+        db.execute_query("""
+            UPDATE rendez_vous 
+            SET statut = 'confirme'
+            WHERE id = %s AND structure_id = %s
+        """, (rdv_id, structure_id))
+        
+        return jsonify({'success': True, 'message': 'Rendez-vous confirmé'})
+        
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/rendez_vous/<int:rdv_id>/annuler', methods=['POST'])
 @login_required
@@ -1870,17 +1970,19 @@ def api_annuler_rendez_vous(rdv_id):
     """Annuler un rendez-vous"""
     try:
         structure_id = session.get('structure_id')
-        sheet_name = f"struct_{structure_id}_rendez_vous"
-        worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
         
-        cell = worksheet.find(str(rdv_id), in_column=1)
-        if cell:
-            row_num = cell.row
-            worksheet.update_cell(row_num, 8, 'annule')
-            return jsonify({'success': True, 'message': 'Rendez-vous annulé'})
-        return jsonify({'success': False, 'error': 'Rendez-vous non trouvé'})
+        # 🔥 Mettre à jour dans Neon
+        db.execute_query("""
+            UPDATE rendez_vous 
+            SET statut = 'annule'
+            WHERE id = %s AND structure_id = %s
+        """, (rdv_id, structure_id))
+        
+        return jsonify({'success': True, 'message': 'Rendez-vous annulé'})
+        
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/rendez_vous/<int:rdv_id>/terminer', methods=['POST'])
 @login_required
@@ -1888,15 +1990,16 @@ def api_terminer_rendez_vous(rdv_id):
     """Marquer un rendez-vous comme terminé"""
     try:
         structure_id = session.get('structure_id')
-        sheet_name = f"struct_{structure_id}_rendez_vous"
-        worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
         
-        cell = worksheet.find(str(rdv_id), in_column=1)
-        if cell:
-            row_num = cell.row
-            worksheet.update_cell(row_num, 8, 'termine')
-            return jsonify({'success': True, 'message': 'Rendez-vous terminé'})
-        return jsonify({'success': False, 'error': 'Rendez-vous non trouvé'})
+        # 🔥 Mettre à jour dans Neon
+        db.execute_query("""
+            UPDATE rendez_vous 
+            SET statut = 'termine'
+            WHERE id = %s AND structure_id = %s
+        """, (rdv_id, structure_id))
+        
+        return jsonify({'success': True, 'message': 'Rendez-vous terminé'})
+        
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -1927,36 +2030,78 @@ def mes_rendez_vous():
 @app.route('/patient/rendez_vous/<int:patient_id>/<token>')
 def patient_rendez_vous(patient_id, token):
     """Page patient pour CONSULTER ses rendez-vous (lecture seule)"""
+    from datetime import datetime
     
-    # Récupérer les infos du patient
-    patients = sheets_helper.get_all_records('patients')
-    patient_info = next((p for p in patients if p.get('ID') == patient_id), None)
-    
-    if not patient_info:
-        return "Patient non trouvé", 404
-    
-    # Récupérer la structure
-    structure_id = patient_info.get('structure_id')
-    structures = sheets_helper.get_all_records('structures', use_prefix=False)
-    structure_info = next((s for s in structures if s.get('ID') == structure_id), {})
-    
-    # 🔥 Récupérer le nom de l'hôpital
-    structure_nom = structure_info.get('nom', 'Notre établissement')
-    structure_telephone = structure_info.get('telephone', '')
-    structure_adresse = structure_info.get('adresse', '')
-    
-    # Récupérer ses rendez-vous
-    rendez_vous = sheets_helper.get_all_records('rendez_vous')
-    mes_rendez_vous = [r for r in rendez_vous if str(r.get('patient_id')) == str(patient_id)]
-    mes_rendez_vous.sort(key=lambda x: x.get('date_rendez_vous', ''))
-    
-    return render_template('patient_rendez_vous.html',
-                         patient=patient_info,
-                         rendez_vous=mes_rendez_vous,
-                         structure_nom=structure_nom,
-                         structure_telephone=structure_telephone,
-                         structure_adresse=structure_adresse)
-
+    try:
+        # 🔥 Récupérer les infos du patient depuis NEON
+        patient = db.execute_query("""
+            SELECT id, nom, prenom, telephone, structure_id
+            FROM patients 
+            WHERE id = %s
+        """, (patient_id,))
+        
+        if not patient or len(patient) == 0:
+            return "Patient non trouvé", 404
+        
+        if isinstance(patient[0], dict):
+            patient_info = patient[0]
+            structure_id = patient_info.get('structure_id')
+        else:
+            patient_info = {
+                'id': patient[0][0],
+                'nom': patient[0][1],
+                'prenom': patient[0][2],
+                'telephone': patient[0][3]
+            }
+            structure_id = patient[0][4] if len(patient[0]) > 4 else None
+        
+        # 🔥 Récupérer la structure depuis Google Sheets (ou Neon)
+        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+        structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
+        
+        structure_nom = structure_info.get('nom', 'Notre établissement')
+        structure_telephone = structure_info.get('telephone', '')
+        structure_adresse = structure_info.get('adresse', '')
+        
+        # 🔥 Récupérer ses rendez-vous depuis NEON
+        rendez_vous = db.execute_query("""
+            SELECT id, date_rdv, heure_rdv, motif, statut, notes
+            FROM rendez_vous
+            WHERE patient_id = %s
+            ORDER BY date_rdv DESC
+        """, (patient_id,))
+        
+        mes_rendez_vous = []
+        for r in rendez_vous:
+            if isinstance(r, dict):
+                mes_rendez_vous.append({
+                    'id': r.get('id'),
+                    'date_rendez_vous': r.get('date_rdv'),
+                    'heure_rendez_vous': r.get('heure_rdv'),
+                    'motif': r.get('motif'),
+                    'statut': r.get('statut', 'programme')
+                })
+            else:
+                mes_rendez_vous.append({
+                    'id': r[0],
+                    'date_rendez_vous': r[1],
+                    'heure_rendez_vous': r[2],
+                    'motif': r[3],
+                    'statut': r[4] if len(r) > 4 else 'programme'
+                })
+        
+        return render_template('patient_rendez_vous.html',
+                             patient=patient_info,
+                             rendez_vous=mes_rendez_vous,
+                             structure_nom=structure_nom,
+                             structure_telephone=structure_telephone,
+                             structure_adresse=structure_adresse)
+                             
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        return f"Erreur: {e}", 500
 @app.route('/api/structure/nom')
 @login_required
 def api_structure_nom():
@@ -1982,7 +2127,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 
-def envoyer_rappel_auto(rdv, type_rappel):
+def envoyer_rappel_auto(rdv, type_rappel, structure_info):
     """Envoie un rappel automatique WhatsApp"""
     try:
         patient_nom = rdv.get('patient_nom', 'Patient')
@@ -1990,6 +2135,8 @@ def envoyer_rappel_auto(rdv, type_rappel):
         date_rdv = rdv.get('date_rendez_vous', '')
         heure_rdv = rdv.get('heure_rendez_vous', '')
         motif = rdv.get('motif', 'Consultation')
+        structure_nom = structure_info.get('nom', 'Notre établissement')
+        structure_tel = structure_info.get('telephone', '')
         
         if not patient_tel:
             return False
@@ -2001,6 +2148,9 @@ def envoyer_rappel_auto(rdv, type_rappel):
         
         if type_rappel == 'j7':
             message = f"🔔 *RAPPEL DE RENDEZ-VOUS (J-7)* 🔔%0A%0A"
+            message += f"🏥 *{structure_nom}*%0A"
+            if structure_tel:
+                message += f"📞 {structure_tel}%0A%0A"
             message += f"Bonjour *{patient_nom}*,%0A%0A"
             message += f"Nous vous rappelons votre rendez-vous dans une semaine :%0A"
             message += f"📅 Date : *{date_rdv}*%0A"
@@ -2009,6 +2159,9 @@ def envoyer_rappel_auto(rdv, type_rappel):
             message += f"Merci de votre ponctualité ! 🙏"
         else:
             message = f"🔔 *RAPPEL DE RENDEZ-VOUS (J-1)* 🔔%0A%0A"
+            message += f"🏥 *{structure_nom}*%0A"
+            if structure_tel:
+                message += f"📞 {structure_tel}%0A%0A"
             message += f"Bonjour *{patient_nom}*,%0A%0A"
             message += f"Nous vous rappelons votre rendez-vous de demain :%0A"
             message += f"📅 Date : *{date_rdv}*%0A"
@@ -2018,80 +2171,137 @@ def envoyer_rappel_auto(rdv, type_rappel):
         
         whatsapp_url = f"https://wa.me/{tel}?text={message}"
         print(f"📱 [RAPPEL AUTO] {patient_nom} - {type_rappel}")
-        # Optionnel: ouvrir WhatsApp automatiquement (décommenter si souhaité)
-        # import webbrowser
-        # webbrowser.open(whatsapp_url)
+        print(f"   🔗 Lien WhatsApp: {whatsapp_url}")
         return True
         
     except Exception as e:
         print(f"❌ Erreur envoi rappel: {e}")
         return False
 
-def maj_statut_rappel(rdv_id, type_rappel):
-    """Met à jour le statut du rappel dans Google Sheets"""
+def maj_statut_rappel(rdv_id, type_rappel, structure_id):
+    """Met à jour le statut du rappel dans Neon"""
     try:
-        structure_id = 1  # À adapter selon ta structure
-        sheet_name = f"struct_{structure_id}_rendez_vous"
-        worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
-        
-        cell = worksheet.find(str(rdv_id), in_column=1)
-        if cell:
-            worksheet.update_cell(cell.row, 11, type_rappel)  # colonne rappel_envoye
-            return True
+        # 🔥 Mettre à jour dans Neon
+        db.execute_query("""
+            UPDATE rendez_vous 
+            SET rappel_envoye = %s
+            WHERE id = %s AND structure_id = %s
+        """, (type_rappel, rdv_id, structure_id))
+        return True
     except Exception as e:
         print(f"❌ Erreur maj statut: {e}")
-    return False
+        return False
 
 def verifier_rappels_automatiques():
     """Vérifie les rendez-vous et envoie les rappels si nécessaire"""
     print(f"🔍 Vérification des rappels - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     try:
-        rendez_vous = sheets_helper.get_all_records('rendez_vous')
-        aujourdhui = datetime.now().date()
-        j7 = aujourdhui + timedelta(days=7)
-        j1 = aujourdhui + timedelta(days=1)
+        # 🔥 Récupérer toutes les structures actives
+        structures = db.execute_query("SELECT id, nom, telephone FROM structures")
         
-        for rdv in rendez_vous:
-            date_rdv_str = rdv.get('date_rendez_vous')
-            if not date_rdv_str:
-                continue
+        for struct in structures:
+            if isinstance(struct, dict):
+                structure_id = struct.get('id')
+                structure_nom = struct.get('nom', 'Notre établissement')
+                structure_tel = struct.get('telephone', '')
+            else:
+                structure_id = struct[0]
+                structure_nom = struct[1] if len(struct) > 1 else 'Notre établissement'
+                structure_tel = struct[2] if len(struct) > 2 else ''
             
-            try:
-                date_rdv = datetime.strptime(date_rdv_str, '%Y-%m-%d').date()
-                statut = rdv.get('statut', 'programme')
-                rappel_envoye = rdv.get('rappel_envoye', 'non')
+            # 🔥 Récupérer les rendez-vous depuis Neon
+            rendez_vous = db.execute_query("""
+                SELECT 
+                    r.id,
+                    r.patient_id,
+                    r.date_rdv,
+                    r.heure_rdv,
+                    r.motif,
+                    r.statut,
+                    r.rappel_envoye,
+                    p.nom,
+                    p.prenom,
+                    p.telephone
+                FROM rendez_vous r
+                LEFT JOIN patients p ON r.patient_id = p.id
+                WHERE r.structure_id = %s
+            """, (structure_id,))
+            
+            aujourdhui = datetime.now().date()
+            j7 = aujourdhui + timedelta(days=7)
+            j1 = aujourdhui + timedelta(days=1)
+            
+            structure_info = {'nom': structure_nom, 'telephone': structure_tel}
+            
+            for r in rendez_vous:
+                if isinstance(r, dict):
+                    rdv_id = r.get('id')
+                    date_rdv_val = r.get('date_rdv')
+                    statut = r.get('statut', 'programme')
+                    rappel_envoye = r.get('rappel_envoye', 'non')
+                    patient_nom = f"{r.get('nom', '')} {r.get('prenom', '')}".strip()
+                    patient_tel = r.get('telephone', '')
+                    heure_rdv = r.get('heure_rdv')
+                    motif = r.get('motif', 'Consultation')
+                else:
+                    rdv_id = r[0]
+                    date_rdv_val = r[2]
+                    statut = r[5] if len(r) > 5 else 'programme'
+                    rappel_envoye = r[6] if len(r) > 6 else 'non'
+                    patient_nom = f"{r[7]} {r[8]}".strip() if len(r) > 8 else 'Patient'
+                    patient_tel = r[9] if len(r) > 9 else ''
+                    heure_rdv = r[3]
+                    motif = r[4] if len(r) > 4 else 'Consultation'
                 
-                # Ignorer les rendez-vous déjà terminés ou annulés
-                if statut in ['termine', 'annule']:
+                if not date_rdv_val:
                     continue
                 
-                # Rappel J-7
-                if date_rdv == j7 and rappel_envoye not in ['j7', 'j1']:
-                    if envoyer_rappel_auto(rdv, 'j7'):
-                        maj_statut_rappel(rdv.get('ID'), 'j7')
-                        print(f"   ✅ Rappel J-7 envoyé à {rdv.get('patient_nom')}")
-                
-                # Rappel J-1
-                elif date_rdv == j1 and rappel_envoye != 'j1':
-                    if envoyer_rappel_auto(rdv, 'j1'):
-                        maj_statut_rappel(rdv.get('ID'), 'j1')
-                        print(f"   ✅ Rappel J-1 envoyé à {rdv.get('patient_nom')}")
-                
-                # Gestion des rendez-vous dépassés
-                elif date_rdv < aujourdhui and statut not in ['termine', 'annule', 'depasse']:
-                    # Marquer comme dépassé
-                    structure_id = 1
-                    sheet_name = f"struct_{structure_id}_rendez_vous"
-                    worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
-                    cell = worksheet.find(str(rdv.get('ID')), in_column=1)
-                    if cell:
-                        worksheet.update_cell(cell.row, 8, 'depasse')
-                        print(f"   📆 RDV {rdv.get('ID')} marqué comme dépassé")
+                try:
+                    if isinstance(date_rdv_val, str):
+                        date_rdv = datetime.strptime(date_rdv_val, '%Y-%m-%d').date()
+                    else:
+                        date_rdv = date_rdv_val
+                    
+                    # Ignorer les rendez-vous déjà terminés ou annulés
+                    if statut in ['termine', 'annule']:
+                        continue
+                    
+                    rdv_data = {
+                        'ID': rdv_id,
+                        'patient_nom': patient_nom,
+                        'patient_telephone': patient_tel,
+                        'date_rendez_vous': str(date_rdv),
+                        'heure_rendez_vous': str(heure_rdv),
+                        'motif': motif,
+                        'statut': statut,
+                        'rappel_envoye': rappel_envoye
+                    }
+                    
+                    # Rappel J-7
+                    if date_rdv == j7 and rappel_envoye not in ['j7', 'j1']:
+                        if envoyer_rappel_auto(rdv_data, 'j7', structure_info):
+                            maj_statut_rappel(rdv_id, 'j7', structure_id)
+                            print(f"   ✅ Rappel J-7 envoyé à {patient_nom} (struct {structure_id})")
+                    
+                    # Rappel J-1
+                    elif date_rdv == j1 and rappel_envoye != 'j1':
+                        if envoyer_rappel_auto(rdv_data, 'j1', structure_info):
+                            maj_statut_rappel(rdv_id, 'j1', structure_id)
+                            print(f"   ✅ Rappel J-1 envoyé à {patient_nom} (struct {structure_id})")
+                    
+                    # Gestion des rendez-vous dépassés
+                    elif date_rdv < aujourdhui and statut not in ['termine', 'annule', 'depasse']:
+                        db.execute_query("""
+                            UPDATE rendez_vous 
+                            SET statut = 'depasse'
+                            WHERE id = %s AND structure_id = %s
+                        """, (rdv_id, structure_id))
+                        print(f"   📆 RDV {rdv_id} marqué comme dépassé")
                         
-            except Exception as e:
-                print(f"   ⚠️ Erreur traitement RDV {rdv.get('ID')}: {e}")
-                
+                except Exception as e:
+                    print(f"   ⚠️ Erreur traitement RDV {rdv_id}: {e}")
+                    
     except Exception as e:
         print(f"❌ Erreur vérification: {e}")
 
@@ -2106,12 +2316,12 @@ def planifier_verification():
 # Démarrer le thread de rappels automatiques
 threading.Thread(target=planifier_verification, daemon=True).start()
 
-@app.route('/api/rendez_vous/test_rappels')
+@app.route('/api/test/rappels')
 @login_required
 def test_rappels():
-    """Route de test pour déclencher manuellement la vérification"""
+    """Déclencher manuellement la vérification des rappels"""
     verifier_rappels_automatiques()
-    return jsonify({'success': True, 'message': 'Vérification effectuée'})
+    return jsonify({'success': True, 'message': 'Vérification des rappels effectuée'})
 
 @app.route('/rappels_rendez_vous')
 @login_required
@@ -2120,7 +2330,24 @@ def rappels_rendez_vous():
     from datetime import datetime, timedelta
     
     structure_id = session.get('structure_id')
-    rendez_vous = sheets_helper.get_all_records('rendez_vous')
+    
+    # 🔥 Récupérer les rendez-vous depuis NEON
+    rendez_vous = db.execute_query("""
+        SELECT 
+            r.id,
+            r.patient_id,
+            r.date_rdv,
+            r.heure_rdv,
+            r.motif,
+            r.statut,
+            p.nom,
+            p.prenom,
+            p.telephone
+        FROM rendez_vous r
+        LEFT JOIN patients p ON r.patient_id = p.id
+        WHERE r.structure_id = %s
+        ORDER BY r.date_rdv DESC
+    """, (structure_id,))
     
     aujourdhui = datetime.now().date()
     date_limite = aujourdhui + timedelta(days=7)
@@ -2128,32 +2355,60 @@ def rappels_rendez_vous():
     moins_7_jours = []
     depasses = []
     
-    for rdv in rendez_vous:
-        if str(rdv.get('structure_id')) != str(structure_id):
-            continue
+    for r in rendez_vous:
+        if isinstance(r, dict):
+            statut = r.get('statut', '')
+            date_rdv_str = r.get('date_rdv')
+            patient_nom = f"{r.get('nom', '')} {r.get('prenom', '')}".strip()
+            patient_tel = r.get('telephone', '')
+            rdv_id = r.get('id')
+            heure_rdv = r.get('heure_rdv')
+            motif = r.get('motif', 'Consultation')
+        else:
+            statut = r[5] if len(r) > 5 else ''
+            date_rdv_str = r[2] if len(r) > 2 else None
+            patient_nom = f"{r[6]} {r[7]}".strip() if len(r) > 7 else 'Patient'
+            patient_tel = r[8] if len(r) > 8 else ''
+            rdv_id = r[0]
+            heure_rdv = r[3] if len(r) > 3 else ''
+            motif = r[4] if len(r) > 4 else 'Consultation'
         
-        statut = rdv.get('statut', '')
         if statut in ['termine', 'annule']:
             continue
         
-        date_rdv_str = rdv.get('date_rendez_vous')
         if not date_rdv_str:
             continue
         
         try:
-            date_rdv = datetime.strptime(date_rdv_str, '%Y-%m-%d').date()
+            # Convertir la date si c'est un string
+            if isinstance(date_rdv_str, str):
+                date_rdv = datetime.strptime(date_rdv_str, '%Y-%m-%d').date()
+            else:
+                date_rdv = date_rdv_str
+            
+            rdv_data = {
+                'ID': rdv_id,
+                'patient_id': r.get('patient_id') if isinstance(r, dict) else r[1],
+                'patient_nom': patient_nom,
+                'patient_telephone': patient_tel,
+                'date_rendez_vous': str(date_rdv),
+                'heure_rendez_vous': str(heure_rdv),
+                'motif': motif,
+                'statut': statut
+            }
             
             # Rendez-vous dépassés
             if date_rdv < aujourdhui:
-                rdv['jours_depasse'] = (aujourdhui - date_rdv).days
-                depasses.append(rdv)
+                rdv_data['jours_depasse'] = (aujourdhui - date_rdv).days
+                depasses.append(rdv_data)
             
             # Rendez-vous dans les 7 jours (à venir)
             elif date_rdv <= date_limite:
-                rdv['jours_restants'] = (date_rdv - aujourdhui).days
-                moins_7_jours.append(rdv)
+                rdv_data['jours_restants'] = (date_rdv - aujourdhui).days
+                moins_7_jours.append(rdv_data)
                 
-        except:
+        except Exception as e:
+            print(f"⚠️ Erreur traitement date: {e}")
             continue
     
     # Trier par date
@@ -2164,14 +2419,21 @@ def rappels_rendez_vous():
                          moins_7_jours=moins_7_jours,
                          depasses=depasses)
 
+
 @app.route('/api/rappels/stats')
 @login_required
 def api_rappels_stats():
-    """API pour les statistiques des rappels"""
+    """API pour les statistiques des rappels depuis Neon"""
     from datetime import datetime, timedelta
     
     structure_id = session.get('structure_id')
-    rendez_vous = sheets_helper.get_all_records('rendez_vous')
+    
+    # 🔥 Récupérer les rendez-vous depuis NEON
+    rendez_vous = db.execute_query("""
+        SELECT id, date_rdv, statut
+        FROM rendez_vous 
+        WHERE structure_id = %s
+    """, (structure_id,))
     
     aujourdhui = datetime.now().date()
     date_limite = aujourdhui + timedelta(days=7)
@@ -2180,16 +2442,25 @@ def api_rappels_stats():
     depasses = 0
     aujourdhui_count = 0
     
-    for rdv in rendez_vous:
-        if str(rdv.get('structure_id')) != str(structure_id):
+    for r in rendez_vous:
+        if isinstance(r, dict):
+            statut = r.get('statut', '')
+            date_rdv_val = r.get('date_rdv')
+        else:
+            statut = r[2] if len(r) > 2 else ''
+            date_rdv_val = r[1] if len(r) > 1 else None
+        
+        if statut in ['termine', 'annule']:
             continue
         
-        date_rdv_str = rdv.get('date_rendez_vous')
-        if not date_rdv_str:
+        if not date_rdv_val:
             continue
         
         try:
-            date_rdv = datetime.strptime(date_rdv_str, '%Y-%m-%d').date()
+            if isinstance(date_rdv_val, str):
+                date_rdv = datetime.strptime(date_rdv_val, '%Y-%m-%d').date()
+            else:
+                date_rdv = date_rdv_val
             
             if date_rdv < aujourdhui:
                 depasses += 1
