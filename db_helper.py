@@ -10,7 +10,7 @@ class DatabaseHelper:
     def connect(self):
         try:
             self.conn = psycopg2.connect(Config.DATABASE_URL)
-            self.conn.autocommit = False
+            self.conn.autocommit = True
             print("✅ Connexion à PostgreSQL (Neon) réussie !")
         except Exception as e:
             print(f"⚠️ Erreur connexion PostgreSQL: {e}")
@@ -25,6 +25,7 @@ class DatabaseHelper:
                 
                 if 'RETURNING' in query.upper() or query.upper().strip().startswith('SELECT'):
                     result = cur.fetchall()
+                    self.conn.commit()  # 🔥 AJOUTE CETTE LIGNE !
                     return result
                 else:
                     self.conn.commit()
@@ -32,7 +33,8 @@ class DatabaseHelper:
                 
         except Exception as e:
             print(f"❌ Erreur requête: {e}")
-            self.conn.rollback()
+            if self.conn:
+                self.conn.rollback()
             return []
     
     def get_patients(self, structure_id):
