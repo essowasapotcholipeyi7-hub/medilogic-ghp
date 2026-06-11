@@ -169,7 +169,6 @@ def index():
         print(f"Email: {email}")
         print("=" * 50)
         
-        # 🔥 Chercher dans TOUTES les feuilles struct_X_users
         spreadsheet = sheets_helper.spreadsheet
         all_worksheets = spreadsheet.worksheets()
         
@@ -181,12 +180,10 @@ def index():
                 try:
                     row_count = len(worksheet.get_all_values())
                     if row_count <= 1:
-                        print(f"   Feuille vide ou sans donnees, ignoree")
                         continue
                     
                     records = worksheet.get_all_records()
                     if not records:
-                        print(f"   Aucun enregistrement, ignoree")
                         continue
                         
                 except Exception as e:
@@ -197,7 +194,7 @@ def index():
                     if str(row.get('email')) == email:
                         print(f"Utilisateur trouve dans {title}")
                         
-                        # 🔥 VÉRIFICATION DU STATUT (ACTIF/NON)
+                        # Vérifier si compte actif
                         statut = row.get('actif', 'oui')
                         if statut != 'oui':
                             print("❌ Compte désactivé")
@@ -206,6 +203,28 @@ def index():
                         
                         if row.get('mot_de_passe') == hash_password(password):
                             print("Mot de passe OK")
+                            
+                            # 🔥 METTRE À JOUR LA DERNIÈRE CONNEXION
+                            try:
+                                # Trouver la ligne de l'utilisateur
+                                cell = worksheet.find(str(row.get('ID')), in_column=1)
+                                if cell:
+                                    row_num = cell.row
+                                    current_row = worksheet.row_values(row_num)
+                                    
+                                    # Étendre si nécessaire
+                                    while len(current_row) < 9:
+                                        current_row.append('')
+                                    
+                                    # Mettre à jour la dernière connexion (colonne I = index 8)
+                                    date_connexion = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+                                    current_row[8] = date_connexion
+                                    
+                                    worksheet.update(range_name=f'A{row_num}:I{row_num}', values=[current_row])
+                                    print(f"✅ Dernière connexion mise à jour: {date_connexion}")
+                            except Exception as e:
+                                print(f"⚠️ Erreur mise à jour dernière connexion: {e}")
+                            
                             try:
                                 structure_id = int(title.split('_')[1])
                             except:
@@ -235,12 +254,26 @@ def index():
                             flash('Mot de passe incorrect', 'danger')
                             return redirect(url_for('index'))
         
-        # Verifier aussi dans structures (admin global)
+        # Vérifier aussi dans structures (admin global)
         structures = sheets_helper.get_all_records('structures', use_prefix=False)
         for structure in structures:
             if structure.get('email') == email:
                 if structure.get('mot_de_passe') == hash_password(password):
                     if structure.get('statut') == 'active':
+                        # 🔥 Aussi pour admin global
+                        try:
+                            sheet_structures = sheets_helper.spreadsheet.worksheet("structures")
+                            cell = sheet_structures.find(str(structure.get('ID')), in_column=1)
+                            if cell:
+                                row_num = cell.row
+                                current_row = sheet_structures.row_values(row_num)
+                                while len(current_row) < 13:
+                                    current_row.append('')
+                                current_row[12] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+                                sheet_structures.update(range_name=f'A{row_num}:M{row_num}', values=[current_row])
+                        except:
+                            pass
+                        
                         session['user_id'] = structure.get('ID')
                         session['user_name'] = structure.get('nom')
                         session['structure_id'] = structure.get('ID')
@@ -1212,7 +1245,7 @@ def api_add_user():
             if cell:
                 row_num = cell.row
                 current_row = worksheet.row_values(row_num)
-                while len(current_row) < 8:
+                while len(current_row) < 9:
                     current_row.append('')
                 current_row[1] = data.get('nom')
                 current_row[2] = data.get('email')
@@ -1220,6 +1253,8 @@ def api_add_user():
                     current_row[3] = hash_password(data.get('password'))
                 current_row[4] = data.get('role')
                 current_row[7] = data.get('actif', 'oui')
+                # current_row[8] = dernière connexion (ne pas toucher)
+
                 worksheet.update(range_name=f'A{row_num}:H{row_num}', values=[current_row])
                 return jsonify({'success': True, 'id': user_id})
             else:
@@ -1239,7 +1274,8 @@ def api_add_user():
                 data.get('role', 'caissier'),
                 structure_id,
                 datetime.now().isoformat(),
-                data.get('actif', 'oui')
+                data.get('actif', 'oui'),
+                ''  # dernière connexion (vide)
             ]
             worksheet.append_row(new_user)
             return jsonify({'success': True, 'id': new_id})
@@ -1274,16 +1310,16 @@ def api_toggle_user(user_id):
         print(f"Nombre de colonnes: {len(current_row)}")
         
         # Ajouter la colonne actif si elle n'existe pas
-        if len(current_row) < 8:
-            # Étendre la ligne jusqu'à la colonne H
-            while len(current_row) < 8:
+        if len(current_row) < 9:
+            # Étendre la ligne jusqu'à la colonne I
+            while len(current_row) < 9:
                 current_row.append('')
         
         # Mettre à jour la colonne actif (index 7 = colonne H)
         current_row[7] = nouveau_statut
         
         # 🔥 Correction : update avec les bons paramètres
-        worksheet.update(range_name=f'A{row_num}:H{row_num}', values=[current_row])
+        worksheet.update(range_name=f'A{row_num}:I{row_num}', values=[current_row])
         
         return jsonify({'success': True, 'message': f'Statut mis à jour'})
         
@@ -1329,6 +1365,22 @@ def api_delete_user(user_id):
 def admin_structure():
     """Administration de la structure"""
     structure_id = session.get('structure_id')
+
+    # Récupérer les utilisateurs avec la dernière connexion
+    sheet_name = f"struct_{structure_id}_users"
+    users = sheets_helper.get_all_records(sheet_name)
+    
+    users_list = []
+    for u in users:
+        users_list.append({
+            'ID': u.get('ID'),
+            'nom': u.get('nom'),
+            'email': u.get('email'),
+            'role': u.get('role'),
+            'actif': u.get('actif', 'oui'),
+            'derniere_connexion': u.get('derniere_connexion', '-'),
+            'created_at': u.get('created_at', '')
+        })
     
     # Récupérer les utilisateurs
     users = sheets_helper.get_all_records('users')
