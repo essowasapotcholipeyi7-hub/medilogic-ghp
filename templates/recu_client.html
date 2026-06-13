@@ -19,6 +19,29 @@
             background: white;
         }
         
+        /* 🔥 TOUT en NOIR et GRAS */
+        * {
+            color: black !important;
+            font-weight: bold !important;
+        }
+        
+        /* Force NOIR pour tous les éléments */
+        body, div, p, span, strong, b, td, th, li, .text-muted, .small, h1, h2, h3, h4, h5, h6 {
+            color: black !important;
+            font-weight: bold !important;
+        }
+        
+        /* Supprimer TOUTES les couleurs */
+        .text-danger, .text-success, .text-primary, .text-warning, .text-info {
+            color: black !important;
+        }
+        
+        /* Badges et fonds en noir */
+        .badge, .bg-primary, .bg-success, .bg-warning, .bg-danger, .bg-info {
+            background: black !important;
+            color: white !important;
+        }
+        
         .container {
             width: 100%;
             padding: 0;
@@ -68,6 +91,7 @@
         
         hr {
             margin: 5px 0;
+            border-top: 1px solid black !important;
         }
         
         .d-flex {
@@ -77,6 +101,12 @@
         
         img {
             max-height: 40px !important;
+            filter: grayscale(100%) contrast(200%) brightness(0%) !important;
+        }
+        
+        /* Supprimer les icônes */
+        i, .fas, .far, .fab {
+            display: none !important;
         }
     }
     
@@ -133,16 +163,15 @@
                 </div>
                 <hr>
 
-                <!-- Infos patient -->
-                <div class="mb-3">
-                    <strong>Patient :</strong> {{ patient_nom }}<br>
-                    <strong>Assurance :</strong> {{ type_assurance }} ({{ taux_assurance }}%)<br>
-                    {% if numero_assure and numero_assure != '' %}
-                    <strong>N° Assuré :</strong> {{ numero_assure }}<br>
-                    {% endif %}
-                    <strong>Paiement :</strong> {{ mode_paiement }}<br>
-                </div>
-
+<!-- Infos patient -->
+<div class="mb-3">
+    <strong>Patient :</strong> {{ patient_nom }}<br>
+    <strong>Assurance :</strong> {{ type_assurance }} ({{ taux_assurance }}%)<br>
+    {% if numero_assure and numero_assure != '' %}
+    <strong>N° Assuré :</strong> {{ numero_assure }}<br>
+    {% endif %}
+    <strong>Paiement :</strong> {{ mode_paiement }}<br>
+</div>
                 <!-- Tableau des articles -->
                 <table style="width:100%; border-collapse: collapse; font-size: 12px;">
                     <thead>
