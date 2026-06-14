@@ -604,20 +604,20 @@ function validerApprovisionnement() {
 }
 
 function supprimerProduit(id) {
-    if (confirm('Supprimer définitivement ce produit ?')) {
+    if (confirm('Supprimer ce produit ?')) {
         fetch(`/api/admin/produits/${id}`, { method: 'DELETE' })
             .then(r => r.json())
             .then(data => {
-                if (data.success) { 
-                    chargerProduitsAdmin(); 
-                    if (typeof chargerProduits === 'function') chargerProduits(); 
+                if (data.success) {
+                    alert('Produit supprimé');
+                    chargerProduitsAdmin();  // ← Recharge la liste
+                    if (typeof chargerProduits === 'function') chargerProduits();
                 } else {
-                    alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+                    alert('Erreur: ' + data.error);
                 }
             });
     }
 }
-
 // ========== GESTION ACTES ==========
 function showAddActeModal() {
     document.getElementById('acteModalTitle').innerText = 'Ajouter un acte';

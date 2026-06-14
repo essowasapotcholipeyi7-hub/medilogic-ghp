@@ -2855,12 +2855,11 @@ def api_get_produits():
         SELECT id, code, nom, prix_vente, quantite_stock, seuil_alerte, 
                unite, categorie, fournisseur, peremption
         FROM produits 
-        WHERE structure_id = %s 
+        WHERE structure_id = %s AND (actif IS NULL OR actif = TRUE)
         ORDER BY nom
     """, (structure_id,))
     
     return jsonify(produits)
-
 @app.route('/api/produits', methods=['POST'])
 @login_required
 def api_add_produit():
@@ -2922,19 +2921,42 @@ def api_admin_add_produit():
         structure_id = session.get('structure_id')
         
         result = db.execute_query("""
-            INSERT INTO produits (structure_id, code, nom, prix_vente, quantite_stock)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO produits (structure_id, code, nom, prix_vente, quantite_stock, seuil_alerte)
+            VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             structure_id,
             data.get('code'),
             data.get('nom'),
             data.get('prix_vente'),
-            data.get('quantite_stock', 0)
+            data.get('quantite_stock', 0),
+            data.get('seuil_alerte', 10)  # ← AJOUTER CETTE LIGNE
+
         ))
         
         return jsonify({'success': True, 'id': result[0]['id']})
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/produits/<int:produit_id>', methods=['DELETE'])
+@login_required
+def api_admin_delete_produit(produit_id):
+    try:
+        structure_id = session.get('structure_id')
+        
+        print(f"🗑️ Désactivation produit ID: {produit_id}")
+        
+        # 🔥 Désactiver le produit au lieu de le supprimer
+        db.execute_query("""
+            UPDATE produits 
+            SET actif = FALSE 
+            WHERE id = %s AND structure_id = %s
+        """, (produit_id, structure_id))
+        
+        return jsonify({'success': True, 'message': 'Produit désactivé'})
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/admin/produits/<int:produit_id>', methods=['PUT'])
@@ -2946,13 +2968,14 @@ def api_admin_update_produit(produit_id):
         
         db.execute_query("""
             UPDATE produits 
-            SET code = %s, nom = %s, prix_vente = %s, quantite_stock = %s
+            SET code = %s, nom = %s, prix_vente = %s, quantite_stock = %s,seuil_alerte = %s
             WHERE id = %s AND structure_id = %s
         """, (
             data.get('code'),
             data.get('nom'),
             data.get('prix_vente'),
             data.get('quantite_stock', 0),
+            data.get('seuil_alerte'),  # ← Vérifie que c'est bien présent
             produit_id,
             structure_id
         ))
@@ -2961,15 +2984,6 @@ def api_admin_update_produit(produit_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/admin/produits/<int:produit_id>', methods=['DELETE'])
-@login_required
-def api_admin_delete_produit(produit_id):
-    try:
-        structure_id = session.get('structure_id')
-        db.execute_query("DELETE FROM produits WHERE id = %s AND structure_id = %s", (produit_id, structure_id))
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ========== ROUTES API POUR LA PHARMACIE (SANS HISTORIQUE) ==========
 
