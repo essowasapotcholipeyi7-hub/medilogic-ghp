@@ -194,7 +194,11 @@
                             <option value="A4">📄 Format A4</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-2">
+                        <label class="form-label">Taux prise en charge (%)</label>
+                        <input type="number" class="form-control" id="tauxVente" value="{{ patientTaux }}" step="5" min="0" max="100">
+                    </div>
+                    <div class="col-md-2">
                         <label class="form-label">&nbsp;</label>
                         <button class="btn btn-primary w-100" onclick="finaliserVente()" id="finaliserBtn" disabled>
                             <i class="fas fa-receipt"></i> Finaliser
@@ -465,6 +469,13 @@ function checkSelectedPatient() {
         
         document.getElementById('selectedAssurance').innerHTML = assuranceText;
         document.getElementById('selectedTaux').innerHTML = patientTaux;
+        
+        // 🔥 AJOUT : Mettre à jour le champ taux modifiable
+        const tauxVenteInput = document.getElementById('tauxVente');
+        if (tauxVenteInput) {
+            tauxVenteInput.value = patientTaux;
+        }
+        
         document.getElementById('patientInfo').style.display = 'block';
         document.getElementById('noPatientAlert').style.display = 'none';
         
@@ -476,7 +487,6 @@ function checkSelectedPatient() {
         console.log('Aucun patient sélectionné');
     }
 }
-
 function changePatient() {
     window.location.href = "/patients";
 }
@@ -692,12 +702,19 @@ function finaliserVente() {
     // Récupérer le patient directement depuis sessionStorage
     let currentPatientId = sessionStorage.getItem('selectedPatientId');
     let currentPatientName = sessionStorage.getItem('selectedPatientName');
-    let currentPatientTaux = parseFloat(sessionStorage.getItem('selectedPatientTaux') || 0);
+    let patientTauxOriginal = parseFloat(sessionStorage.getItem('selectedPatientTaux') || 0);
+    
+    // 🔥 Récupérer le taux modifié depuis le champ
+    let tauxUtilise = parseFloat(document.getElementById('tauxVente').value);
+    if (isNaN(tauxUtilise)) {
+        tauxUtilise = patientTauxOriginal;
+    }
     
     console.log('Patient depuis sessionStorage:', {
         id: currentPatientId,
         nom: currentPatientName,
-        taux: currentPatientTaux
+        tauxPatient: patientTauxOriginal,
+        tauxUtilise: tauxUtilise
     });
     
     if (!currentPatientId || currentPatientId === 'null' || currentPatientId === 'undefined') {
@@ -705,7 +722,8 @@ function finaliserVente() {
         if (localId && localId !== 'null') {
             currentPatientId = localId;
             currentPatientName = localStorage.getItem('selectedPatientName');
-            currentPatientTaux = parseFloat(localStorage.getItem('selectedPatientTaux') || 0);
+            patientTauxOriginal = parseFloat(localStorage.getItem('selectedPatientTaux') || 0);
+            tauxUtilise = patientTauxOriginal;
             console.log('Patient depuis localStorage:', { id: currentPatientId, nom: currentPatientName });
         } else {
             alert('Veuillez sélectionner un patient');
@@ -713,7 +731,7 @@ function finaliserVente() {
         }
     }
     
-    // Calcul des totaux
+    // Calcul des totaux avec le taux modifié
     let sousTotal = 0;
     const produitsDetails = [];
     
@@ -731,18 +749,18 @@ function finaliserVente() {
         });
     }
     
-    const priseEnCharge = (sousTotal * currentPatientTaux) / 100;
+    const priseEnCharge = (sousTotal * tauxUtilise) / 100;
     const netAPayer = sousTotal - priseEnCharge;
     const ordonnance = document.getElementById('avecOrdonnance').checked;
     const typeDocument = document.getElementById('typeDocument').value;
     const modePaiement = document.getElementById('modePaiement').value;
-    const formatImpression = document.getElementById('formatImpression').value;  // ← AJOUT
+    const formatImpression = document.getElementById('formatImpression').value;
     
     console.log('Calculs:', {
         sousTotal,
         priseEnCharge,
         netAPayer,
-        taux: currentPatientTaux,
+        taux: tauxUtilise,
         format: formatImpression
     });
     
@@ -750,7 +768,7 @@ function finaliserVente() {
     let confirmationMsg = `📊 RÉCAPITULATIF DE LA VENTE\n\n`;
     confirmationMsg += `👤 Patient: ${currentPatientName}\n`;
     confirmationMsg += `🆔 ID Patient: ${currentPatientId}\n`;
-    confirmationMsg += `🏥 Taux assurance: ${currentPatientTaux}%\n`;
+    confirmationMsg += `🏥 Taux assurance: ${tauxUtilise}%\n`;
     confirmationMsg += `\n📦 PRODUITS:\n`;
     
     produitsDetails.forEach((item, idx) => {
@@ -759,7 +777,7 @@ function finaliserVente() {
     });
     
     confirmationMsg += `\n💰 Sous-total: ${sousTotal.toLocaleString()} FCFA\n`;
-    confirmationMsg += `🎯 Prise en charge (${currentPatientTaux}%): ${priseEnCharge.toLocaleString()} FCFA\n`;
+    confirmationMsg += `🎯 Prise en charge (${tauxUtilise}%): ${priseEnCharge.toLocaleString()} FCFA\n`;
     confirmationMsg += `💵 À payer: ${netAPayer.toLocaleString()} FCFA\n\n`;
     confirmationMsg += `💳 Paiement: ${modePaiement}\n`;
     confirmationMsg += `📄 Document: ${typeDocument}\n`;
@@ -781,7 +799,7 @@ function finaliserVente() {
         net_a_payer: netAPayer,
         mode_paiement: modePaiement,
         avec_ordonnance: ordonnance,
-        taux_assurance: currentPatientTaux
+        taux_assurance: tauxUtilise  // 🔥 Taux modifié
     };
     
     console.log('DONNÉES ENVOYÉES AU SERVEUR:', JSON.stringify(venteData, null, 2));
@@ -848,7 +866,6 @@ function finaliserVente() {
         alert('Erreur: ' + error);
     });
 }
-
 // ========== INITIALISATION ==========
 document.addEventListener('DOMContentLoaded', function() {
     checkSelectedPatient();

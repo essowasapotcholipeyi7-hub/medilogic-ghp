@@ -148,13 +148,13 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Date de naissance <span class="text-muted">(optionnel)</span></label>
-                        <input type="date" class="form-control" id="date_naissance">
+                        <input type="date" class="form-control" id="date_naissance" onchange="updateAgeFromDate()">
                         <small class="text-muted">Laissez vide si non renseignée</small>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Âge</label>
-                        <input type="number" class="form-control" id="age" readonly>
-                        <small class="text-muted">Calculé automatiquement</small>
+                        <label class="form-label">Âge <span class="text-muted">(optionnel - si date non renseignée)</span></label>
+                        <input type="number" class="form-control" id="age" min="0" max="120" onchange="updateDateFromAge()">
+                        <small class="text-muted">Saisir l'âge si la date de naissance n'est pas connue</small>
                     </div>
                     
                     <div class="mb-3">
@@ -293,6 +293,41 @@ function updateEditAge() {
     const dateNaissance = document.getElementById('editDateNaissance').value;
     const age = calculerAge(dateNaissance);
     document.getElementById('editAge').value = age;
+}
+
+// Calculer l'âge à partir de la date de naissance
+function updateAgeFromDate() {
+    const dateNaissance = document.getElementById('date_naissance').value;
+    const ageInput = document.getElementById('age');
+    
+    if (dateNaissance) {
+        const today = new Date();
+        const birthDate = new Date(dateNaissance);
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        ageInput.value = age;
+    } else {
+        ageInput.value = '';
+    }
+}
+
+// Calculer la date de naissance approximative à partir de l'âge
+function updateDateFromAge() {
+    const age = document.getElementById('age').value;
+    const dateInput = document.getElementById('date_naissance');
+    
+    if (age && age > 0) {
+        const today = new Date();
+        const year = today.getFullYear() - parseInt(age);
+        // On met au 1er janvier pour approximation
+        const approxDate = new Date(year, 0, 1);
+        dateInput.value = approxDate.toISOString().split('T')[0];
+    } else if (!age) {
+        dateInput.value = '';
+    }
 }
 
 // Initialisation
@@ -483,12 +518,23 @@ function savePatient() {
         typeAssurance = autreAssurance.trim();
     }
     
+    let dateNaissance = document.getElementById('date_naissance').value;
+    let age = document.getElementById('age').value;
+    
+    // Si l'âge est renseigné mais pas la date, on calcule une date approximative
+    if (!dateNaissance && age && age > 0) {
+        const today = new Date();
+        const year = today.getFullYear() - parseInt(age);
+        dateNaissance = `${year}-01-01`;  // 1er janvier de l'année approximative
+    }
+    
     const patient = {
         nom: document.getElementById('nom').value,
         prenom: document.getElementById('prenom').value,
         telephone: document.getElementById('telephone').value,
         adresse: document.getElementById('adresse').value,
-        date_naissance: document.getElementById('date_naissance').value || null,
+        date_naissance: dateNaissance || null,
+        age_saisi: age || null,  // On garde l'âge saisi pour info
         type_assurance: typeAssurance,
         taux_prise_charge: document.getElementById('taux_prise_charge').value,
         numero_assure: document.getElementById('numero_assure').value

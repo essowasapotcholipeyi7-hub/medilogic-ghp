@@ -147,7 +147,11 @@
                             <option value="A4">📄 Format A4</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-2">
+                        <label class="form-label">Taux prise en charge (%)</label>
+                        <input type="number" class="form-control" id="tauxVente" value="{{ patientTaux }}" step="5" min="0" max="100">
+                    </div>
+                    <div class="col-md-2">
                         <label class="form-label">&nbsp;</label>
                         <button class="btn btn-primary w-100" onclick="finaliserVente()" id="finaliserBtn" disabled>
                             <i class="fas fa-receipt"></i> Finaliser la vente
@@ -431,7 +435,6 @@ function finaliserVente() {
     console.log('Panier:', panier);
     console.log('Patient ID:', patientId);
     console.log('Patient Name:', patientName);
-    console.log('Patient Taux:', patientTaux);
     
     if (panier.length === 0) {
         alert('Le panier est vide');
@@ -446,10 +449,16 @@ function finaliserVente() {
     const btn = document.getElementById('finaliserBtn');
     const originalText = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement en cours...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement...';
+    
+    // 🔥 Récupérer le taux modifié (ou celui du patient par défaut)
+    let tauxUtilise = parseFloat(document.getElementById('tauxVente').value);
+    if (isNaN(tauxUtilise)) {
+        tauxUtilise = patientTaux;
+    }
     
     let sousTotal = panier.reduce((sum, item) => sum + item.total, 0);
-    let priseEnCharge = (sousTotal * patientTaux) / 100;
+    let priseEnCharge = (sousTotal * tauxUtilise) / 100;
     let netAPayer = sousTotal - priseEnCharge;
     
     let actesData = panier.map(item => ({
@@ -468,22 +477,13 @@ function finaliserVente() {
         prise_en_charge: parseFloat(priseEnCharge),
         net_a_payer: parseFloat(netAPayer),
         mode_paiement: document.getElementById('modePaiement').value,
-        taux_assurance: parseFloat(patientTaux)
+        taux_assurance: parseFloat(tauxUtilise)  // ← Taux modifié
     };
     
+    console.log('Objet vente envoyé:', vente);
+    
     let typeDocument = document.getElementById('typeDocument').value;
-    let formatImpression = document.getElementById('formatImpression').value;  // ← AJOUT
-    
-    showProgress('Finalisation de la vente', 'Préparation de la vente...');
-    updateProgress(10, 'Vérification...');
-    
-    let progress = 10;
-    const progressInterval = setInterval(() => {
-        if (progress < 90) {
-            progress += 10;
-            updateProgress(progress, `Traitement en cours... ${progress}%`);
-        }
-    }, 300);
+    let formatImpression = document.getElementById('formatImpression').value;
     
     fetch('/api/ventes/actes', {
         method: 'POST',
@@ -492,50 +492,38 @@ function finaliserVente() {
     })
     .then(response => response.json())
     .then(data => {
-        clearInterval(progressInterval);
-        
         if(data.success) {
-            updateProgress(100, 'Vente enregistrée !');
+            panier = [];
+            afficherPanier();
             
-            setTimeout(() => {
-                hideProgress();
-                panier = [];
-                afficherPanier();
-                
-                // Redirection AVEC le format
-                if (typeDocument === 'recu_client') {
-                    window.location.href = `/recu/${data.vente_id}/actes?format=${formatImpression}`;
-                } else if (typeDocument === 'recu_structure') {
-                    window.location.href = `/recu_structure/${data.vente_id}/actes?format=${formatImpression}`;
-                } else if (typeDocument === 'facture_client') {
-                    window.location.href = `/facture/${data.vente_id}/actes?format=${formatImpression}`;
-                } else if (typeDocument === 'facture_structure') {
-                    window.location.href = `/facture_structure/${data.vente_id}/actes?format=${formatImpression}`;
-                } else if (typeDocument === 'les_deux') {
-                    window.open(`/recu/${data.vente_id}/actes?format=${formatImpression}`, '_blank');
-                    window.open(`/recu_structure/${data.vente_id}/actes?format=${formatImpression}`, '_blank');
-                    window.location.href = "/dashboard";
-                } else {
-                    window.location.href = "/dashboard";
-                }
-            }, 500);
+            if (typeDocument === 'recu_client') {
+                window.location.href = `/recu/${data.vente_id}/actes?format=${formatImpression}`;
+            } else if (typeDocument === 'recu_structure') {
+                window.location.href = `/recu_structure/${data.vente_id}/actes?format=${formatImpression}`;
+            } else if (typeDocument === 'facture_client') {
+                window.location.href = `/facture/${data.vente_id}/actes?format=${formatImpression}`;
+            } else if (typeDocument === 'facture_structure') {
+                window.location.href = `/facture_structure/${data.vente_id}/actes?format=${formatImpression}`;
+            } else if (typeDocument === 'les_deux') {
+                window.open(`/recu/${data.vente_id}/actes?format=${formatImpression}`, '_blank');
+                window.open(`/recu_structure/${data.vente_id}/actes?format=${formatImpression}`, '_blank');
+                window.location.href = "/dashboard";
+            } else {
+                window.location.href = "/dashboard";
+            }
         } else {
-            hideProgress();
             alert('Erreur: ' + (data.error || 'Erreur inconnue'));
             btn.disabled = false;
             btn.innerHTML = originalText;
         }
     })
     .catch(error => {
-        clearInterval(progressInterval);
-        hideProgress();
-        console.error('Erreur fetch:', error);
-        alert('Erreur lors de la vente: ' + error);
+        console.error('Erreur:', error);
+        alert('Erreur: ' + error);
         btn.disabled = false;
         btn.innerHTML = originalText;
     });
 }
-
 // ========== INITIALISATION ==========
 window.onload = function() {
     checkSelectedPatient();
