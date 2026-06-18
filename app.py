@@ -155,6 +155,34 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def mettre_a_jour_solde_caisse(structure_id):
+    """Met à jour le solde de caisse en fonction des recettes et dépenses"""
+    recettes = db.execute_query("""
+        SELECT COALESCE(SUM(montant), 0) as total 
+        FROM recettes 
+        WHERE structure_id = %s 
+        AND (est_annulation IS NULL OR est_annulation = FALSE)
+    """, (structure_id,))
+    
+    depenses = db.execute_query("""
+        SELECT COALESCE(SUM(montant), 0) as total 
+        FROM depenses 
+        WHERE structure_id = %s
+    """, (structure_id,))
+    
+    total_recettes = recettes[0]['total'] if recettes else 0
+    total_depenses = depenses[0]['total'] if depenses else 0
+    nouveau_solde = total_recettes - total_depenses
+    
+    db.execute_query("""
+        INSERT INTO caisse (structure_id, solde_actuel, date_mise_a_jour)
+        VALUES (%s, %s, NOW())
+        ON CONFLICT (structure_id) DO UPDATE SET 
+            solde_actuel = EXCLUDED.solde_actuel,
+            date_mise_a_jour = NOW()
+    """, (structure_id, nouveau_solde))
+    
+    return nouveau_solde
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -3322,13 +3350,13 @@ def api_ventes_stats():
             SELECT type, net_a_payer, sous_total, date_vente
             FROM ventes 
             WHERE structure_id = %s 
-            AND (statut = 'validee' OR statut IS NULL)
+            AND (statut IS NULL OR statut != 'annulee')
         """, (structure_id,))
         
         actes_today = 0
         pharma_today = 0
-        ca_net_today = 0      # Ce que les patients ont payé
-        ca_brut_today = 0     # Total (patients + assurance)
+        ca_net_today = 0
+        ca_brut_today = 0
         
         for v in ventes:
             if isinstance(v, dict):
@@ -3366,7 +3394,6 @@ def api_ventes_stats():
             'ca_brut_today': 0
         }), 500
 
-
 @app.route('/api/activites/recentes')
 @login_required
 def api_activites_recentes():
@@ -3388,7 +3415,7 @@ def api_activites_recentes():
             FROM ventes v
             LEFT JOIN patients p ON v.patient_id = p.id
             WHERE v.structure_id = %s 
-            AND (v.statut = 'validee' OR v.statut IS NULL)
+            AND (v.statut IS NULL OR v.statut != 'annulee')
             ORDER BY v.date_vente DESC
             LIMIT 10
         """, (structure_id,))
@@ -3724,7 +3751,7 @@ def annuler_vente(vente_id):
             net_a_payer = float(v[6]) if len(v) > 6 else 0
             sous_total = float(v[4]) if len(v) > 4 else 0
         
-        # 🔥 Pour la pharmacie : restocker dans Google Sheets (pas Neon)
+        # ========== POUR LA PHARMACIE : RESTOCKER DANS SHEETS ==========
         if vente_type in ['pharma', 'pharmacie'] and produits_data:
             if isinstance(produits_data, str):
                 produits_data = json.loads(produits_data)
@@ -3738,7 +3765,6 @@ def annuler_vente(vente_id):
                     quantite = int(produit.get('quantite', 0))
                     
                     if produit_id and quantite > 0:
-                        # Trouver le produit dans Sheets
                         cell = worksheet.find(produit_id, in_column=1)
                         if cell:
                             row_num = cell.row
@@ -3746,13 +3772,13 @@ def annuler_vente(vente_id):
                             stock_actuel = int(current_row[3]) if len(current_row) > 3 else 0
                             nouveau_stock = stock_actuel + quantite
                             worksheet.update_cell(row_num, 4, nouveau_stock)
-                            print(f"📦 Restocké dans Sheets: {produit.get('nom')} +{quantite} (Stock: {stock_actuel} → {nouveau_stock})")
-                        else:
-                            print(f"⚠️ Produit {produit_id} non trouvé dans Sheets")
+                            print(f"📦 Restocké dans Sheets: {produit.get('nom')} +{quantite}")
             except Exception as e:
                 print(f"⚠️ Erreur restock Sheets: {e}")
         
-        # Enregistrer l'annulation dans l'historique
+        # ========== POUR LES ACTES : PAS DE STOCK ==========
+        
+        # 🔥 ENREGISTRER L'ANNULATION DANS L'HISTORIQUE
         db.execute_query("""
             INSERT INTO annulations_ventes (
                 vente_id, vente_type, motif, annule_par_id, annule_par_nom,
@@ -3764,17 +3790,7 @@ def annuler_vente(vente_id):
             net_a_payer, sous_total, json.dumps(v, default=str)
         ))
         
-        # Marquer la vente comme annulee
-        db.execute_query("""
-            UPDATE ventes 
-            SET statut = 'annulee', 
-                annulee_le = NOW(), 
-                annulee_par = %s,
-                motif_annulation = %s
-            WHERE id = %s AND structure_id = %s
-        """, (user_id, motif, vente_id, structure_id))
-        
-        # ANNULER LA RECETTE ASSOCIEE
+        # 🔥 Mettre à jour la recette (annuler)
         db.execute_query("""
             UPDATE recettes 
             SET est_annulation = TRUE, 
@@ -3784,24 +3800,49 @@ def annuler_vente(vente_id):
             AND structure_id = %s
         """, (motif, vente_id, structure_id))
         
-        # METTRE A JOUR LE SOLDE DE CAISSE
+        # 🔥 Marquer la vente comme annulée
+        db.execute_query("""
+            UPDATE ventes 
+            SET statut = 'annulee', 
+                annulee_le = NOW(), 
+                annulee_par = %s,
+                motif_annulation = %s
+            WHERE id = %s AND structure_id = %s
+        """, (user_id, motif, vente_id, structure_id))
+        
+        # 🔥 METTRE À JOUR LE SOLDE DE CAISSE (recalculer)
+        recettes = db.execute_query("""
+            SELECT COALESCE(SUM(montant), 0) as total 
+            FROM recettes 
+            WHERE structure_id = %s AND (est_annulation IS NULL OR est_annulation = FALSE)
+        """, (structure_id,))
+        
+        depenses = db.execute_query("""
+            SELECT COALESCE(SUM(montant), 0) as total 
+            FROM depenses 
+            WHERE structure_id = %s
+        """, (structure_id,))
+        
+        total_recettes = recettes[0]['total'] if recettes else 0
+        total_depenses = depenses[0]['total'] if depenses else 0
+        nouveau_solde = total_recettes - total_depenses
+        
         db.execute_query("""
             INSERT INTO caisse (structure_id, solde_actuel, date_mise_a_jour)
-            VALUES (%s, 
-                (SELECT COALESCE(SUM(montant), 0) FROM recettes WHERE structure_id = %s AND est_annulation = FALSE) -
-                (SELECT COALESCE(SUM(montant), 0) FROM depenses WHERE structure_id = %s),
-                NOW())
+            VALUES (%s, %s, NOW())
             ON CONFLICT (structure_id) DO UPDATE SET 
                 solde_actuel = EXCLUDED.solde_actuel,
                 date_mise_a_jour = NOW()
-        """, (structure_id, structure_id, structure_id))
+        """, (structure_id, nouveau_solde))
         
         print(f"✅ Vente {vente_id} ({vente_type}) annulee par {user_name}")
+        print(f"💰 Nouveau solde: {nouveau_solde} FCFA")
         
         return jsonify({
             'success': True, 
             'message': f'Vente #{vente_id} annulee avec succes',
-            'type': vente_type
+            'type': vente_type,
+            'nouveau_solde': nouveau_solde
         })
         
     except Exception as e:
@@ -3923,10 +3964,11 @@ def admin_finances():
     
     structure_id = session.get('structure_id')
     
-    # Récupérer les recettes
+    # 🔥 Récupérer les recettes (exclure les annulations)
     recettes = db.execute_query("""
         SELECT * FROM recettes 
         WHERE structure_id = %s 
+        AND (est_annulation IS NULL OR est_annulation = FALSE)
         ORDER BY date_recette DESC
     """, (structure_id,))
     
@@ -3944,14 +3986,19 @@ def admin_finances():
     
     solde = caisse[0]['solde_actuel'] if caisse and len(caisse) > 0 else 0
     
-    # Calculer les totaux
+    # 🔥 Calculer les totaux (exclure annulations)
     total_recettes = db.execute_query("""
-        SELECT COALESCE(SUM(montant), 0) as total FROM recettes WHERE structure_id = %s
+        SELECT COALESCE(SUM(montant), 0) as total 
+        FROM recettes 
+        WHERE structure_id = %s 
+        AND (est_annulation IS NULL OR est_annulation = FALSE)
     """, (structure_id,))
     total_recettes = total_recettes[0]['total'] if total_recettes else 0
     
     total_depenses = db.execute_query("""
-        SELECT COALESCE(SUM(montant), 0) as total FROM depenses WHERE structure_id = %s
+        SELECT COALESCE(SUM(montant), 0) as total 
+        FROM depenses 
+        WHERE structure_id = %s
     """, (structure_id,))
     total_depenses = total_depenses[0]['total'] if total_depenses else 0
     
@@ -3987,11 +4034,13 @@ def api_add_recette():
             user_name
         ))
         
-        # Mettre à jour le solde de caisse
+        # 🔥 Mettre à jour le solde de caisse (exclure annulations)
         db.execute_query("""
             INSERT INTO caisse (structure_id, solde_actuel, date_mise_a_jour)
-            VALUES (%s, (SELECT COALESCE(SUM(montant), 0) FROM recettes WHERE structure_id = %s) - 
-                         (SELECT COALESCE(SUM(montant), 0) FROM depenses WHERE structure_id = %s), NOW())
+            VALUES (%s, 
+                (SELECT COALESCE(SUM(montant), 0) FROM recettes WHERE structure_id = %s AND (est_annulation IS NULL OR est_annulation = FALSE)) - 
+                (SELECT COALESCE(SUM(montant), 0) FROM depenses WHERE structure_id = %s), 
+                NOW())
             ON CONFLICT (structure_id) DO UPDATE SET 
                 solde_actuel = EXCLUDED.solde_actuel,
                 date_mise_a_jour = NOW()
@@ -4002,7 +4051,6 @@ def api_add_recette():
     except Exception as e:
         print(f"❌ Erreur: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
-
 
 # ========== API FINANCES ==========
 
@@ -4017,8 +4065,8 @@ def api_finances_stats():
         date_debut = request.args.get('date_debut')
         date_fin = request.args.get('date_fin')
         
-        # Construction de la condition WHERE
-        where_clause = "WHERE structure_id = %s"
+        # 🔥 Construction de la condition WHERE (exclure annulations)
+        where_clause = "WHERE structure_id = %s AND (est_annulation IS NULL OR est_annulation = FALSE)"
         params = [structure_id]
         
         if date_debut and date_fin:
@@ -4027,8 +4075,7 @@ def api_finances_stats():
             where_clause += " AND date_recette BETWEEN %s AND %s"
             params.extend([date_debut_formatted, date_fin_formatted])
         
-        # Recettes (patients + assurances + autres)
-        # Les remboursements assurance sont dans recettes avec source = 'assurance'
+        # 🔥 Recettes (exclure annulations)
         recettes = db.execute_query(f"""
             SELECT COALESCE(SUM(montant), 0) as total
             FROM recettes 
@@ -4050,7 +4097,7 @@ def api_finances_stats():
             {where_clause_dep}
         """, params_dep)
         
-        # Recettes par source (detail)
+        # 🔥 Recettes par source (exclure annulations)
         recettes_par_source = db.execute_query(f"""
             SELECT source, COALESCE(SUM(montant), 0) as total
             FROM recettes 
@@ -4085,7 +4132,8 @@ def api_recettes_detail():
         date_debut = request.args.get('date_debut')
         date_fin = request.args.get('date_fin')
         
-        where_clause = "WHERE structure_id = %s AND (statut = 'validee' OR statut IS NULL)"
+        # 🔥 Exclure les ventes annulées
+        where_clause = "WHERE structure_id = %s AND (statut IS NULL OR statut != 'annulee')"
         params = [structure_id]
         
         if date_debut and date_fin:
@@ -4110,7 +4158,6 @@ def api_recettes_detail():
     except Exception as e:
         print(f"Erreur: {e}")
         return jsonify([]), 500
-
 
 @app.route('/api/finances/depenses', methods=['POST'])
 @login_required
@@ -4324,7 +4371,7 @@ def generer_factures_assurance():
         
         print(f"Periode: du {date_debut} au {date_fin}")
         
-        # Recuperer les ventes AVEC assurance
+        # 🔥 Recuperer les ventes AVEC assurance ET NON ANNULEES
         ventes = db.execute_query("""
             SELECT 
                 v.id,
@@ -4339,7 +4386,7 @@ def generer_factures_assurance():
             WHERE v.structure_id = %s 
             AND v.date_vente >= %s 
             AND v.date_vente <= %s
-            AND (v.statut = 'validee' OR v.statut IS NULL)
+            AND (v.statut IS NULL OR v.statut != 'annulee')
             AND v.taux_assurance > 0
             AND p.type_assurance IS NOT NULL 
             AND p.type_assurance != 'non_assure'
@@ -4394,7 +4441,6 @@ def generer_factures_assurance():
                 deja_rembourse = float(existing[0]['montant_rembourse'] or 0)
                 nouveau_total = data_assurance['total']
                 
-                # 🔥 RECALCULER LE STATUT
                 if deja_rembourse >= nouveau_total:
                     nouveau_statut = 'payee'
                 elif deja_rembourse > 0:
@@ -4417,7 +4463,6 @@ def generer_factures_assurance():
                     'reste': nouveau_total - deja_rembourse
                 })
             else:
-                # Nouvelle facture
                 result = db.execute_query("""
                     INSERT INTO factures_assurance (structure_id, mois_reference, assurance, montant_total, details)
                     VALUES (%s, %s, %s, %s, %s)
