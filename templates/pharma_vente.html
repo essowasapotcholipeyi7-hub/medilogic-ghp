@@ -203,6 +203,9 @@
                         <button class="btn btn-primary w-100" onclick="finaliserVente()" id="finaliserBtn" disabled>
                             <i class="fas fa-receipt"></i> Finaliser
                         </button>
+                        <button class="btn btn-warning w-100" onclick="creerProforma()" id="proformaBtn" disabled>
+                            <i class="fas fa-file-invoice"></i> Proforma
+                        </button>
                     </div>
                 </div>
             </div>
@@ -866,10 +869,174 @@ function finaliserVente() {
         alert('Erreur: ' + error);
     });
 }
+
+// ========== CRÉER PROFORMA ==========
+function creerProforma() {
+    if (panier.length === 0) {
+        alert('Le panier est vide');
+        return;
+    }
+    
+    let patientId = sessionStorage.getItem('selectedPatientId') || localStorage.getItem('selectedPatientId');
+    let patientNom = sessionStorage.getItem('selectedPatientName') || localStorage.getItem('selectedPatientName');
+    let patientAssurance = sessionStorage.getItem('selectedPatientAssurance') || localStorage.getItem('selectedPatientAssurance');
+    let patientTaux = parseFloat(sessionStorage.getItem('selectedPatientTaux') || localStorage.getItem('selectedPatientTaux') || 0);
+    
+    if (!patientId || patientId === 'null') {
+        alert('Veuillez sélectionner un patient');
+        return;
+    }
+    
+    // 🔥 RÉCUPÉRER LE TÉLÉPHONE DEPUIS L'API
+    showLoader('Récupération des infos patient...');
+    
+    fetch(`/api/patients/${patientId}`)
+        .then(response => response.json())
+        .then(patient => {
+            hideLoader();
+            
+            let patientTelephone = patient.telephone || '';
+            console.log('Téléphone récupéré:', patientTelephone);
+            
+            // Continuer avec la création de la proforma
+            creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux, patientTelephone);
+        })
+        .catch(error => {
+            hideLoader();
+            console.error('Erreur récupération patient:', error);
+            // Continuer sans téléphone
+            creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux, '');
+        });
+}
+
+// 🔥 NOUVELLE FONCTION : SUITE DE LA CRÉATION
+function creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux, patientTelephone) {
+    let tauxUtilise = parseFloat(document.getElementById('tauxVente').value);
+    if (isNaN(tauxUtilise)) {
+        tauxUtilise = patientTaux;
+    }
+    
+    // Calcul des totaux
+    let sousTotal = 0;
+    const articles = [];
+    
+    for (const item of panier) {
+        const prix = item.prix_reel || item.prix || 0;
+        const total = prix * item.quantite;
+        sousTotal += total;
+        
+        const type = item.prix_reel !== undefined ? 'produit' : 'acte';
+        
+        articles.push({
+            nom: item.nom,
+            type: type,
+            quantite: item.quantite,
+            prix_unitaire: prix,
+            total: total
+        });
+    }
+    
+    const proformaData = {
+        patient_id: parseInt(patientId),
+        patient_nom: patientNom,
+        patient_telephone: patientTelephone || '',
+        assurance_nom: patientAssurance && patientAssurance !== 'non_assure' ? patientAssurance : 'Non assuré',
+        taux_assurance: tauxUtilise,
+        numero_assure: localStorage.getItem('selectedPatientNumero') || '',
+        articles: articles,
+        type: 'mixte',
+        notes: document.getElementById('avecOrdonnance')?.checked ? 'Avec ordonnance' : ''
+    };
+    
+    console.log('Données proforma:', proformaData);
+    
+    // Confirmation
+    let msg = '📋 NOUVELLE PROFORMA\n\n';
+    msg += `👤 Patient: ${patientNom}\n`;
+    msg += `📱 Téléphone: ${patientTelephone || 'Non renseigné'}\n`;
+    msg += `🏥 Assurance: ${proformaData.assurance_nom}\n`;
+    msg += `📊 Taux: ${tauxUtilise}%\n\n`;
+    msg += `📦 ${articles.length} article(s)\n`;
+    msg += `💰 Total: ${sousTotal.toLocaleString()} FCFA\n\n`;
+    msg += `Confirmer ?`;
+    
+    if (!confirm(msg)) return;
+    
+    showLoader('Création de la proforma...');
+    
+    fetch('/api/proformas', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(proformaData)
+    })
+    .then(r => r.json())
+    .then(data => {
+        hideLoader();
+        if (data.success) {
+            alert(`✅ Proforma #${data.id} créée !\nNet à payer: ${data.net_a_payer.toLocaleString()} FCFA`);
+            
+            if (confirm('Imprimer la proforma ?')) {
+                window.open(`/proforma/${data.id}/print`, '_blank');
+            }
+            
+            panier = [];
+            afficherPanier();
+            if (typeof updatePanierBadge === 'function') {
+                updatePanierBadge();
+            }
+            chargerProformaBadge();
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => {
+        hideLoader();
+        alert('Erreur: ' + error);
+    });
+}
+// ========== CHARGER LE BADGE PROFORMA ==========
+function chargerProformaBadge() {
+    fetch('/api/proformas/count')
+        .then(response => response.json())
+        .then(data => {
+            const badge = document.getElementById('proformaBadge');
+            if (badge) {
+                if (data.en_attente > 0) {
+                    badge.textContent = data.en_attente;
+                    badge.style.display = 'inline-block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+        })
+        .catch(() => {});
+}
+
+// Activer/désactiver le bouton Proforma en fonction du panier
+function updateProformaButton() {
+    const btn = document.getElementById('proformaBtn');
+    if (btn) {
+        btn.disabled = panier.length === 0;
+    }
+}
+
+// Surcharger la fonction afficherPanier pour inclure le bouton Proforma
+// (à ajouter dans le script existant)
+const originalAfficherPanier = window.afficherPanier;
+window.afficherPanier = function() {
+    if (originalAfficherPanier) {
+        originalAfficherPanier();
+    }
+    updateProformaButton();
+};
 // ========== INITIALISATION ==========
 document.addEventListener('DOMContentLoaded', function() {
     checkSelectedPatient();
     chargerProduits();
+    chargerProformaBadge();
+    
+    // Mettre à jour les boutons
+    updateProformaButton();
 });
 </script>
 {% endblock %}

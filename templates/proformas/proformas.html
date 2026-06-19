@@ -1,0 +1,445 @@
+{% extends "base.html" %}
+
+{% block title %}Factures Proforma{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3 mb-4">
+        {% include 'sidebar_menu.html' %}
+    </div>
+    
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-file-invoice"></i> Factures Proforma</h5>
+                <div>
+                    <button class="btn btn-sm btn-primary" onclick="nouvelleProforma()">
+                        <i class="fas fa-plus"></i> Nouvelle proforma
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Statistiques -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h5>{{ stats.total }}</h5>
+                                <small class="text-muted">Total</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-warning text-white">
+                            <div class="card-body text-center">
+                                <h5>{{ stats.en_attente }}</h5>
+                                <small>En attente</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white">
+                            <div class="card-body text-center">
+                                <h5>{{ stats.acceptees }}</h5>
+                                <small>Acceptées</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-info text-white">
+                            <div class="card-body text-center">
+                                <h5>{{ stats.total_montant|round(0)|int }} FCFA</h5>
+                                <small>Montant total</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tableau -->
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>N°</th>
+                                <th>Patient</th>
+                                <th>Date</th>
+                                <th>Montant</th>
+                                <th>Assurance</th>
+                                <th>Statut</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in proformas %}
+                            <tr>
+                                <td><strong>#{{ p.id }}</strong></td>
+                                <td>{{ p.patient_nom }}</td>
+                                <td>{{ p.created_at.strftime('%d/%m/%Y') if p.created_at else '-' }}</td>
+                                <td><strong>{{ p.net_a_payer|round(0)|int }} FCFA</strong></td>
+                                <td>{{ p.assurance_nom or 'Non assuré' }}</td>
+                                <td>
+                                    <span class="badge 
+                                        {% if p.statut == 'en_attente' %}bg-warning
+                                        {% elif p.statut == 'accepte' %}bg-success
+                                        {% elif p.statut == 'refuse' %}bg-danger
+                                        {% elif p.statut == 'converti_en_vente' %}bg-info
+                                        {% else %}bg-secondary{% endif %}">
+                                        {{ p.statut_label }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('proforma_print', proforma_id=p.id) }}" target="_blank" class="btn btn-secondary">
+                                            <i class="fas fa-print"></i>
+                                        </a>
+                                        {% if p.statut == 'en_attente' %}
+                                        <button onclick="changerStatut({{ p.id }}, 'accepte')" class="btn btn-success">
+                                            <i class="fas fa-check"></i>
+                                        </button>
+                                        <button onclick="changerStatut({{ p.id }}, 'refuse')" class="btn btn-danger">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center py-4">
+                                    <i class="fas fa-file-invoice fa-2x text-muted mb-2 d-block"></i>
+                                    Aucune proforma trouvée
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nouvelle Proforma -->
+<div class="modal fade" id="proformaModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-file-invoice"></i> Facture Proforma</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="proformaForm">
+                    <!-- Patient -->
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Patient *</label>
+                            <select class="form-control" id="patientSelect" required>
+                                <option value="">Sélectionner un patient...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Téléphone</label>
+                            <input type="text" class="form-control" id="patientTelephone" readonly>
+                        </div>
+                    </div>
+                    
+                    <!-- Assurance -->
+                    <div class="row mb-3">
+                        <div class="col-md-5">
+                            <label class="form-label">Assurance</label>
+                            <input type="text" class="form-control" id="assuranceNom" placeholder="AMU-CNSS, GTA, etc.">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Taux (%)</label>
+                            <input type="number" class="form-control" id="tauxAssurance" value="0" min="0" max="100" onchange="calculerTotal()">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">N° Carte</label>
+                            <input type="text" class="form-control" id="numeroAssure" placeholder="Numéro d'assuré">
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <!-- Articles -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Articles</label>
+                        <div class="table-responsive">
+                            <table class="table table-sm" id="articlesTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width:35%">Nom</th>
+                                        <th style="width:20%">Type</th>
+                                        <th style="width:12%">Qté</th>
+                                        <th style="width:18%">Prix unit.</th>
+                                        <th style="width:15%">Total</th>
+                                        <th style="width:5%"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="articlesBody">
+                                    <!-- Lignes ajoutées dynamiquement -->
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colspan="6">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="ajouterArticle()">
+                                                <i class="fas fa-plus"></i> Ajouter un article
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-success ms-2" onclick="ajouterActe()">
+                                                <i class="fas fa-plus"></i> Depuis les actes
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-info" onclick="ajouterProduit()">
+                                                <i class="fas fa-plus"></i> Depuis les produits
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Totaux -->
+                    <div class="row">
+                        <div class="col-md-6 offset-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <span>Sous-total :</span>
+                                        <span id="sousTotalDisplay">0 FCFA</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Prise en charge :</span>
+                                        <span id="priseEnChargeDisplay">0 FCFA</span>
+                                    </div>
+                                    <hr>
+                                    <div class="d-flex justify-content-between fw-bold">
+                                        <span>Net à payer :</span>
+                                        <span id="netAPayerDisplay" class="text-success">0 FCFA</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Notes -->
+                    <div class="mb-3 mt-3">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" id="proformaNotes" rows="2" placeholder="Informations complémentaires..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-primary" onclick="sauvegarderProforma()">
+                    <i class="fas fa-save"></i> Sauvegarder
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================
+// GESTION PROFORMA
+// ============================================
+
+let articlesProforma = [];
+
+function nouvelleProforma() {
+    articlesProforma = [];
+    document.getElementById('articlesBody').innerHTML = '';
+    document.getElementById('sousTotalDisplay').textContent = '0 FCFA';
+    document.getElementById('priseEnChargeDisplay').textContent = '0 FCFA';
+    document.getElementById('netAPayerDisplay').textContent = '0 FCFA';
+    document.getElementById('assuranceNom').value = '';
+    document.getElementById('tauxAssurance').value = 0;
+    document.getElementById('numeroAssure').value = '';
+    document.getElementById('proformaNotes').value = '';
+    
+    // Charger la liste des patients
+    fetch('/api/patients')
+        .then(r => r.json())
+        .then(data => {
+            const select = document.getElementById('patientSelect');
+            select.innerHTML = '<option value="">Sélectionner un patient...</option>';
+            if (data && data.length) {
+                data.forEach(p => {
+                    select.innerHTML += `<option value="${p.id}" data-telephone="${p.telephone || ''}" data-assurance="${p.type_assurance || 'non_assure'}" data-taux="${p.taux_prise_charge || 0}" data-numero="${p.numero_assure || ''}">
+                        ${p.nom} ${p.prenom || ''} - ${p.telephone || ''}
+                    </option>`;
+                });
+            }
+        })
+        .catch(err => console.error('Erreur chargement patients:', err));
+    
+    new bootstrap.Modal(document.getElementById('proformaModal')).show();
+}
+
+function ajouterArticle(nom = '', type = 'acte', prix = 0, qte = 1) {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td>
+            <input type="text" class="form-control form-control-sm" value="${nom}" placeholder="Nom de l'article" onchange="calculerTotal()">
+        </td>
+        <td>
+            <select class="form-control form-control-sm" onchange="calculerTotal()">
+                <option value="acte" ${type === 'acte' ? 'selected' : ''}>Acte médical</option>
+                <option value="produit" ${type === 'produit' ? 'selected' : ''}>Produit</option>
+            </select>
+        </td>
+        <td>
+            <input type="number" class="form-control form-control-sm" value="${qte}" min="1" onchange="calculerTotal()">
+        </td>
+        <td>
+            <input type="number" class="form-control form-control-sm" value="${prix}" placeholder="Prix" onchange="calculerTotal()">
+        </td>
+        <td class="total-cell text-end fw-bold">0 FCFA</td>
+        <td>
+            <button class="btn btn-sm btn-danger" onclick="supprimerArticle(this)">
+                <i class="fas fa-times"></i>
+            </button>
+        </td>
+    `;
+    document.getElementById('articlesBody').appendChild(row);
+    calculerTotal();
+}
+
+function ajouterActe() {
+    // TODO: Ouvrir modal de sélection des actes
+    alert('Sélection des actes à venir...');
+}
+
+function ajouterProduit() {
+    // TODO: Ouvrir modal de sélection des produits
+    alert('Sélection des produits à venir...');
+}
+
+function calculerTotal() {
+    let sousTotal = 0;
+    const rows = document.querySelectorAll('#articlesBody tr');
+    
+    rows.forEach(row => {
+        const inputs = row.querySelectorAll('input[type="number"]');
+        const qte = parseFloat(inputs[0]?.value) || 0;
+        const prix = parseFloat(inputs[1]?.value) || 0;
+        const total = qte * prix;
+        row.querySelector('.total-cell').textContent = total.toLocaleString() + ' FCFA';
+        sousTotal += total;
+    });
+    
+    // Appliquer le taux d'assurance
+    const taux = parseFloat(document.getElementById('tauxAssurance').value) || 0;
+    const priseEnCharge = sousTotal * (taux / 100);
+    const netAPayer = sousTotal - priseEnCharge;
+    
+    document.getElementById('sousTotalDisplay').textContent = sousTotal.toLocaleString() + ' FCFA';
+    document.getElementById('priseEnChargeDisplay').textContent = priseEnCharge.toLocaleString() + ' FCFA';
+    document.getElementById('netAPayerDisplay').textContent = netAPayer.toLocaleString() + ' FCFA';
+}
+
+function supprimerArticle(btn) {
+    btn.closest('tr').remove();
+    calculerTotal();
+}
+
+// Charger les infos du patient sélectionné
+document.getElementById('patientSelect')?.addEventListener('change', function() {
+    const option = this.options[this.selectedIndex];
+    const telephone = option.dataset.telephone || '';
+    const assurance = option.dataset.assurance || '';
+    const taux = option.dataset.taux || 0;
+    const numero = option.dataset.numero || '';
+    
+    document.getElementById('patientTelephone').value = telephone;
+    document.getElementById('assuranceNom').value = assurance !== 'non_assure' ? assurance : '';
+    document.getElementById('tauxAssurance').value = taux;
+    document.getElementById('numeroAssure').value = numero;
+    calculerTotal();
+});
+
+function sauvegarderProforma() {
+    // Récupérer les articles
+    const articles = [];
+    const rows = document.querySelectorAll('#articlesBody tr');
+    
+    rows.forEach(row => {
+        const nom = row.querySelector('input[type="text"]')?.value || '';
+        const type = row.querySelector('select')?.value || 'acte';
+        const inputs = row.querySelectorAll('input[type="number"]');
+        const qte = parseFloat(inputs[0]?.value) || 0;
+        const prix = parseFloat(inputs[1]?.value) || 0;
+        
+        if (nom && qte > 0 && prix > 0) {
+            articles.push({ 
+                nom, 
+                type, 
+                quantite: qte, 
+                prix_unitaire: prix, 
+                total: qte * prix 
+            });
+        }
+    });
+    
+    if (articles.length === 0) {
+        alert('Veuillez ajouter au moins un article');
+        return;
+    }
+    
+    // Récupérer les infos patient
+    const patientSelect = document.getElementById('patientSelect');
+    const patientId = patientSelect.value;
+    const patientNom = patientSelect.options[patientSelect.selectedIndex]?.text?.split(' - ')[0] || '';
+    const patientTelephone = document.getElementById('patientTelephone').value;
+    
+    const data = {
+        patient_id: patientId || null,
+        patient_nom: patientNom,
+        patient_telephone: patientTelephone,
+        assurance_nom: document.getElementById('assuranceNom').value || 'Non assuré',
+        taux_assurance: parseFloat(document.getElementById('tauxAssurance').value) || 0,
+        numero_assure: document.getElementById('numeroAssure').value || '',
+        articles: articles,
+        notes: document.getElementById('proformaNotes').value,
+        type: 'mixte'
+    };
+    
+    showLoader('Enregistrement de la proforma...');
+    
+    fetch('/api/proformas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        hideLoader();
+        if (data.success) {
+            alert('✅ Proforma créée avec succès !\nNet à payer : ' + data.net_a_payer.toLocaleString() + ' FCFA');
+            bootstrap.Modal.getInstance(document.getElementById('proformaModal')).hide();
+            location.reload();
+        } else {
+            alert('❌ Erreur: ' + data.error);
+        }
+    })
+    .catch(() => { hideLoader(); alert('❌ Erreur'); });
+}
+
+function changerStatut(id, statut) {
+    if (!confirm('Confirmer le changement de statut ?')) return;
+    
+    fetch(`/api/proformas/${id}/statut`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statut: statut })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    });
+}
+</script>
+{% endblock %}

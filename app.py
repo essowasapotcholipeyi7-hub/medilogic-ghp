@@ -4704,6 +4704,229 @@ def api_recettes_source():
         print(f"Erreur: {e}")
         return jsonify([]), 500
 
+# ============================================
+# ROUTES PROFORMA
+# ============================================
+
+@app.route('/proformas')
+@login_required
+def proformas():
+    """Liste des proformas de la structure"""
+    if not session.get('is_admin'):
+        flash('Accès non autorisé', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    structure_id = session.get('structure_id')
+    
+    # Récupérer toutes les proformas
+    proformas = db.execute_query("""
+        SELECT 
+            p.*,
+            CASE 
+                WHEN p.statut = 'en_attente' THEN 'En attente'
+                WHEN p.statut = 'accepte' THEN 'Acceptée'
+                WHEN p.statut = 'refuse' THEN 'Refusée'
+                WHEN p.statut = 'converti_en_vente' THEN 'Convertie en vente'
+                WHEN p.statut = 'expire' THEN 'Expirée'
+                ELSE p.statut
+            END as statut_label
+        FROM proformas p
+        WHERE p.structure_id = %s
+        ORDER BY p.created_at DESC
+    """, (structure_id,))
+    
+    # Statistiques
+    stats = db.execute_query("""
+        SELECT 
+            COUNT(*) as total,
+            COUNT(CASE WHEN statut = 'en_attente' THEN 1 END) as en_attente,
+            COUNT(CASE WHEN statut = 'accepte' THEN 1 END) as acceptees,
+            COUNT(CASE WHEN statut = 'converti_en_vente' THEN 1 END) as converties,
+            COALESCE(SUM(CASE WHEN statut IN ('en_attente', 'accepte') THEN net_a_payer ELSE 0 END), 0) as total_montant
+        FROM proformas
+        WHERE structure_id = %s
+    """, (structure_id,))
+    
+    stats = stats[0] if stats else {'total': 0, 'en_attente': 0, 'acceptees': 0, 'converties': 0, 'total_montant': 0}
+    
+    return render_template('proformas/proformas.html', 
+                         proformas=proformas,
+                         stats=stats)
+
+
+@app.route('/api/proformas', methods=['POST'])
+@login_required
+def api_creer_proforma():
+    """Créer une nouvelle proforma"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        user_name = session.get('user_name', 'System')
+        
+        print("=" * 60)
+        print("📄 CRÉATION PROFORMA")
+        print(f"Patient: {data.get('patient_nom')}")
+        print(f"Articles: {len(data.get('articles', []))}")
+        print("=" * 60)
+        
+        # Calculer les totaux
+        articles = data.get('articles', [])
+        sous_total = 0
+        for article in articles:
+            qte = float(article.get('quantite', 0))
+            prix = float(article.get('prix_unitaire', 0))
+            article['total'] = qte * prix
+            sous_total += article['total']
+        
+        taux_assurance = float(data.get('taux_assurance', 0))
+        prise_en_charge = sous_total * (taux_assurance / 100)
+        net_a_payer = sous_total - prise_en_charge
+        
+        expires_at = datetime.now() + timedelta(days=7)
+        
+        # Insérer la proforma
+        result = db.execute_query("""
+            INSERT INTO proformas (
+                structure_id, 
+                patient_id, 
+                patient_nom, 
+                patient_telephone,
+                assurance_nom,
+                taux_assurance,
+                numero_assure,
+                type, 
+                articles, 
+                sous_total, 
+                prise_en_charge, 
+                net_a_payer, 
+                notes,
+                created_by,
+                expires_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            structure_id,
+            data.get('patient_id'),
+            data.get('patient_nom'),
+            data.get('patient_telephone', ''),
+            data.get('assurance_nom', 'Non assuré'),
+            float(data.get('taux_assurance', 0)),
+            data.get('numero_assure', ''),
+            data.get('type', 'mixte'),
+            json.dumps(articles, ensure_ascii=False),
+            sous_total,
+            prise_en_charge,
+            net_a_payer,
+            data.get('notes', ''),
+            user_name,
+            expires_at
+        ))
+        
+        proforma_id = result[0]['id']
+        
+        print(f"✅ Proforma #{proforma_id} créée")
+        print(f"   Sous-total: {sous_total} FCFA")
+        print(f"   Net à payer: {net_a_payer} FCFA")
+        
+        return jsonify({
+            'success': True,
+            'id': proforma_id,
+            'net_a_payer': net_a_payer,
+            'sous_total': sous_total,
+            'prise_en_charge': prise_en_charge
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/proformas/<int:proforma_id>/statut', methods=['PUT'])
+@login_required
+def api_changer_statut_proforma(proforma_id):
+    """Changer le statut d'une proforma"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        nouveau_statut = data.get('statut')
+        
+        if nouveau_statut not in ['en_attente', 'accepte', 'refuse', 'converti_en_vente', 'expire']:
+            return jsonify({'success': False, 'error': 'Statut invalide'}), 400
+        
+        db.execute_query("""
+            UPDATE proformas 
+            SET statut = %s, updated_at = NOW()
+            WHERE id = %s AND structure_id = %s
+        """, (nouveau_statut, proforma_id, structure_id))
+        
+        return jsonify({
+            'success': True,
+            'message': f'Statut mis à jour vers {nouveau_statut}'
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/proforma/<int:proforma_id>/print')
+@login_required
+def proforma_print(proforma_id):
+    """Imprimer une proforma"""
+    structure_id = session.get('structure_id')
+    
+    # Récupérer la proforma
+    proforma = db.execute_query("""
+        SELECT * FROM proformas 
+        WHERE id = %s AND structure_id = %s
+    """, (proforma_id, structure_id))
+    
+    if not proforma:
+        flash('Proforma non trouvée', 'danger')
+        return redirect(url_for('proformas'))
+    
+    proforma = proforma[0]
+    
+    # Récupérer les infos de la structure depuis Google Sheets
+    structures = sheets_helper.get_all_records('structures', use_prefix=False)
+    structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
+    
+    # Récupérer le logo
+    logo_url = structure_info.get('logo_url', '')
+    
+    return render_template('proformas/proforma_print.html', 
+                         proforma=proforma,
+                         structure=structure_info,
+                         logo_url=logo_url)
+@app.route('/api/proformas/count')
+@login_required
+def api_proformas_count():
+    """Retourne le nombre de proformas en attente"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        result = db.execute_query("""
+            SELECT 
+                COUNT(*) as total,
+                COUNT(CASE WHEN statut = 'en_attente' THEN 1 END) as en_attente
+            FROM proformas
+            WHERE structure_id = %s
+        """, (structure_id,))
+        
+        if result:
+            return jsonify({
+                'total': result[0]['total'],
+                'en_attente': result[0]['en_attente']
+            })
+        return jsonify({'total': 0, 'en_attente': 0})
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'total': 0, 'en_attente': 0})
+
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut
     port = int(os.environ.get("PORT", 5000))

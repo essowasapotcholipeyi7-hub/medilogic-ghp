@@ -199,7 +199,7 @@ img {
         <div class="text-center mt-3 no-print">
             <button onclick="window.print()" class="btn btn-primary btn-sm">Imprimer</button>
             <button onclick="telechargerPDF()" class="btn btn-success btn-sm">PDF</button>
-            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary btn-sm">Retour</a>
+            <button onclick="fermerOuRediriger()" class="btn btn-secondary btn-sm"><i class="fas fa-times"></i> Fermer</button>
         </div>
     </div>
 </div>
@@ -218,5 +218,17 @@ function telechargerPDF() {
     };
     html2pdf().set(opt).from(element).save();
 }
+function fermerOuRediriger() {
+    // Essayer de fermer la fenêtre
+    window.close();
+    
+    // Si la fenêtre n'est pas fermée après 500ms, rediriger
+    setTimeout(function() {
+        if (!window.closed) {
+            window.location.href = "{{ url_for('dashboard') }}";
+        }
+    }, 500);
+}
+
 </script>
 {% endblock %}
