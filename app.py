@@ -1129,6 +1129,7 @@ def recu(vente_id, type):
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
                          structure_logo=structure_logo,
                          nom_caissier=session.get('user_name', ''))
+
 @app.route('/historique_ventes')
 @login_required
 def historique_ventes():

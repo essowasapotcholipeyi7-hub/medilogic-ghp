@@ -84,8 +84,10 @@
                         <div class="card bg-light">
                             <div class="card-body p-2">
                                 <h6><i class="fas fa-stethoscope"></i> Top 5 actes les plus vendus</h6>
-                                <table class="table table-sm table-borderless" id="topActesTable">
-                                    <tbody><tr><td colspan="3" class="text-muted">Chargement...</td></tr></tbody>
+                                <table class="table table-sm table-borderless">
+                                    <tbody id="topActesTable">
+                                        <tr><td colspan="2" class="text-muted">Chargement...</td></tr>
+                                    </tbody>
                                 </table>
                             </div>
                         </div>
@@ -94,8 +96,10 @@
                         <div class="card bg-light">
                             <div class="card-body p-2">
                                 <h6><i class="fas fa-pills"></i> Top 5 produits les plus vendus</h6>
-                                <table class="table table-sm table-borderless" id="topProduitsTable">
-                                    <tbody><tr><td colspan="3" class="text-muted">Chargement...</td></tr></tbody>
+                                <table class="table table-sm table-borderless">
+                                    <tbody id="topProduitsTable">
+                                        <tr><td colspan="2" class="text-muted">Chargement...</td></tr>
+                                    </tbody>
                                 </table>
                             </div>
                         </div>
@@ -104,95 +108,93 @@
             </div>
         </div>
 
-<!-- FILTRES -->
-<div class="card mb-3">
-    <div class="card-header bg-secondary text-white">
-        <h5><i class="fas fa-filter"></i> Filtres</h5>
-    </div>
-    <div class="card-body">
-        <!-- Première ligne : filtres principaux -->
-        <div class="row g-2 mb-2">
-            <div class="col-md-3">
-                <label class="form-label small">Periode</label>
-                <select id="periodeFiltre" class="form-control form-control-sm" onchange="changerPeriodeFiltre()">
-                    <option value="tous">Toutes les ventes</option>
-                    <option value="aujourdhui">Aujourd'hui</option>
-                    <option value="semaine">Cette semaine</option>
-                    <option value="mois">Ce mois</option>
-                    <option value="annee">Cette annee</option>
-                    <option value="personnalise">Periode personnalisee</option>
-                </select>
+        <!-- FILTRES -->
+        <div class="card mb-3">
+            <div class="card-header bg-secondary text-white">
+                <h5><i class="fas fa-filter"></i> Filtres</h5>
             </div>
-            <div class="col-md-3" id="dateDebutGroup" style="display: none;">
-                <label class="form-label small">Date debut</label>
-                <input type="date" id="filtreDateDebut" class="form-control form-control-sm">
-            </div>
-            <div class="col-md-3" id="dateFinGroup" style="display: none;">
-                <label class="form-label small">Date fin</label>
-                <input type="date" id="filtreDateFin" class="form-control form-control-sm">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label small">Type de vente</label>
-                <select id="searchType" class="form-control form-control-sm" onchange="filtrerHistorique()">
-                    <option value="">Tous les types</option>
-                    <option value="actes">Actes medicaux</option>
-                    <option value="pharma">Pharmacie</option>
-                </select>
-            </div>
-        </div>
-        
-        <!-- Deuxieme ligne : filtres heure -->
-        <div class="row g-2 mb-2">
-            <div class="col-md-3">
-                <label class="form-label small">Heure debut</label>
-                <input type="time" id="filtreHeureDebut" class="form-control form-control-sm" onchange="filtrerHistorique()">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label small">Heure fin</label>
-                <input type="time" id="filtreHeureFin" class="form-control form-control-sm" onchange="filtrerHistorique()">
-            </div>
-            <div class="col-md-6">
-                <label class="form-label small">Recherche</label>
-                <div class="input-group">
-                    <span class="input-group-text bg-white">
-                        <i class="fas fa-search text-primary"></i>
-                    </span>
-                    <input type="text" id="searchGlobal" class="form-control form-control-sm" 
-                           placeholder="Patient, acte, produit..." 
-                           onkeyup="filtrerHistorique()">
-                    <button class="btn btn-outline-secondary btn-sm" onclick="clearSearch()" type="button">
-                        <i class="fas fa-times"></i>
-                    </button>
+            <div class="card-body">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-3">
+                        <label class="form-label small">Periode</label>
+                        <select id="periodeFiltre" class="form-control form-control-sm" onchange="changerPeriodeFiltre()">
+                            <option value="tous">Toutes les ventes</option>
+                            <option value="aujourdhui">Aujourd'hui</option>
+                            <option value="semaine">Cette semaine</option>
+                            <option value="mois">Ce mois</option>
+                            <option value="annee">Cette annee</option>
+                            <option value="personnalise">Periode personnalisee</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3" id="dateDebutGroup" style="display: none;">
+                        <label class="form-label small">Date debut</label>
+                        <input type="date" id="filtreDateDebut" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-3" id="dateFinGroup" style="display: none;">
+                        <label class="form-label small">Date fin</label>
+                        <input type="date" id="filtreDateFin" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Type de vente</label>
+                        <select id="searchType" class="form-control form-control-sm" onchange="filtrerHistorique()">
+                            <option value="">Tous les types</option>
+                            <option value="actes">Actes medicaux</option>
+                            <option value="pharma">Pharmacie</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="row g-2 mb-2">
+                    <div class="col-md-3">
+                        <label class="form-label small">Heure debut</label>
+                        <input type="time" id="filtreHeureDebut" class="form-control form-control-sm" onchange="filtrerHistorique()">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Heure fin</label>
+                        <input type="time" id="filtreHeureFin" class="form-control form-control-sm" onchange="filtrerHistorique()">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small">Recherche</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white">
+                                <i class="fas fa-search text-primary"></i>
+                            </span>
+                            <input type="text" id="searchGlobal" class="form-control form-control-sm" 
+                                   placeholder="Patient, acte, produit..." 
+                                   onkeyup="filtrerHistorique()">
+                            <button class="btn btn-outline-secondary btn-sm" onclick="clearSearch()" type="button">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row g-2">
+                    <div class="col-md-12">
+                        <button class="btn btn-secondary btn-sm" onclick="resetFiltres()">
+                            <i class="fas fa-sync-alt"></i> Reinitialiser
+                        </button>
+                        <button class="btn btn-info btn-sm ms-2" onclick="chargerHistorique()">
+                            <i class="fas fa-sync-alt"></i> Rafraichir
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm ms-2" onclick="filtrerParPriseDeService()">
+                            <i class="fas fa-sun"></i> Prise service (8h-16h)
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm ms-2" onclick="filtrerParFinService()">
+                            <i class="fas fa-moon"></i> Fin service (16h-23h)
+                        </button>
+                        <button class="btn btn-outline-dark btn-sm ms-2" onclick="filtrerGardeNuit()">
+                            <i class="fas fa-moon"></i> Garde nuit (16h-8h)
+                        </button>
+                        <span class="ms-3 text-muted">
+                            <i class="fas fa-chart-simple"></i> 
+                            <span id="resultCount">0</span> resultat(s) trouve(s)
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
-        
-        <!-- Troisieme ligne : boutons actions -->
-        <div class="row g-2">
-            <div class="col-md-12">
-                <button class="btn btn-secondary btn-sm" onclick="resetFiltres()">
-                    <i class="fas fa-sync-alt"></i> Reinitialiser
-                </button>
-                <button class="btn btn-info btn-sm ms-2" onclick="chargerHistorique()">
-                    <i class="fas fa-sync-alt"></i> Rafraichir
-                </button>
-                <button class="btn btn-outline-primary btn-sm ms-2" onclick="filtrerParPriseDeService()">
-                    <i class="fas fa-sun"></i> Prise service (8h-16h)
-                </button>
-                <button class="btn btn-outline-warning btn-sm ms-2" onclick="filtrerParFinService()">
-                    <i class="fas fa-moon"></i> Fin service (16h-23h)
-                </button>
-                <button class="btn btn-outline-dark btn-sm ms-2" onclick="filtrerGardeNuit()">
-                    <i class="fas fa-moon"></i> Garde nuit (16h-8h)
-                </button>
-                <span class="ms-3 text-muted">
-                    <i class="fas fa-chart-simple"></i> 
-                    <span id="resultCount">0</span> resultat(s) trouve(s)
-                </span>
-            </div>
-        </div>
-    </div>
-</div>
+
         <!-- LISTE DES VENTES -->
         <div class="card">
             <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
@@ -235,18 +237,13 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <!-- 🔥 AJOUT : Sélecteur de format 🔥 -->
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Format d'impression</label>
                     <select id="printFormat" class="form-control">
                         <option value="80mm">🎫 Format Ticket (80mm)</option>
                         <option value="A4">📄 Format A4 (Standard)</option>
                     </select>
-                    <div class="form-text text-muted small">
-                        <i class="fas fa-info-circle"></i> Choisissez A4 pour une imprimante laser, ou 80mm pour une imprimante à ticket.
-                    </div>
                 </div>
-                <!-- Fin de l'ajout -->
                 
                 <div class="d-grid gap-2">
                     <button class="btn btn-outline-primary" onclick="printDocument('recu_client')">
@@ -276,16 +273,158 @@
         </div>
     </div>
 </div>
+
 <script>
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
+let toutesLesVentes = [];
 let currentVenteId = null;
 let currentVenteType = null;
 let periodeStatsCourante = 'tous';
-let toutesLesVentes = [];
 
-// ========== STATISTIQUES ==========
+// ============================================
+// LOADER
+// ============================================
+function showLoader(message) {
+    var loader = document.getElementById('loaderOverlay');
+    if (!loader) {
+        loader = document.createElement('div');
+        loader.id = 'loaderOverlay';
+        loader.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;';
+        loader.innerHTML = '<div class="spinner-border text-light" style="width:3rem;height:3rem;"></div><div class="text-white mt-2" id="loaderMessage">Chargement...</div>';
+        document.body.appendChild(loader);
+    }
+    loader.style.display = 'flex';
+    var msg = document.getElementById('loaderMessage');
+    if (msg) msg.textContent = message || 'Chargement...';
+}
+
+function hideLoader() {
+    var loader = document.getElementById('loaderOverlay');
+    if (loader) loader.style.display = 'none';
+}
+
+// ============================================
+// CHARGEMENT HISTORIQUE
+// ============================================
+function chargerHistorique() {
+    showLoader('Chargement des ventes...');
+    
+    fetch('/api/ventes/all')
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(ventes) {
+            toutesLesVentes = ventes || [];
+            console.log('✅ Ventes chargées:', toutesLesVentes.length);
+            filtrerHistorique();
+            changerPeriodeStats('tous');
+            hideLoader();
+        })
+        .catch(function(error) {
+            console.error('❌ Erreur:', error);
+            document.getElementById('ventesList').innerHTML = 
+                '<tr><td colspan="8" class="text-center text-danger">❌ Erreur de chargement</td></tr>';
+            hideLoader();
+        });
+}
+
+// ============================================
+// AFFICHER LES VENTES
+// ============================================
+function filtrerHistorique() {
+    var tbody = document.getElementById('ventesList');
+    if (!tbody) return;
+    
+    if (!toutesLesVentes || toutesLesVentes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Aucune vente trouvée</td></tr>';
+        document.getElementById('resultCount').innerText = '0';
+        return;
+    }
+    
+    // Récupérer les filtres
+    var periode = document.getElementById('periodeFiltre').value;
+    var searchType = document.getElementById('searchType').value;
+    var searchGlobal = document.getElementById('searchGlobal').value.toLowerCase().trim();
+    var heureDebut = document.getElementById('filtreHeureDebut').value;
+    var heureFin = document.getElementById('filtreHeureFin').value;
+    var dateDebut = document.getElementById('filtreDateDebut').value;
+    var dateFin = document.getElementById('filtreDateFin').value;
+    
+    var html = '';
+    var count = 0;
+    var isAdmin = {% if session.is_admin %}true{% else %}false{% endif %};
+    
+    for (var i = 0; i < toutesLesVentes.length; i++) {
+        var v = toutesLesVentes[i];
+        var visible = true;
+        
+        // Filtre par type
+        if (searchType && v.type !== searchType) {
+            visible = false;
+        }
+        
+        // Filtre global
+        if (visible && searchGlobal) {
+            var texte = (v.patient_nom || '') + ' ' + (v.detail || '') + ' ' + (v.net_a_payer || '');
+            if (texte.toLowerCase().indexOf(searchGlobal) === -1) {
+                visible = false;
+            }
+        }
+        
+        // Filtre par date
+        if (visible && (dateDebut || dateFin)) {
+            var dateVente = v.date ? new Date(v.date) : null;
+            if (dateVente) {
+                if (dateDebut) {
+                    var debut = new Date(dateDebut);
+                    debut.setHours(0, 0, 0, 0);
+                    if (dateVente < debut) visible = false;
+                }
+                if (dateFin && visible) {
+                    var fin = new Date(dateFin);
+                    fin.setHours(23, 59, 59);
+                    if (dateVente > fin) visible = false;
+                }
+            }
+        }
+        
+        if (visible) {
+            count++;
+            var dateStr = v.date ? new Date(v.date).toLocaleString('fr-FR') : '-';
+            var typeLabel = v.type === 'actes' ? 'Acte' : 'Pharmacie';
+            var badgeClass = v.type === 'actes' ? 'bg-primary' : 'bg-success';
+            var montant = Math.round(v.net_a_payer || 0).toLocaleString();
+            
+            html += '<tr>';
+            html += '<td><strong>#' + (v.ID || i+1) + '</strong></td>';
+            html += '<td>' + dateStr + '</td>';
+            html += '<td>' + (v.patient_nom || 'Patient') + '</td>';
+            html += '<td><span class="badge ' + badgeClass + '">' + typeLabel + '</span></td>';
+            html += '<td>' + (v.detail || '-') + '</td>';
+            html += '<td><strong>' + montant + ' FCFA</strong></td>';
+            html += '<td>' + (v.taux_assurance || 0) + '%</td>';
+            html += '<td>';
+            html += '<button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(' + (v.ID || i+1) + ', \'' + v.type + '\')"><i class="fas fa-print"></i></button>';
+            if (isAdmin) {
+                html += ' <button class="btn btn-sm btn-danger" onclick="annulerVente(' + (v.ID || i+1) + ', \'' + v.type + '\')"><i class="fas fa-ban"></i></button>';
+            }
+            html += '</td>';
+            html += '</tr>';
+        }
+    }
+    
+    tbody.innerHTML = html || '<tr><td colspan="8" class="text-center text-muted">Aucun résultat</td></tr>';
+    document.getElementById('resultCount').innerText = count;
+}
+
+// ============================================
+// STATISTIQUES
+// ============================================
 function changerPeriodeStats(periode) {
     periodeStatsCourante = periode;
-    const statsDateRange = document.getElementById('statsDateRange');
+    var statsDateRange = document.getElementById('statsDateRange');
     
     if (periode === 'personnalise') {
         statsDateRange.style.display = 'flex';
@@ -294,8 +433,8 @@ function changerPeriodeStats(periode) {
         statsDateRange.style.display = 'none';
     }
     
-    let debut, fin;
-    const aujourdhui = new Date();
+    var debut, fin;
+    var aujourdhui = new Date();
     aujourdhui.setHours(0, 0, 0, 0);
     
     switch(periode) {
@@ -303,7 +442,7 @@ function changerPeriodeStats(periode) {
             debut = new Date(aujourdhui);
             fin = new Date(aujourdhui);
             fin.setHours(23, 59, 59);
-            document.getElementById('periodeStatsLabel').innerText = 'Aujourd\'hui';
+            document.getElementById('periodeStatsLabel').innerText = "Aujourd'hui";
             break;
         case 'semaine':
             debut = new Date(aujourdhui);
@@ -334,302 +473,99 @@ function changerPeriodeStats(periode) {
     calculerStats(debut, fin);
 }
 
-function appliquerStatsPersonnalise() {
-    const dateDebut = document.getElementById('statsDateDebut').value;
-    const dateFin = document.getElementById('statsDateFin').value;
-    
-    if (!dateDebut || !dateFin) {
-        alert('Veuillez sélectionner les deux dates');
+function calculerStats(debut, fin) {
+    if (!toutesLesVentes || toutesLesVentes.length === 0) {
+        document.getElementById('statTotalVentes').innerText = '0';
+        document.getElementById('statCA').innerHTML = '0 F';
+        document.getElementById('statActes').innerText = '0';
+        document.getElementById('statPharma').innerText = '0';
+        document.getElementById('topActesTable').innerHTML = '<tr><td colspan="2" class="text-muted">Aucune donnée</td></tr>';
+        document.getElementById('topProduitsTable').innerHTML = '<tr><td colspan="2" class="text-muted">Aucune donnée</td></tr>';
         return;
     }
     
-    const debut = new Date(dateDebut);
-    debut.setHours(0, 0, 0, 0);
-    const fin = new Date(dateFin);
-    fin.setHours(23, 59, 59);
+    var totalVentes = 0;
+    var totalCA = 0;
+    var totalActes = 0;
+    var totalPharma = 0;
+    var actesCount = {};
+    var produitsCount = {};
     
-    document.getElementById('periodeStatsLabel').innerText = `${dateDebut} au ${dateFin}`;
-    calculerStats(debut, fin);
-}
-
-function calculerStats(debut, fin) {
-    let totalVentes = 0;
-    let totalCA = 0;
-    let totalActes = 0;
-    let totalPharma = 0;
-    const actesCount = {};
-    const produitsCount = {};
-    
-    toutesLesVentes.forEach(vente => {
-        const dateVente = vente.date || '';
+    for (var i = 0; i < toutesLesVentes.length; i++) {
+        var v = toutesLesVentes[i];
+        var dateVente = v.date || '';
         if (dateVente) {
-            const date = new Date(dateVente);
-            if (date < debut || date > fin) return;
+            var date = new Date(dateVente);
+            if (date < debut || date > fin) continue;
         }
         
         totalVentes++;
-        totalCA += vente.net_a_payer || 0;
+        totalCA += v.net_a_payer || 0;
         
-        if (vente.type === 'actes') {
+        if (v.type === 'actes') {
             totalActes++;
-            const detail = vente.detail || '';
+            var detail = v.detail || '';
             if (detail) {
                 actesCount[detail] = (actesCount[detail] || 0) + 1;
             }
-        } else if (vente.type === 'pharma') {
+        } else if (v.type === 'pharma' || v.type === 'pharmacie') {
             totalPharma++;
-            const detail = vente.detail || '';
-            if (detail) {
-                produitsCount[detail] = (produitsCount[detail] || 0) + 1;
+            var detail2 = v.detail || '';
+            if (detail2) {
+                produitsCount[detail2] = (produitsCount[detail2] || 0) + 1;
             }
         }
-    });
+    }
     
     document.getElementById('statTotalVentes').innerText = totalVentes;
     document.getElementById('statCA').innerHTML = totalCA.toLocaleString() + ' F';
     document.getElementById('statActes').innerText = totalActes;
     document.getElementById('statPharma').innerText = totalPharma;
     
-    const topActes = Object.entries(actesCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const topActesHtml = topActes.map(([nom, quantite], index) => `
-        <tr>
-            <td>${index + 1}. ${nom}</td>
-            <td class="text-end">${quantite} vendu(s)</td>
-        </tr>
-    `).join('');
-    document.getElementById('topActesTable').innerHTML = topActesHtml || '<tr><td colspan="2" class="text-muted">Aucune donnée</td></tr>';
+    // Top 5 actes
+    var topActes = Object.keys(actesCount).sort(function(a, b) {
+        return actesCount[b] - actesCount[a];
+    }).slice(0, 5);
     
-    const topProduits = Object.entries(produitsCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const topProduitsHtml = topProduits.map(([nom, quantite], index) => `
-        <tr>
-            <td>${index + 1}. ${nom}</td>
-            <td class="text-end">${quantite} vendu(s)</td>
-        </tr>
-    `).join('');
-    document.getElementById('topProduitsTable').innerHTML = topProduitsHtml || '<tr><td colspan="2" class="text-muted">Aucune donnée</td></tr>';
-}
-
-// ========== FILTRES HISTORIQUE ==========
-function changerPeriodeFiltre() {
-    const periode = document.getElementById('periodeFiltre').value;
-    const dateDebutGroup = document.getElementById('dateDebutGroup');
-    const dateFinGroup = document.getElementById('dateFinGroup');
-    
-    if (periode === 'personnalise') {
-        dateDebutGroup.style.display = 'block';
-        dateFinGroup.style.display = 'block';
-    } else {
-        dateDebutGroup.style.display = 'none';
-        dateFinGroup.style.display = 'none';
-        document.getElementById('filtreDateDebut').value = '';
-        document.getElementById('filtreDateFin').value = '';
+    var topActesHtml = '';
+    for (var j = 0; j < topActes.length; j++) {
+        topActesHtml += '<tr><td>' + (j+1) + '. ' + topActes[j] + '</td><td class="text-end">' + actesCount[topActes[j]] + ' vendu(s)</td></tr>';
     }
-    filtrerHistorique();
+    document.getElementById('topActesTable').innerHTML = topActesHtml || '<tr><td colspan="2" class="text-muted">Aucun acte vendu</td></tr>';
+    
+    // Top 5 produits
+    var topProduits = Object.keys(produitsCount).sort(function(a, b) {
+        return produitsCount[b] - produitsCount[a];
+    }).slice(0, 5);
+    
+    var topProduitsHtml = '';
+    for (var k = 0; k < topProduits.length; k++) {
+        topProduitsHtml += '<tr><td>' + (k+1) + '. ' + topProduits[k] + '</td><td class="text-end">' + produitsCount[topProduits[k]] + ' vendu(s)</td></tr>';
+    }
+    document.getElementById('topProduitsTable').innerHTML = topProduitsHtml || '<tr><td colspan="2" class="text-muted">Aucun produit vendu</td></tr>';
 }
 
-// Filtre pour la prise de service (8h-16h)
-function filtrerParPriseService() {
-    document.getElementById('periodeFiltre').value = 'aujourdhui';
-    document.getElementById('filtreHeureDebut').value = '08:00';
-    document.getElementById('filtreHeureFin').value = '16:00';
-    document.getElementById('dateDebutGroup').style.display = 'none';
-    document.getElementById('dateFinGroup').style.display = 'none';
-    filtrerHistorique();
-}
-
-// Filtre pour la fin de service (16h-23h59)
-function filtrerParFinService() {
-    document.getElementById('periodeFiltre').value = 'aujourdhui';
-    document.getElementById('filtreHeureDebut').value = '16:00';
-    document.getElementById('filtreHeureFin').value = '23:59';
-    document.getElementById('dateDebutGroup').style.display = 'none';
-    document.getElementById('dateFinGroup').style.display = 'none';
-    filtrerHistorique();
-}
-
-// Filtre pour la garde de nuit (hier 16h - aujourd'hui 8h)
-function filtrerGardeNuit() {
-    const hier = new Date();
-    hier.setDate(hier.getDate() - 1);
-    const dateHier = hier.toISOString().split('T')[0];
-    const aujourdhui = new Date().toISOString().split('T')[0];
+function appliquerStatsPersonnalise() {
+    var dateDebut = document.getElementById('statsDateDebut').value;
+    var dateFin = document.getElementById('statsDateFin').value;
     
-    document.getElementById('periodeFiltre').value = 'personnalise';
-    document.getElementById('filtreDateDebut').value = dateHier;
-    document.getElementById('filtreDateFin').value = aujourdhui;
-    document.getElementById('filtreHeureDebut').value = '16:00';
-    document.getElementById('filtreHeureFin').value = '08:00';
-    document.getElementById('dateDebutGroup').style.display = 'block';
-    document.getElementById('dateFinGroup').style.display = 'block';
-    filtrerHistorique();
-}
-function filtrerHistorique() {
-    const periode = document.getElementById('periodeFiltre').value;
-    const searchType = document.getElementById('searchType').value;
-    const searchGlobal = document.getElementById('searchGlobal').value.toLowerCase().trim();
-    const heureDebut = document.getElementById('filtreHeureDebut').value;
-    const heureFin = document.getElementById('filtreHeureFin').value;
-    
-    let debut, fin;
-    const aujourdhui = new Date();
-    aujourdhui.setHours(0, 0, 0, 0);
-    
-    if (periode === 'personnalise') {
-        const dateDebut = document.getElementById('filtreDateDebut').value;
-        const dateFin = document.getElementById('filtreDateFin').value;
-        if (dateDebut && dateFin) {
-            debut = new Date(dateDebut);
-            debut.setHours(0, 0, 0, 0);
-            fin = new Date(dateFin);
-            fin.setHours(23, 59, 59);
-        } else {
-            debut = null;
-            fin = null;
-        }
-    } else {
-        switch(periode) {
-            case 'aujourdhui':
-                debut = new Date(aujourdhui);
-                fin = new Date(aujourdhui);
-                fin.setHours(23, 59, 59);
-                break;
-            case 'semaine':
-                debut = new Date(aujourdhui);
-                debut.setDate(debut.getDate() - debut.getDay());
-                fin = new Date(aujourdhui);
-                fin.setDate(fin.getDate() + (6 - fin.getDay()));
-                fin.setHours(23, 59, 59);
-                break;
-            case 'mois':
-                debut = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth(), 1);
-                fin = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth() + 1, 0);
-                fin.setHours(23, 59, 59);
-                break;
-            case 'annee':
-                debut = new Date(aujourdhui.getFullYear(), 0, 1);
-                fin = new Date(aujourdhui.getFullYear(), 11, 31);
-                fin.setHours(23, 59, 59);
-                break;
-            default:
-                debut = null;
-                fin = null;
-        }
+    if (!dateDebut || !dateFin) {
+        alert('Veuillez sélectionner les deux dates');
+        return;
     }
     
-    const tbody = document.getElementById('ventesList');
-    tbody.innerHTML = '';
-    let visibleCount = 0;
+    var debut = new Date(dateDebut);
+    debut.setHours(0, 0, 0, 0);
+    var fin = new Date(dateFin);
+    fin.setHours(23, 59, 59);
     
-    const isAdmin = {% if session.is_admin %}true{% else %}false{% endif %};
-    
-    toutesLesVentes.forEach(vente => {
-        let visible = true;
-        
-        // Filtre par date
-        if (debut && fin) {
-            const dateVente = vente.date || '';
-            if (dateVente) {
-                const date = new Date(dateVente);
-                if (date < debut || date > fin) visible = false;
-            }
-        }
-        
-        // Filtre par heure avec gestion des dates différentes
-        if (visible && (heureDebut || heureFin)) {
-            const dateVente = vente.date || '';
-            if (dateVente) {
-                const dateObj = new Date(dateVente);
-                const heures = dateObj.getHours().toString().padStart(2, '0');
-                const minutes = dateObj.getMinutes().toString().padStart(2, '0');
-                const heureVente = `${heures}:${minutes}`;
-                
-                // Verifier si la periode couvre deux jours
-                const estDeuxJours = debut && fin && debut.toDateString() !== fin.toDateString();
-                
-                if (estDeuxJours && heureDebut && heureFin) {
-                    const dateVenteStr = dateObj.toISOString().split('T')[0];
-                    const debutStr = debut.toISOString().split('T')[0];
-                    const finStr = fin.toISOString().split('T')[0];
-                    
-                    if (dateVenteStr === debutStr) {
-                        // Premier jour : vente apres heure debut
-                        if (heureVente < heureDebut) visible = false;
-                    } else if (dateVenteStr === finStr) {
-                        // Deuxieme jour : vente avant heure fin
-                        if (heureVente > heureFin) visible = false;
-                    }
-                } 
-                // Cas garde de nuit (debut >= fin) sur une seule journee
-                else if (heureDebut && heureFin && heureDebut >= heureFin) {
-                    const visibleNuit = (heureVente >= heureDebut) || (heureVente <= heureFin);
-                    if (!visibleNuit) visible = false;
-                } 
-                // Cas normal (un seul jour)
-                else {
-                    if (heureDebut && heureVente < heureDebut) visible = false;
-                    if (heureFin && heureVente > heureFin) visible = false;
-                }
-            }
-        }
-        
-        // Filtre par type
-        if (visible && searchType && vente.type !== searchType) {
-            visible = false;
-        }
-        
-        // Filtre global par recherche
-        if (visible && searchGlobal) {
-            const texteComplet = `${vente.patient_nom || ''} ${vente.detail || ''} ${vente.net_a_payer || ''}`.toLowerCase();
-            if (!texteComplet.includes(searchGlobal)) visible = false;
-        }
-        
-        if (visible) {
-            visibleCount++;
-            const row = tbody.insertRow();
-            const dateStr = vente.date ? new Date(vente.date).toLocaleString('fr-FR') : '-';
-            
-            row.insertCell(0).innerHTML = vente.ID;
-            row.insertCell(1).innerHTML = dateStr;
-            row.insertCell(2).innerHTML = vente.patient_nom || '-';
-            
-            const typeCell = row.insertCell(3);
-            if (vente.type === 'actes') {
-                typeCell.innerHTML = '<span class="badge bg-primary">Acte</span>';
-            } else {
-                typeCell.innerHTML = '<span class="badge bg-success">Pharmacie</span>';
-            }
-            
-            row.insertCell(4).innerHTML = `<small>${vente.detail || '-'}</small>`;
-            row.insertCell(5).innerHTML = `${Math.round(vente.net_a_payer).toLocaleString()} FCFA`;
-            row.insertCell(6).innerHTML = `${vente.taux_assurance || 0}%`;
-            
-            const actionCell = row.insertCell(7);
-            if (isAdmin) {
-                actionCell.innerHTML = `
-                    <div class="d-flex gap-1 justify-content-center">
-                        <button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(${vente.ID}, '${vente.type}')" title="Reimprimer">
-                            <i class="fas fa-print"></i>
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="annulerVente(${vente.ID}, '${vente.type}')" title="Annuler la vente">
-                            <i class="fas fa-ban"></i>
-                        </button>
-                    </div>
-                `;
-            } else {
-                actionCell.innerHTML = `<button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(${vente.ID}, '${vente.type}')" title="Reimprimer">
-                                            <i class="fas fa-print"></i>
-                                        </button>`;
-            }
-        }
-    });
-    
-    document.getElementById('resultCount').innerText = visibleCount;
-}
-function clearSearch() {
-    document.getElementById('searchGlobal').value = '';
-    filtrerHistorique();
+    document.getElementById('periodeStatsLabel').innerText = dateDebut + ' au ' + dateFin;
+    calculerStats(debut, fin);
 }
 
+// ============================================
+// FILTRES
+// ============================================
 function resetFiltres() {
     document.getElementById('periodeFiltre').value = 'tous';
     document.getElementById('searchType').value = '';
@@ -642,7 +578,52 @@ function resetFiltres() {
     document.getElementById('dateFinGroup').style.display = 'none';
     filtrerHistorique();
 }
-// ========== RÉIMPRESSION ==========
+
+function clearSearch() {
+    document.getElementById('searchGlobal').value = '';
+    filtrerHistorique();
+}
+
+function changerPeriodeFiltre() {
+    var periode = document.getElementById('periodeFiltre').value;
+    document.getElementById('dateDebutGroup').style.display = periode === 'personnalise' ? 'block' : 'none';
+    document.getElementById('dateFinGroup').style.display = periode === 'personnalise' ? 'block' : 'none';
+    filtrerHistorique();
+}
+
+function filtrerParPriseDeService() {
+    document.getElementById('periodeFiltre').value = 'aujourdhui';
+    document.getElementById('filtreHeureDebut').value = '08:00';
+    document.getElementById('filtreHeureFin').value = '16:00';
+    filtrerHistorique();
+}
+
+function filtrerParFinService() {
+    document.getElementById('periodeFiltre').value = 'aujourdhui';
+    document.getElementById('filtreHeureDebut').value = '16:00';
+    document.getElementById('filtreHeureFin').value = '23:59';
+    filtrerHistorique();
+}
+
+function filtrerGardeNuit() {
+    var hier = new Date();
+    hier.setDate(hier.getDate() - 1);
+    var dateHier = hier.toISOString().split('T')[0];
+    var aujourdhui = new Date().toISOString().split('T')[0];
+    
+    document.getElementById('periodeFiltre').value = 'personnalise';
+    document.getElementById('filtreDateDebut').value = dateHier;
+    document.getElementById('filtreDateFin').value = aujourdhui;
+    document.getElementById('filtreHeureDebut').value = '16:00';
+    document.getElementById('filtreHeureFin').value = '08:00';
+    document.getElementById('dateDebutGroup').style.display = 'block';
+    document.getElementById('dateFinGroup').style.display = 'block';
+    filtrerHistorique();
+}
+
+// ============================================
+// RÉIMPRESSION
+// ============================================
 function reimprimer(venteId, type) {
     currentVenteId = venteId;
     currentVenteType = type;
@@ -650,25 +631,20 @@ function reimprimer(venteId, type) {
 }
 
 function printDocument(docType) {
-    const format = document.getElementById('printFormat').value;
-    let url = '';
+    var format = document.getElementById('printFormat').value;
+    var url = '';
     
     if (docType === 'recu_client') {
-        url = `/recu/${currentVenteId}/${currentVenteType}?format=${format}`;
+        url = '/recu/' + currentVenteId + '/' + currentVenteType + '?format=' + format;
     } else if (docType === 'recu_structure') {
-        url = `/recu_structure/${currentVenteId}/${currentVenteType}?format=${format}`;
-    } else if (docType === 'les_deux_recus') {
-        window.open(`/recu/${currentVenteId}/${currentVenteType}?format=${format}`, '_blank');
-        window.open(`/recu_structure/${currentVenteId}/${currentVenteType}?format=${format}`, '_blank');
-        bootstrap.Modal.getInstance(document.getElementById('documentModal')).hide();
-        return;
+        url = '/recu_structure/' + currentVenteId + '/' + currentVenteType + '?format=' + format;
     } else if (docType === 'facture_client') {
-        url = `/facture/${currentVenteId}/${currentVenteType}?format=${format}`;
+        url = '/facture/' + currentVenteId + '/' + currentVenteType + '?format=' + format;
     } else if (docType === 'facture_structure') {
-        url = `/facture_structure/${currentVenteId}/${currentVenteType}?format=${format}`;
-    } else if (docType === 'les_deux') {
-        window.open(`/recu/${currentVenteId}/${currentVenteType}?format=${format}`, '_blank');
-        window.open(`/recu_structure/${currentVenteId}/${currentVenteType}?format=${format}`, '_blank');
+        url = '/facture_structure/' + currentVenteId + '/' + currentVenteType + '?format=' + format;
+    } else if (docType === 'les_deux_recus' || docType === 'les_deux') {
+        window.open('/recu/' + currentVenteId + '/' + currentVenteType + '?format=' + format, '_blank');
+        window.open('/recu_structure/' + currentVenteId + '/' + currentVenteType + '?format=' + format, '_blank');
         bootstrap.Modal.getInstance(document.getElementById('documentModal')).hide();
         return;
     }
@@ -677,150 +653,92 @@ function printDocument(docType) {
     bootstrap.Modal.getInstance(document.getElementById('documentModal')).hide();
 }
 
-// ========== IMPRESSION ==========
-function imprimerHistorique() {
-    const visibleRows = document.querySelectorAll('#ventesList tr');
-    let printWindow = window.open('', '_blank');
-    
-    let html = `<!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Historique des ventes</title>
-        <style>
-            body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; }
-            h2 { color: #667eea; text-align: center; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #667eea; color: white; }
-            .footer { margin-top: 30px; text-align: center; font-size: 11px; color: #999; }
-            @media print { button { display: none; } }
-        </style>
-    </head>
-    <body>
-        <h2>📋 HISTORIQUE DES VENTES</h2>
-        <div style="text-align:center">${new Date().toLocaleString()}</div>
-        <table>
-            <thead><tr><th>N°</th><th>Date</th><th>Patient</th><th>Type</th><th>Détail</th><th>Montant</th><th>Assurance</th></tr></thead>
-            <tbody>`;
-    
-    visibleRows.forEach(row => {
-        const cells = row.cells;
-        if (cells.length > 1 && row.style.display !== 'none') {
-            html += `<tr>
-                <td>${cells[0]?.innerText || ''}</td>
-                <td>${cells[1]?.innerText || ''}</td>
-                <td>${cells[2]?.innerText || ''}</td>
-                <td>${cells[3]?.innerText || ''}</td>
-                <td>${cells[4]?.innerText || ''}</td>
-                <td>${cells[5]?.innerText || ''}</td>
-                <td>${cells[6]?.innerText || ''}</td>
-            </tr>`;
-        }
-    });
-    
-    html += `</tbody>
-        </table>
-        <div class="footer">Medilogic-GHP - Tous droits réservés</div>
-        <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);};<\/script>
-    </body>
-    </html>`;
-    
-    printWindow.document.write(html);
-    printWindow.document.close();
-}
-
-function imprimerStats() {
-    let printWindow = window.open('', '_blank');
-    let html = `<!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Statistiques des ventes</title>
-        <style>
-            body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; }
-            h2 { color: #667eea; text-align: center; }
-            .stats { display: flex; gap: 20px; justify-content: center; margin: 30px 0; flex-wrap: wrap; }
-            .stat { text-align: center; padding: 15px; border: 1px solid #ddd; border-radius: 10px; min-width: 150px; }
-            .stat h3 { margin: 0; color: #667eea; font-size: 28px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ddd; padding: 8px; }
-            th { background-color: #667eea; color: white; }
-        </style>
-    </head>
-    <body>
-        <h2>📊 STATISTIQUES DES VENTES</h2>
-        <div style="text-align:center">${document.getElementById('periodeStatsLabel').innerText} - ${new Date().toLocaleString()}</div>
-        <div class="stats">
-            <div class="stat"><div>Total ventes</div><h3>${document.getElementById('statTotalVentes').innerText}</h3></div>
-            <div class="stat"><div>Chiffre d'affaires</div><h3>${document.getElementById('statCA').innerText}</h3></div>
-            <div class="stat"><div>Actes</div><h3>${document.getElementById('statActes').innerText}</h3></div>
-            <div class="stat"><div>Pharmacie</div><h3>${document.getElementById('statPharma').innerText}</h3></div>
-        </div>
-        <h4>Top actes</h4>
-        <table><thead><tr><th>Acte</th><th>Quantité</th></tr></thead><tbody>${document.getElementById('topActesTable').innerHTML}</tbody></table>
-        <h4>Top produits</h4>
-        <table><thead><tr><th>Produit</th><th>Quantité</th></tr></thead><tbody>${document.getElementById('topProduitsTable').innerHTML}</tbody></table>
-        <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);};<\/script>
-    </body>
-    </html>`;
-    
-    printWindow.document.write(html);
-    printWindow.document.close();
-}
-
-// ========== CHARGEMENT HISTORIQUE ==========
-function chargerHistorique() {
-    showLoader();
-    
-    fetch('/api/ventes/all')
-        .then(response => response.json())
-        .then(ventes => {
-            toutesLesVentes = ventes;
-            filtrerHistorique();
-            changerPeriodeStats(periodeStatsCourante);
-            hideLoader();
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            document.getElementById('ventesList').innerHTML = '<tr><td colspan="8" class="text-center text-danger">Erreur de chargement des ventes</td></tr>';
-            hideLoader();
-        });
-}
-
+// ============================================
+// ANNULATION
+// ============================================
 function annulerVente(venteId, type) {
-    const motif = prompt("Motif de l'annulation (optionnel) :", "Annulation manuelle");
+    var motif = prompt("Motif de l'annulation (optionnel) :", "Annulation manuelle");
+    if (motif === null) return;
     
-    if (motif === null) return; // L'utilisateur a annulé
-    
-    if (confirm(`⚠️ Êtes-vous sûr de vouloir ANNULER cette vente ${type.toUpperCase()} #${venteId} ?\n\nCette action est IRRÉVERSIBLE.\n${type === 'pharma' ? 'Les produits seront remis en stock.' : ''}`)) {
-        
+    if (confirm('⚠️ Êtes-vous sûr de vouloir ANNULER cette vente ?')) {
         showLoader('Annulation en cours...');
         
-        fetch(`/api/ventes/${venteId}/annuler`, {
+        fetch('/api/ventes/' + venteId + '/annuler', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({motif: motif})
         })
-        .then(r => r.json())
-        .then(data => {
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
             hideLoader();
             if (data.success) {
-                alert(`✅ ${data.message}`);
-                // Recharger la page
+                alert('✅ Vente annulée');
                 location.reload();
             } else {
-                alert(`❌ Erreur: ${data.error}`);
+                alert('❌ Erreur: ' + data.error);
             }
         })
-        .catch(error => {
+        .catch(function() {
             hideLoader();
             alert('❌ Erreur lors de l\'annulation');
         });
     }
 }
 
-// ========== INITIALISATION ==========
+// ============================================
+// IMPRESSION
+// ============================================
+function imprimerHistorique() {
+    var rows = document.querySelectorAll('#ventesList tr');
+    var printWindow = window.open('', '_blank');
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Historique des ventes</title>';
+    html += '<style>body{font-family:Arial;padding:20px;}h2{color:#667eea;}table{width:100%;border-collapse:collapse;margin-top:20px;}th,td{border:1px solid #ddd;padding:8px;}th{background:#667eea;color:white;}</style>';
+    html += '</head><body><h2>📋 HISTORIQUE DES VENTES</h2>';
+    html += '<div>' + new Date().toLocaleString() + '</div>';
+    html += '<table><thead><tr><th>N°</th><th>Date</th><th>Patient</th><th>Type</th><th>Détail</th><th>Montant</th><th>Assurance</th></tr></thead><tbody>';
+    
+    for (var i = 0; i < rows.length; i++) {
+        var cells = rows[i].cells;
+        if (cells.length > 1 && rows[i].style.display !== 'none') {
+            html += '<tr><td>' + (cells[0]?.innerText || '') + '</td>';
+            html += '<td>' + (cells[1]?.innerText || '') + '</td>';
+            html += '<td>' + (cells[2]?.innerText || '') + '</td>';
+            html += '<td>' + (cells[3]?.innerText || '') + '</td>';
+            html += '<td>' + (cells[4]?.innerText || '') + '</td>';
+            html += '<td>' + (cells[5]?.innerText || '') + '</td>';
+            html += '<td>' + (cells[6]?.innerText || '') + '</td></tr>';
+        }
+    }
+    
+    html += '</tbody></table></body></html>';
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setTimeout(function() { printWindow.print(); }, 500);
+}
+
+function imprimerStats() {
+    var printWindow = window.open('', '_blank');
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Statistiques</title>';
+    html += '<style>body{font-family:Arial;padding:20px;}h2{color:#667eea;}.stats{display:flex;gap:20px;justify-content:center;margin:30px 0;}.stat{text-align:center;padding:15px;border:1px solid #ddd;border-radius:10px;min-width:150px;}.stat h3{color:#667eea;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:8px;}th{background:#667eea;color:white;}</style>';
+    html += '</head><body><h2>📊 STATISTIQUES DES VENTES</h2>';
+    html += '<div>' + document.getElementById('periodeStatsLabel').innerText + ' - ' + new Date().toLocaleString() + '</div>';
+    html += '<div class="stats">';
+    html += '<div class="stat"><div>Total ventes</div><h3>' + document.getElementById('statTotalVentes').innerText + '</h3></div>';
+    html += '<div class="stat"><div>Chiffre d\'affaires</div><h3>' + document.getElementById('statCA').innerText + '</h3></div>';
+    html += '<div class="stat"><div>Actes</div><h3>' + document.getElementById('statActes').innerText + '</h3></div>';
+    html += '<div class="stat"><div>Pharmacie</div><h3>' + document.getElementById('statPharma').innerText + '</h3></div>';
+    html += '</div>';
+    html += '<h4>Top actes</h4><table><thead><tr><th>Acte</th><th>Quantité</th></tr></thead><tbody>' + document.getElementById('topActesTable').innerHTML + '</tbody></table>';
+    html += '<h4>Top produits</h4><table><thead><tr><th>Produit</th><th>Quantité</th></tr></thead><tbody>' + document.getElementById('topProduitsTable').innerHTML + '</tbody></table>';
+    html += '</body></html>';
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setTimeout(function() { printWindow.print(); }, 500);
+}
+
+// ============================================
+// INITIALISATION
+// ============================================
 document.addEventListener('DOMContentLoaded', function() {
     chargerHistorique();
 });
