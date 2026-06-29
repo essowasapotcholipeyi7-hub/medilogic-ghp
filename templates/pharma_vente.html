@@ -225,6 +225,25 @@
                             <option value="cheque">📝 Chèque</option>
                         </select>
                     </div>
+
+    <!-- 🔥 NOUVEAU : Montant donné par le patient -->
+    <div class="col-md-3">
+        <label class="form-label">Montant donné (frcfa)</label>
+        <input type="number" class="form-control" id="montantDonne" 
+               value="0" min="0" step="100"
+               oninput="calculerRendu()"
+               placeholder="0">
+    </div>
+    
+    <!-- 🔥 NOUVEAU : Montant à rendre -->
+    <div class="col-md-3">
+        <label class="form-label">Rendu au patient (frcfa)</label>
+        <input type="text" class="form-control" id="montantRendu" 
+               value="0 FCFA" readonly
+               style="font-weight: bold; color: #28a745; background: #f0f8f0;">
+    </div>
+    
+
                     <div class="col-md-3">
                         <label class="form-label">Type de document</label>
                         <select class="form-control" id="typeDocument">
@@ -235,18 +254,18 @@
                             <option value="les_deux">📄+📑 Les deux</option>
                         </select>
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Format d'impression</label>
+                    <div class="col-md-3">
+                        <label class="form-label">Format(choisir 80mm/A4)</label>
                         <select class="form-control" id="formatImpression">
                             <option value="80mm" selected>🎫 Format Ticket (80mm)</option>
                             <option value="A4">📄 Format A4</option>
                         </select>
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <label class="form-label">Taux prise en charge (%)</label>
                         <input type="number" class="form-control" id="tauxVente" value="{{ patientTaux }}" step="5" min="0" max="100">
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-5">
                         <label class="form-label">&nbsp;</label>
                         <button class="btn btn-primary w-100" onclick="finaliserVente()" id="finaliserBtn" disabled>
                             <i class="fas fa-receipt"></i> Finaliser
@@ -759,6 +778,7 @@ function afficherPanier() {
     calculerTotal();
     
     updatePanierBadge();
+    calculerRendu();
 }
 function supprimerProduit(index) {
     if (index >= 0 && index < panier.length) {
@@ -787,7 +807,6 @@ function updatePanierBadge() {
     }
 }
 
-// ========== FINALISATION VENTE ==========
 // ========== FINALISATION VENTE ==========
 function finaliserVente() {
     console.log('=== DÉBUT FINALISATION VENTE ===');
@@ -899,6 +918,11 @@ function finaliserVente() {
     const modePaiement = document.getElementById('modePaiement').value;
     const formatImpression = document.getElementById('formatImpression').value;
     
+    // 🔥 RÉCUPÉRER LE MONTANT DONNÉ ET LE RELIQUAT
+    const montantDonne = parseFloat(document.getElementById('montantDonne').value) || 0;
+    const renduText = document.getElementById('montantRendu').value;
+    const reliquat = parseFloat(renduText.replace(/[^0-9,.]/g, '').replace(',', '.')) || 0;
+    
     console.log('Calculs:', { 
         sousTotal, 
         priseEnCharge, 
@@ -907,7 +931,9 @@ function finaliserVente() {
         tauxPrincipal, 
         tauxFinalAssurance2, 
         assurance2Active,
-        tauxFinalModifie
+        tauxFinalModifie,
+        montantDonne,
+        reliquat
     });
     
     let confirmationMsg = `📊 RÉCAPITULATIF DE LA VENTE\n\n`;
@@ -935,8 +961,15 @@ function finaliserVente() {
         const tauxAffiche = tauxFinalModifie ? `${tauxFinalAssurance2}%` : `${tauxFinalAssurance2}%`;
         confirmationMsg += `🎯 Prise en charge ${patientAssurance2} (${tauxAffiche}): ${priseEnCharge2.toLocaleString()} FCFA\n`;
     }
-    confirmationMsg += `💵 À payer: ${netAPayer.toLocaleString()} FCFA\n\n`;
-    confirmationMsg += `💳 Paiement: ${modePaiement}\n`;
+    confirmationMsg += `💵 À payer: ${netAPayer.toLocaleString()} FCFA\n`;
+    
+    // 🔥 AJOUTER MONTANT DONNÉ ET RELIQUAT DANS LE RÉCAPITULATIF
+    if (montantDonne > 0) {
+        confirmationMsg += `💶 Montant donné: ${montantDonne.toLocaleString()} FCFA\n`;
+        confirmationMsg += `🔄 Reliquat à rendre: ${reliquat.toLocaleString()} FCFA\n`;
+    }
+    
+    confirmationMsg += `\n💳 Paiement: ${modePaiement}\n`;
     confirmationMsg += `📄 Document: ${typeDocument}\n`;
     confirmationMsg += `🖨️ Format: ${formatImpression === '80mm' ? 'Ticket 80mm' : 'A4'}\n\n`;
     confirmationMsg += `✅ Confirmer la vente ?`;
@@ -946,7 +979,7 @@ function finaliserVente() {
         return;
     }
     
-    // 🔥 CONSTRUCTION DE L'OBJET VENTE AVEC LE TAUX TEMPORAIRE
+    // 🔥 CONSTRUCTION DE L'OBJET VENTE AVEC LE TAUX TEMPORAIRE ET LE MONTANT DONNÉ
     const venteData = {
         patient_id: parseInt(currentPatientId),
         patient_nom: currentPatientName,
@@ -965,7 +998,10 @@ function finaliserVente() {
         taux_temp_modifie: tauxFinalModifie,
         taux_original: tauxOriginal,
         // Pour compatibilité avec le recu
-        assurance_nom: patientAssurance || 'non_assure'
+        assurance_nom: patientAssurance || 'non_assure',
+        // 🔥 NOUVEAUX CHAMPS POUR LE MONTANT DONNÉ ET LE RELIQUAT
+        montant_donne: montantDonne,
+        rendu: reliquat
     };
     
     console.log('📦 DONNÉES ENVOYÉES AU BACKEND:', JSON.stringify(venteData, null, 2));
@@ -1001,6 +1037,10 @@ function finaliserVente() {
                 sessionStorage.setItem('lastTauxOriginal', tauxOriginal.toString());
                 sessionStorage.setItem('lastAssurance2Nom', patientAssurance2);
             }
+            
+            // 🔥 Sauvegarder le montant donné et le reliquat pour le reçu
+            sessionStorage.setItem('lastMontantDonne', montantDonne.toString());
+            sessionStorage.setItem('lastReliquat', reliquat.toString());
             
             setTimeout(() => {
                 hideProgress();
@@ -1043,6 +1083,11 @@ function finaliserVente() {
                     url += `&assurance2_nom=${encodeURIComponent(patientAssurance2)}`;
                 }
                 
+                // 🔥 AJOUTER LE MONTANT DONNÉ ET LE RELIQUAT À L'URL
+                if (montantDonne > 0) {
+                    url += `&montant_donne=${montantDonne}&reliquat=${reliquat}`;
+                }
+                
                 console.log('🔗 Redirection vers:', url);
                 window.location.href = url;
                 
@@ -1059,6 +1104,7 @@ function finaliserVente() {
         alert('❌ Erreur: ' + error);
     });
 }
+
 // ========== CRÉER PROFORMA ==========
 function creerProforma() {
     if (panier.length === 0) {
@@ -1443,12 +1489,73 @@ function calculerTotal() {
     document.getElementById('proformaBtn').disabled = (panier.length === 0);
 }
 
+// ============================================
+// CALCUL DU RENDU DE MONNAIE
+// ============================================
+function calculerRendu() {
+    // 🔥 Récupérer le net à payer depuis la variable globale ou le calcul
+    let sousTotal = 0;
+    for (const item of panier) {
+        sousTotal += item.prix * item.quantite;
+    }
+    
+    let tauxPrincipal = parseFloat(document.getElementById('tauxVente').value);
+    if (isNaN(tauxPrincipal)) {
+        tauxPrincipal = patientTaux || 0;
+    }
+    
+    let tauxComplementaire = 0;
+    if (assurance2Active && patientAssurance2 && patientAssurance2 !== 'Aucune') {
+        tauxComplementaire = tauxTempModifie ? tauxTempValeur : (patientTaux2Original || 0);
+    }
+    
+    let priseEnCharge = (sousTotal * tauxPrincipal) / 100;
+    let resteApresPrincipal = sousTotal - priseEnCharge;
+    let priseEnCharge2 = 0;
+    
+    if (tauxComplementaire > 0 && resteApresPrincipal > 0) {
+        priseEnCharge2 = (resteApresPrincipal * tauxComplementaire) / 100;
+    }
+    
+    let netAPayer = sousTotal - priseEnCharge - priseEnCharge2;
+    if (netAPayer < 0) netAPayer = 0;
+    
+    const montantDonne = parseFloat(document.getElementById('montantDonne').value) || 0;
+    const rendu = montantDonne - netAPayer;
+    
+    const renduElement = document.getElementById('montantRendu');
+    
+    if (rendu < 0) {
+        renduElement.value = '⚠️ ' + Math.abs(rendu).toLocaleString() + ' FCFA manquant';
+        renduElement.style.color = '#dc3545';
+        renduElement.style.background = '#fde8e8';
+    } else if (rendu === 0) {
+        renduElement.value = '✅ 0 FCFA (juste)';
+        renduElement.style.color = '#28a745';
+        renduElement.style.background = '#f0f8f0';
+    } else {
+        renduElement.value = rendu.toLocaleString() + ' FCFA';
+        renduElement.style.color = '#28a745';
+        renduElement.style.background = '#f0f8f0';
+    }
+    
+    return rendu;
+}
 // ========== INITIALISATION ==========
 document.addEventListener('DOMContentLoaded', function() {
     chargerProduits();
     checkSelectedPatient();
     chargerProformaBadge();
     updateProformaButton();
+    document.getElementById('montantDonne').addEventListener('input', calculerRendu);
+    // Recalculer quand le panier change
+    const originalAfficherPanier = window.afficherPanier;
+    window.afficherPanier = function() {
+        if (originalAfficherPanier) {
+            originalAfficherPanier();
+        }
+        calculerRendu();
+    };
 });
 </script>
 {% endblock %}

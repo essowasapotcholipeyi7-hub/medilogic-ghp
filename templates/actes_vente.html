@@ -177,6 +177,23 @@
                             <option value="cheque">📝 Chèque</option>
                         </select>
                     </div>
+    <!-- 🔥 NOUVEAU : Montant donné par le patient -->
+    <div class="col-md-3">
+        <label class="form-label">Montant donné (FCFA)</label>
+        <input type="number" class="form-control" id="montantDonne" 
+               value="0" min="0" step="100"
+               oninput="calculerRendu()"
+               placeholder="0">
+    </div>
+    
+    <!-- 🔥 NOUVEAU : Montant à rendre -->
+    <div class="col-md-3">
+        <label class="form-label">Rendu au patient (FCFA)</label>
+        <input type="text" class="form-control" id="montantRendu" 
+               value="0 FCFA" readonly
+               style="font-weight: bold; color: #28a745; background: #f0f8f0;">
+    </div>
+    
                     <div class="col-md-3">
                         <label class="form-label">Type de document</label>
                         <select class="form-control" id="typeDocument">
@@ -187,18 +204,18 @@
                             <option value="les_deux">📄+📑 Les deux (Patient+Structure)</option>
                         </select>
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Format d'impression</label>
+                    <div class="col-md-3">
+                        <label class="form-label">Format(choisir 80mm/A4)</label>
                         <select class="form-control" id="formatImpression">
                             <option value="80mm" selected>🎫 Format Ticket (80mm)</option>
                             <option value="A4">📄 Format A4</option>
                         </select>
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <label class="form-label">Taux prise en charge (%)</label>
                         <input type="number" class="form-control" id="tauxVente" value="{{ patientTaux }}" step="5" min="0" max="100" onchange="calculerTotal()">
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-5">
                         <label class="form-label">&nbsp;</label>
                         <button class="btn btn-primary w-100" onclick="finaliserVente()" id="finaliserBtn" disabled>
                             <i class="fas fa-receipt"></i> Finaliser la vente
@@ -491,6 +508,7 @@ function afficherPanier() {
     
     // Calculer les totaux avec le sous-total recalculé
     calculerTotal();
+    calculerRendu();
 }
 
 // ============================================
@@ -851,6 +869,10 @@ function finaliserVente() {
         quantite: parseInt(item.quantite),
         total: parseFloat(item.total)
     }));
+
+    const montantDonne = parseFloat(document.getElementById('montantDonne').value) || 0;
+    const rendu = montantDonne - netAPayer;
+
     
     let vente = {
         patient_id: parseInt(patientId),
@@ -866,7 +888,9 @@ function finaliserVente() {
         taux_assurance2: assurance2Active ? parseFloat(tauxComplementaire || 0) : 0,
         assurance2_active: assurance2Active,
         taux_temp_modifie: tauxTempModifie,
-        taux_original: patientTaux2Original || 0
+        taux_original: patientTaux2Original || 0,
+        montant_donne: montantDonne,
+        rendu: rendu >= 0 ? rendu : 0
     };
     
     console.log('Objet vente envoyé:', vente);
@@ -965,6 +989,8 @@ function afficherRecapVente() {
     let modePaiement = document.getElementById('modePaiement').value;
     let typeDocument = document.getElementById('typeDocument').value;
     let formatImpression = document.getElementById('formatImpression').value;
+    const montantDonne = parseFloat(document.getElementById('montantDonne').value) || 0;
+    const rendu = montantDonne - netAPayer;
     
     let msg = "📋 RÉCAPITULATIF DE LA VENTE\n";
     msg += "═".repeat(40) + "\n\n";
@@ -997,6 +1023,15 @@ function afficherRecapVente() {
     msg += "   Sous-total: " + sousTotal.toLocaleString() + " FCFA\n";
     msg += "   Taux assurance principale: " + tauxPrincipal + "%\n";
     msg += "   Prise en charge: -" + priseEnCharge.toLocaleString() + " FCFA\n";
+    msg += "   " + "═".repeat(30) + "\n";
+    msg += "   NET À PAYER: " + netAPayer.toLocaleString() + " FCFA\n";
+    msg += "   Montant donné: " + montantDonne.toLocaleString() + " FCFA\n";
+    if (rendu >= 0) {
+        msg += "   RENDU: " + rendu.toLocaleString() + " FCFA\n";
+    } else {
+        msg += "   MANQUE: " + Math.abs(rendu).toLocaleString() + " FCFA\n";
+    }
+    msg += "\n";
     if (assurance2Active && patientAssurance2 && patientAssurance2 !== 'Aucune' && tauxComplementaire > 0) {
         const tauxAffiche = tauxTempModifie ? `${tauxComplementaire}%` : `${tauxComplementaire}%`;
         msg += "   ✅ Prise en charge complémentaire (" + patientAssurance2 + " " + tauxAffiche + "): -" + priseEnCharge2.toLocaleString() + " FCFA\n";
@@ -1163,12 +1198,49 @@ function chargerProformaBadge() {
 }
 
 // ============================================
+// CALCUL DU RENDU DE MONNAIE
+// ============================================
+function calculerRendu() {
+    const netAPayer = parseFloat(document.getElementById('netAPayer').innerText.replace(/[^0-9]/g, '')) || 0;
+    const montantDonne = parseFloat(document.getElementById('montantDonne').value) || 0;
+    
+    const rendu = montantDonne - netAPayer;
+    const renduElement = document.getElementById('montantRendu');
+    
+    if (rendu < 0) {
+        renduElement.value = '⚠️ ' + Math.abs(rendu).toLocaleString() + ' FCFA manquant';
+        renduElement.style.color = '#dc3545';
+        renduElement.style.background = '#fde8e8';
+    } else if (rendu === 0) {
+        renduElement.value = '✅ 0 FCFA (juste)';
+        renduElement.style.color = '#28a745';
+        renduElement.style.background = '#f0f8f0';
+    } else {
+        renduElement.value = rendu.toLocaleString() + ' FCFA';
+        renduElement.style.color = '#28a745';
+        renduElement.style.background = '#f0f8f0';
+    }
+}
+
+
+// ============================================
 // INITIALISATION
 // ============================================
 document.addEventListener('DOMContentLoaded', function() {
     checkSelectedPatient();
     filterActes();
     chargerProformaBadge();
+
+    document.getElementById('montantDonne').addEventListener('input', calculerRendu);
+    // Recalculer quand le panier change
+    const originalAfficherPanier = window.afficherPanier;
+    window.afficherPanier = function() {
+        if (originalAfficherPanier) {
+            originalAfficherPanier();
+        }
+        calculerRendu();
+    };
 });
+
 </script>
 {% endblock %}

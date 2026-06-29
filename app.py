@@ -1235,12 +1235,16 @@ def recu(vente_id, type):
     prise_en_charge2 = 0
     numero_assure2 = ''
     
+    # 🔥 CHAMPS POUR LE MONTANT DONNÉ ET LE RENDU
+    montant_donne = 0
+    rendu = 0
+    
     # 🔥 CORRECTION : Accepter 'pharma' et 'pharmacie'
     type_bd = 'pharmacie' if type == 'pharma' else type
     
     print(f"🔍 Recherche vente {vente_id} (type reçu: {type}, type BD: {type_bd})")
     
-    # 🔥 Lire depuis NEON (sans les colonnes qui n'existent pas)
+    # 🔥 Lire depuis NEON
     vente = db.execute_query("""
         SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
                p.assurance2_nom as patient_assurance2_nom, 
@@ -1270,27 +1274,29 @@ def recu(vente_id, type):
         type_assurance = v.get('type_assurance', 'non_assure')
         numero_assure = v.get('numero_assure', '')
         
-        # 🔥 Récupérer les données de l'assurance complémentaire (depuis la vente)
+        # 🔥 Récupérer les données de l'assurance complémentaire
         assurance2_nom = v.get('assurance2_nom', '')
         taux_assurance2 = float(v.get('taux_assurance2', 0))
         prise_en_charge2 = float(v.get('prise_en_charge2', 0))
         numero_assure2 = v.get('numero_assure2', '')
         
-        # 🔥 Récupérer le taux original du patient (pour comparaison)
+        # 🔥 Récupérer le montant donné et le rendu
+        montant_donne = float(v.get('montant_donne', 0)) if v.get('montant_donne') is not None else 0
+        rendu = float(v.get('rendu', 0)) if v.get('rendu') is not None else 0
+        
+        print(f"💰 montant_donne={montant_donne}, rendu={rendu}")  # 🔥 LOG DE DEBUG
+        
+        # 🔥 Récupérer le taux original du patient
         patient_taux_original = float(v.get('patient_taux_assurance2', 0))
         
         # 🔥 Déterminer si le taux a été modifié
-        # Si le taux dans la vente est différent du taux du patient (et > 0)
         taux_modifie = False
         taux_original = patient_taux_original
         
         if taux_assurance2 > 0 and patient_taux_original > 0:
-            # Si les taux sont différents, le taux a été modifié
             if abs(taux_assurance2 - patient_taux_original) > 0.01:
                 taux_modifie = True
                 print(f"🔴 TAUX MODIFIÉ DÉTECTÉ: {taux_assurance2}% (original: {patient_taux_original}%)")
-        
-        print(f"📊 Données: taux_assurance2_vente={taux_assurance2}, patient_taux_original={patient_taux_original}, taux_modifie={taux_modifie}")
         
         # Récupérer les produits
         if type_bd == 'pharmacie' or type_bd == 'pharma':
@@ -1332,13 +1338,7 @@ def recu(vente_id, type):
     
     print(f"=== REÇU {vente_id} ({type_bd}) ===")
     print(f"Patient: {patient_nom}")
-    print(f"Articles: {len(articles)}")
-    print(f"Assurance principale: {assurance_text} ({taux_assurance}%)")
-    print(f"Assurance complémentaire appliquée: {assurance2_appliquee}")
-    if assurance2_appliquee:
-        print(f"  - {assurance2_nom} ({taux_assurance2}%) - {prise_en_charge2} FCFA")
-    if taux_modifie:
-        print(f"  ⚠️ TAUX MODIFIÉ: {taux_assurance2}% (original: {taux_original}%)")
+    print(f"💰 montant_donne={montant_donne}, rendu={rendu}")
     
     return render_template('recu_client.html',
                          vente_id=vente_id,
@@ -1364,9 +1364,12 @@ def recu(vente_id, type):
                          prise_en_charge2=prise_en_charge2,
                          numero_assure2=numero_assure2,
                          assurance2_appliquee=assurance2_appliquee,
-                         # 🔥 PARAMÈTRES DE MODIFICATION (déterminés par comparaison)
+                         # 🔥 PARAMÈTRES DE MODIFICATION
                          taux_modifie=taux_modifie,
-                         taux_original=taux_original)
+                         taux_original=taux_original,
+                         # 🔥 PARAMÈTRES MONTANT DONNÉ ET RENDU
+                         montant_donne=montant_donne,
+                         rendu=rendu)
 
 @app.route('/recu_structure/<int:vente_id>/<string:type>')
 @login_required
@@ -3352,6 +3355,10 @@ def api_vente_pharma():
         prise_en_charge = float(data.get('prise_en_charge', 0))
         prise_en_charge2 = float(data.get('prise_en_charge2', 0))
         
+        # 🔥 Récupérer le montant donné et le rendu
+        montant_donne = float(data.get('montant_donne', 0))
+        rendu = float(data.get('rendu', 0))
+        
         # 🔥 Construire l'objet assurances pour le JSONB
         assurances_data = {
             'principale': {
@@ -3367,6 +3374,7 @@ def api_vente_pharma():
         }
         
         print(f"📊 Assurances: {assurances_data}")
+        print(f"💰 Montant donné: {montant_donne} FCFA, Rendu: {rendu} FCFA")
         
         # ========== 1. ENREGISTRER LA VENTE DANS NEON ==========
         result = db.execute_query("""
@@ -3387,9 +3395,11 @@ def api_vente_pharma():
                 assurances,
                 assurance2_nom,
                 taux_assurance2,
-                prise_en_charge2
+                prise_en_charge2,
+                montant_donne,
+                rendu
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, 'validee', %s::jsonb, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, 'validee', %s::jsonb, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             patient_id,
@@ -3406,7 +3416,9 @@ def api_vente_pharma():
             json.dumps(assurances_data, ensure_ascii=False),
             assurance2_nom,
             taux_assurance2,
-            prise_en_charge2
+            prise_en_charge2,
+            montant_donne,
+            rendu
         ))
         
         if not result or len(result) == 0:
@@ -3438,7 +3450,7 @@ def api_vente_pharma():
                 'patients',
                 vente_id,
                 'vente_pharma',
-                'Vente pharmacie #' + str(vente_id) + ' - ' + data.get('patient_nom', 'Patient'),
+                'Vente pharmacie #' + str(vente_id) + ' - ' + data.get('patient_nom', 'Patient') + f' - Donné: {montant_donne} FCFA, Rendu: {rendu} FCFA',
                 vendeur
             ))
             
@@ -3489,7 +3501,6 @@ def api_vente_pharma():
                 
                 print(f"   🔍 Recherche du produit ID: {produit_id} - {produit_nom}")
                 
-                # Chercher le produit dans Sheets (colonne A = ID)
                 cell = worksheet.find(produit_id, in_column=1)
                 if cell:
                     row_num = cell.row
@@ -3502,7 +3513,6 @@ def api_vente_pharma():
                         nouveau_stock = 0
                     
                     print(f"   📊 Stock: {stock_actuel} → {nouveau_stock}")
-                    
                     worksheet.update_cell(row_num, 4, nouveau_stock)
                     print(f"   ✅ Stock Sheets mis à jour pour {produit_nom}")
                 else:
@@ -3778,6 +3788,10 @@ def api_add_acte_vente():
         taux_assurance2 = float(data.get('taux_assurance2', 0))
         prise_en_charge2 = float(data.get('prise_en_charge2', 0))
         
+        # 🔥 Récupérer le montant donné et le rendu
+        montant_donne = float(data.get('montant_donne', 0))
+        rendu = float(data.get('rendu', 0))
+        
         # 🔥 Construire l'objet assurances pour le JSONB
         assurances_data = {
             'principale': {
@@ -3793,6 +3807,7 @@ def api_add_acte_vente():
         }
         
         print(f"📊 Assurances: {assurances_data}")
+        print(f"💰 Montant donné: {montant_donne} FCFA, Rendu: {rendu} FCFA")
         
         result = db.execute_query("""
             INSERT INTO ventes (
@@ -3811,9 +3826,11 @@ def api_add_acte_vente():
                 assurances,
                 assurance2_nom,
                 taux_assurance2,
-                prise_en_charge2
+                prise_en_charge2,
+                montant_donne,
+                rendu
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s::jsonb, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s::jsonb, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             patient_id,
@@ -3830,14 +3847,16 @@ def api_add_acte_vente():
             json.dumps(assurances_data, ensure_ascii=False),
             assurance2_nom,
             taux_assurance2,
-            prise_en_charge2
+            prise_en_charge2,
+            montant_donne,
+            rendu
         ))
         
         if result and len(result) > 0:
             vente_id = result[0]['id']
             print(f"Vente actes inseree ID: {vente_id} par {user_name}")
             
-            # 🔥 Ajout automatique de la recette (net à payer = ce que le patient paie réellement)
+            # Ajout automatique de la recette (net à payer = ce que le patient paie réellement)
             net_a_payer = float(data.get('net_a_payer', 0))
             if net_a_payer > 0:
                 db.execute_query("""
@@ -3849,7 +3868,7 @@ def api_add_acte_vente():
                     'patients',
                     vente_id,
                     'vente_acte',
-                    'Vente actes #' + str(vente_id) + ' - ' + data.get('patient_nom', 'Patient'),
+                    'Vente actes #' + str(vente_id) + ' - ' + data.get('patient_nom', 'Patient') + f' - Donné: {montant_donne} FCFA, Rendu: {rendu} FCFA',
                     user_name
                 ))
                 print(f"Recette ajoutee: {net_a_payer} FCFA")
