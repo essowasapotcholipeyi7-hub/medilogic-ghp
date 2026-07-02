@@ -141,59 +141,60 @@
                             </div>
                         </div>
 
-<!-- Filtres dépenses -->
-<div class="filter-bar">
-    <div class="row g-2">
-        <div class="col-md-3">
-            <label class="form-label small">Date début</label>
-            <input type="date" id="depensesDateDebut" class="form-control form-control-sm">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label small">Date fin</label>
-            <input type="date" id="depensesDateFin" class="form-control form-control-sm">
-        </div>
-        <div class="col-md-2">
-            <label class="form-label small">&nbsp;</label>
-            <button class="btn btn-primary btn-sm w-100" onclick="filtrerDepenses()">
-                <i class="fas fa-search"></i> Appliquer
-            </button>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label small">Recherche motif</label>
-            <input type="text" id="searchMotif" class="form-control form-control-sm" 
-                   placeholder="Salaire, assurance, reparation..." 
-                   onkeyup="filtrerDepenses()">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label small">Filtre motif</label>
-            <select id="filtreMotif" class="form-control form-control-sm" onchange="filtrerDepenses()">
-                <option value="">Tous les motifs</option>
-                <option value="salaire">Salaire personnel</option>
-                <option value="assurance">Versement assurance</option>
-                <option value="reparation">Réparation clinique</option>
-                <option value="fourniture">Fourniture médicale</option>
-                <option value="eau">Eau</option>
-                <option value="electricite">Électricité</option>
-                <option value="internet">Internet</option>
-                <option value="loyer">Loyer</option>
-                <option value="materiel">Matériel informatique</option>
-                <option value="transport">Transport</option>
-                <option value="communication">Communication</option>
-                <option value="autres">Autres</option>
-            </select>
-        </div>
-    </div>
-    <div class="row mt-2">
-        <div class="col-md-12">
-            <button class="btn btn-secondary btn-sm" onclick="resetFiltresDepenses()">
-                <i class="fas fa-sync-alt"></i> Réinitialiser
-            </button>
-            <span class="ms-3 text-muted">
-                <span id="depensesResultCount">0</span> dépense(s) trouvée(s)
-            </span>
-        </div>
-    </div>
-</div>
+                        <!-- Filtres dépenses -->
+                        <div class="filter-bar">
+                            <div class="row g-2">
+                                <div class="col-md-3">
+                                    <label class="form-label small">Date début</label>
+                                    <input type="date" id="depensesDateDebut" class="form-control form-control-sm">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small">Date fin</label>
+                                    <input type="date" id="depensesDateFin" class="form-control form-control-sm">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">&nbsp;</label>
+                                    <button class="btn btn-primary btn-sm w-100" onclick="filtrerDepenses()">
+                                        <i class="fas fa-search"></i> Appliquer
+                                    </button>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">Recherche motif</label>
+                                    <input type="text" id="searchMotif" class="form-control form-control-sm" 
+                                           placeholder="Salaire, assurance, reparation..." 
+                                           onkeyup="filtrerDepenses()">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">Filtre motif</label>
+                                    <select id="filtreMotif" class="form-control form-control-sm" onchange="filtrerDepenses()">
+                                        <option value="">Tous les motifs</option>
+                                        <option value="salaire">Salaire personnel</option>
+                                        <option value="assurance">Versement assurance</option>
+                                        <option value="reparation">Réparation clinique</option>
+                                        <option value="fourniture">Fourniture médicale</option>
+                                        <option value="eau">Eau</option>
+                                        <option value="electricite">Électricité</option>
+                                        <option value="internet">Internet</option>
+                                        <option value="loyer">Loyer</option>
+                                        <option value="materiel">Matériel informatique</option>
+                                        <option value="transport">Transport</option>
+                                        <option value="communication">Communication</option>
+                                        <option value="autres">Autres</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-12">
+                                    <button class="btn btn-secondary btn-sm" onclick="resetFiltresDepenses()">
+                                        <i class="fas fa-sync-alt"></i> Réinitialiser
+                                    </button>
+                                    <span class="ms-3 text-muted">
+                                        <span id="depensesResultCount">0</span> dépense(s) trouvée(s)
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="table-responsive">
                             <table class="table table-hover" id="depensesTable">
                                 <thead class="table-light">
@@ -370,29 +371,30 @@
                             </div>
                         </div>
 
-            <!-- 🔥 NOUVEAU : RECETTES PAR SOURCE ET DEPENSES PAR MOTIF 🔥 -->
-            <div class="row mt-3">
-                <div class="col-md-6">
-                    <div class="card bg-light border-0">
-                        <div class="card-body">
-                            <h6 class="text-muted">Recettes par source</h6>
-                            <div id="recettesParSource">
-                                <span class="spinner-border spinner-border-sm"></span> Chargement...
+                        <!-- 🔥 RECETTES PAR SOURCE ET DEPENSES PAR MOTIF -->
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <div class="card bg-light border-0">
+                                    <div class="card-body">
+                                        <h6 class="text-muted">Recettes par source</h6>
+                                        <div id="recettesParSource">
+                                            <span class="spinner-border spinner-border-sm"></span> Chargement...
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card bg-light border-0">
+                                    <div class="card-body">
+                                        <h6 class="text-muted">Depenses par motif</h6>
+                                        <div id="depensesParMotif">
+                                            <span class="spinner-border spinner-border-sm"></span> Chargement...
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card bg-light border-0">
-                        <div class="card-body">
-                            <h6 class="text-muted">Depenses par motif</h6>
-                            <div id="depensesParMotif">
-                                <span class="spinner-border spinner-border-sm"></span> Chargement...
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                        
                         <!-- Dépenses par motif -->
                         <div class="card mt-3">
                             <div class="card-header bg-secondary text-white">
@@ -493,6 +495,36 @@
 </div>
 
 <script>
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
+let toutesLesVentes = [];
+
+// ============================================
+// LOADER
+// ============================================
+function showLoader(message) {
+    var loader = document.getElementById('loaderOverlay');
+    if (!loader) {
+        loader = document.createElement('div');
+        loader.id = 'loaderOverlay';
+        loader.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;';
+        loader.innerHTML = '<div class="spinner-border text-light" style="width:3rem;height:3rem;"></div><div class="text-white mt-2" id="loaderMessage">Chargement...</div>';
+        document.body.appendChild(loader);
+    }
+    loader.style.display = 'flex';
+    var msg = document.getElementById('loaderMessage');
+    if (msg) msg.textContent = message || 'Chargement...';
+}
+
+function hideLoader() {
+    var loader = document.getElementById('loaderOverlay');
+    if (loader) loader.style.display = 'none';
+}
+
+// ============================================
+// DEPENSES
+// ============================================
 function showAddDepenseModal() {
     document.getElementById('depenseForm').reset();
     document.getElementById('motifPersonnaliseDiv').style.display = 'none';
@@ -533,13 +565,13 @@ function saveDepense() {
     .then(data => {
         hideLoader();
         if (data.success) {
-            alert('Dépense enregistrée avec succès');
+            alert('✅ Dépense enregistrée avec succès');
             location.reload();
         } else {
-            alert('Erreur: ' + data.error);
+            alert('❌ Erreur: ' + data.error);
         }
     })
-    .catch(() => { hideLoader(); alert('Erreur'); });
+    .catch(() => { hideLoader(); alert('❌ Erreur'); });
 }
 
 function filtrerDepenses() {
@@ -561,24 +593,18 @@ function filtrerDepenses() {
         const descriptionCell = row.cells[4]?.innerText || '';
         const montant = parseFloat(row.cells[3]?.innerText?.replace(' FCFA', '').replace(/\s/g, '')) || 0;
         
-        // Filtre par date - seulement si les deux dates sont renseignées
         if (dateDebut && dateFin && dateCell) {
             const date = new Date(dateCell.split(' ')[0]);
             const debut = new Date(dateDebut);
             const fin = new Date(dateFin);
             fin.setHours(23, 59, 59);
             if (date < debut || date > fin) visible = false;
-        } else if ((dateDebut && !dateFin) || (!dateDebut && dateFin)) {
-            // Si une seule date est renseignée, on ignore le filtre date
-            visible = true;
         }
         
-        // Filtre par motif (select)
         if (visible && motif) {
             if (!motifCell.toLowerCase().includes(motif.toLowerCase())) visible = false;
         }
         
-        // Barre de recherche
         if (visible && searchMotif) {
             const texteRecherche = `${motifCell} ${descriptionCell}`.toLowerCase();
             if (!texteRecherche.includes(searchMotif)) visible = false;
@@ -603,194 +629,37 @@ function resetFiltresDepenses() {
     filtrerDepenses();
 }
 
+// ============================================
+// SOLDE ET FINANCES
+// ============================================
 function chargerSolde() {
     fetch('/api/finances/stats')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) throw new Error('Erreur HTTP: ' + response.status);
+            return response.json();
+        })
         .then(data => {
-            // data.total_recettes inclut deja:
-            // - paiements des patients (ventes)
-            // - remboursements des assurances
-            // - autres recettes manuelles
-            
-            // data.total_depenses inclut:
-            // - salaires, fournitures, reparations, etc.
-            
             const totalRecettes = data.total_recettes || 0;
             const totalDepenses = data.total_depenses || 0;
             const solde = totalRecettes - totalDepenses;
             const taux = totalRecettes > 0 ? ((totalDepenses / totalRecettes) * 100).toFixed(1) : 0;
             
-            // Mettre a jour les cartes
+            // Mettre à jour les cartes
             const soldeElement = document.getElementById('soldeActuel');
-            const totalRecettesElement = document.getElementById('totalRecettes');
-            const totalDepensesElement = document.getElementById('totalDepensesCard');
+            const totalDepensesElement = document.getElementById('totalDepenses');
             const tauxElement = document.getElementById('tauxDepenses');
             
             if (soldeElement) soldeElement.innerHTML = Math.round(solde).toLocaleString('fr-FR') + ' FCFA';
-            if (totalRecettesElement) totalRecettesElement.innerHTML = Math.round(totalRecettes).toLocaleString('fr-FR') + ' FCFA';
             if (totalDepensesElement) totalDepensesElement.innerHTML = Math.round(totalDepenses).toLocaleString('fr-FR') + ' FCFA';
             if (tauxElement) tauxElement.innerHTML = taux + '%';
             
-            // Afficher aussi le detail des recettes par source
-            chargerDetailRecettes();
-        })
-        .catch(error => console.error('Erreur chargerSolde:', error));
-}
-
-function chargerDetailRecettes() {
-    fetch('/api/finances/recettes/source')
-        .then(response => response.json())
-        .then(data => {
-            // Afficher le detail dans une section si besoin
-            console.log('Recettes par source:', data);
-        })
-        .catch(err => console.error('Erreur:', err));
-}
-
-// ========== RAPPORTS ==========
-function genererRapport() {
-    let dateDebut = document.getElementById('rapportDateDebut').value;
-    let dateFin = document.getElementById('rapportDateFin').value;
-    
-    // Si les dates sont vides, ne pas filtrer (prendre toutes les données)
-    let url = '/api/finances/stats';
-    let detailUrl = '/api/finances/recettes/detail';
-    
-    if (dateDebut && dateFin) {
-        url = `/api/finances/stats?date_debut=${dateDebut}&date_fin=${dateFin}`;
-        detailUrl = `/api/finances/recettes/detail?date_debut=${dateDebut}&date_fin=${dateFin}`;
-    }
-    
-    showLoader('Génération du rapport...')
-    
-    // Appel pour les stats
-    fetch(url)
-        .then(response => response.json())
-        .then(stats => {
-            // Mettre à jour les cartes
-            document.getElementById('rapportTotalRecettes').innerHTML = Math.round(stats.total_recettes || 0).toLocaleString();
-            document.getElementById('rapportTotalDepenses').innerHTML = Math.round(stats.total_depenses || 0).toLocaleString();
-            document.getElementById('rapportSolde').innerHTML = Math.round((stats.total_recettes - stats.total_depenses) || 0).toLocaleString();
-            
-            const marge = stats.total_recettes > 0 ? ((stats.total_recettes - stats.total_depenses) / stats.total_recettes * 100) : 0;
-            document.getElementById('rapportMarge').innerHTML = marge.toFixed(1);
-            
-            // Dépenses par motif
-            const tbody = document.getElementById('rapportMotifsList');
-            if (stats.depenses_par_motif && stats.depenses_par_motif.length > 0) {
-                let totalDepenses = 0;
-                tbody.innerHTML = stats.depenses_par_motif.map(m => {
-                    const motifNom = m.motif_nom || m.motif;
-                    const montant = m.total;
-                    totalDepenses += montant;
-                    const pourcentage = stats.total_depenses > 0 ? ((montant / stats.total_depenses) * 100).toFixed(1) : 0;
-                    return `
-                        <tr>
-                            <td>${motifNom}</td>
-                            <td class="text-end text-danger">${Math.round(montant).toLocaleString()} FCFA</td>
-                            <td class="text-end">${pourcentage}%</td>
-                        </tr>
-                    `;
-                }).join('');
-                document.getElementById('totalDepensesFooter').innerHTML = Math.round(totalDepenses).toLocaleString() + ' FCFA';
-            } else {
-                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">Aucune dépense</td></tr>';
-                document.getElementById('totalDepensesFooter').innerHTML = '0 FCFA';
-            }
-            
-            return fetch(detailUrl);
-        })
-        .then(response => response.json())
-        .then(recettesDetail => {
-            let recettesActes = 0;
-            let recettesPharma = 0;
-            let nbActes = 0;
-            let nbPharma = 0;
-            
-            if (recettesDetail && recettesDetail.length) {
-                recettesDetail.forEach(item => {
-                    if (item.type === 'actes') {
-                        recettesActes = item.total_recettes || 0;
-                        nbActes = item.nombre_ventes || 0;
-                    } else if (item.type === 'pharmacie' || item.type === 'pharma') {
-                        recettesPharma = item.total_recettes || 0;
-                        nbPharma = item.nombre_ventes || 0;
-                    }
-                });
-            }
-            
-            document.getElementById('rapportRecettesActes').innerHTML = Math.round(recettesActes).toLocaleString() + ' FCFA';
-            document.getElementById('rapportRecettesPharma').innerHTML = Math.round(recettesPharma).toLocaleString() + ' FCFA';
-            document.getElementById('rapportNbActes').innerHTML = nbActes;
-            document.getElementById('rapportNbPharma').innerHTML = nbPharma;
-            
-            hideLoader();
+            // Mettre à jour aussi les totaux dans les filtres
+            const totalDepensesFilter = document.getElementById('totalDepensesFilter');
+            if (totalDepensesFilter) totalDepensesFilter.innerHTML = Math.round(totalDepenses).toLocaleString('fr-FR') + ' FCFA';
         })
         .catch(error => {
-            hideLoader();
-            console.error('Erreur:', error);
-            alert('Erreur lors de la génération du rapport');
+            console.error('Erreur chargerSolde:', error);
         });
-chargerDetailFinances();
-}
-
-function exporterRapport() {
-    const dateDebut = document.getElementById('rapportDateDebut').value;
-    const dateFin = document.getElementById('rapportDateFin').value;
-    
-    if (!dateDebut || !dateFin) {
-        alert('Veuillez sélectionner une période avant d\'exporter');
-        return;
-    }
-    
-    const url = `/api/finances/export/csv?date_debut=${dateDebut}&date_fin=${dateFin}`;
-    window.open(url, '_blank');
-}
-
-function imprimerRapport() {
-    window.print();
-}
-
-function resetFilters() {
-    document.getElementById('depensesDateDebut').value = '';
-    document.getElementById('depensesDateFin').value = '';
-    document.getElementById('filtreMotif').value = '';
-    filtrerDepenses();
-}
-
-// Initialisation
-document.addEventListener('DOMContentLoaded', function() {
-    // Ne pas générer automatiquement le rapport
-    const dateDebut = document.getElementById('rapportDateDebut');
-    const dateFin = document.getElementById('rapportDateFin');
-    
-    // Option: définir les dates par défaut (dernier mois)
-    const today = new Date();
-    const lastMonth = new Date();
-    lastMonth.setMonth(today.getMonth() - 1);
-    
-    dateDebut.value = lastMonth.toISOString().split('T')[0];
-    dateFin.value = today.toISOString().split('T')[0];
-});
-
-// Régénérer quand on clique sur l'onglet Rapports
-const rapportsTab = document.getElementById('rapports-tab');
-if (rapportsTab) {
-    rapportsTab.addEventListener('click', function() {
-        const dateDebut = document.getElementById('rapportDateDebut').value;
-        const dateFin = document.getElementById('rapportDateFin').value;
-        
-        if (dateDebut && dateFin) {
-            genererRapport();
-        } else {
-            const today = new Date();
-            const lastMonth = new Date();
-            lastMonth.setMonth(today.getMonth() - 1);
-            document.getElementById('rapportDateDebut').value = lastMonth.toISOString().split('T')[0];
-            document.getElementById('rapportDateFin').value = today.toISOString().split('T')[0];
-            genererRapport();
-        }
-    });
 }
 
 function chargerDetailFinances() {
@@ -801,12 +670,18 @@ function chargerDetailFinances() {
             const container = document.getElementById('recettesParSource');
             if (container) {
                 if (data && data.length) {
-                    container.innerHTML = data.map(s => `
-                        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
-                            <span class="fw-semibold">${s.source}</span>
-                            <span class="text-success fw-bold">${Math.round(s.total).toLocaleString('fr-FR')} FCFA</span>
-                        </div>
-                    `).join('');
+                    container.innerHTML = data.map(s => {
+                        let label = s.source;
+                        if (label === 'patients') label = 'Patients';
+                        else if (label === 'assurance') label = 'Assurances';
+                        else if (label === 'autres') label = 'Autres';
+                        return `
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                <span class="fw-semibold">${label}</span>
+                                <span class="text-success fw-bold">${Math.round(s.total).toLocaleString('fr-FR')} FCFA</span>
+                            </div>
+                        `;
+                    }).join('');
                 } else {
                     container.innerHTML = '<p class="text-muted mb-0">Aucune recette</p>';
                 }
@@ -854,6 +729,154 @@ function chargerDetailFinances() {
             const container = document.getElementById('depensesParMotif');
             if (container) container.innerHTML = '<p class="text-danger">Erreur chargement</p>';
         });
+}
+
+// ============================================
+// RAPPORTS
+// ============================================
+function genererRapport() {
+    let dateDebut = document.getElementById('rapportDateDebut').value;
+    let dateFin = document.getElementById('rapportDateFin').value;
+    
+    // Si les dates sont vides, prendre le mois en cours
+    if (!dateDebut || !dateFin) {
+        const today = new Date();
+        const lastMonth = new Date();
+        lastMonth.setMonth(today.getMonth() - 1);
+        dateDebut = lastMonth.toISOString().split('T')[0];
+        dateFin = today.toISOString().split('T')[0];
+        document.getElementById('rapportDateDebut').value = dateDebut;
+        document.getElementById('rapportDateFin').value = dateFin;
+    }
+    
+    let url = `/api/finances/stats?date_debut=${dateDebut}&date_fin=${dateFin}`;
+    let detailUrl = `/api/finances/recettes/detail?date_debut=${dateDebut}&date_fin=${dateFin}`;
+    
+    showLoader('Génération du rapport...');
+    
+    // Appel pour les stats
+    fetch(url)
+        .then(response => response.json())
+        .then(stats => {
+            // Mettre à jour les cartes
+            document.getElementById('rapportTotalRecettes').innerHTML = Math.round(stats.total_recettes || 0).toLocaleString('fr-FR');
+            document.getElementById('rapportTotalDepenses').innerHTML = Math.round(stats.total_depenses || 0).toLocaleString('fr-FR');
+            document.getElementById('rapportSolde').innerHTML = Math.round((stats.total_recettes - stats.total_depenses) || 0).toLocaleString('fr-FR');
+            
+            const marge = stats.total_recettes > 0 ? ((stats.total_recettes - stats.total_depenses) / stats.total_recettes * 100) : 0;
+            document.getElementById('rapportMarge').innerHTML = marge.toFixed(1);
+            
+            // Dépenses par motif
+            const tbody = document.getElementById('rapportMotifsList');
+            if (stats.depenses_par_motif && stats.depenses_par_motif.length > 0) {
+                let totalDepenses = 0;
+                tbody.innerHTML = stats.depenses_par_motif.map(m => {
+                    let motifNom = m.motif_nom || m.motif;
+                    if (motifNom === 'salaire') motifNom = 'Salaires';
+                    else if (motifNom === 'reparation') motifNom = 'Reparations';
+                    else if (motifNom === 'fourniture') motifNom = 'Fournitures';
+                    else if (motifNom === 'assurance') motifNom = 'Assurances';
+                    else motifNom = motifNom.charAt(0).toUpperCase() + motifNom.slice(1);
+                    
+                    const montant = m.total;
+                    totalDepenses += montant;
+                    const pourcentage = stats.total_depenses > 0 ? ((montant / stats.total_depenses) * 100).toFixed(1) : 0;
+                    return `
+                        <tr>
+                            <td>${motifNom}</td>
+                            <td class="text-end text-danger">${Math.round(montant).toLocaleString('fr-FR')} FCFA</td>
+                            <td class="text-end">${pourcentage}%</td>
+                        </tr>
+                    `;
+                }).join('');
+                document.getElementById('totalDepensesFooter').innerHTML = Math.round(totalDepenses).toLocaleString('fr-FR') + ' FCFA';
+            } else {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">Aucune dépense</td></tr>';
+                document.getElementById('totalDepensesFooter').innerHTML = '0 FCFA';
+            }
+            
+            return fetch(detailUrl);
+        })
+        .then(response => response.json())
+        .then(recettesDetail => {
+            let recettesActes = 0;
+            let recettesPharma = 0;
+            let nbActes = 0;
+            let nbPharma = 0;
+            
+            if (recettesDetail && recettesDetail.length) {
+                recettesDetail.forEach(item => {
+                    if (item.type === 'actes') {
+                        recettesActes = item.total_recettes || 0;
+                        nbActes = item.nombre_ventes || 0;
+                    } else if (item.type === 'pharmacie' || item.type === 'pharma') {
+                        recettesPharma = item.total_recettes || 0;
+                        nbPharma = item.nombre_ventes || 0;
+                    }
+                });
+            }
+            
+            document.getElementById('rapportRecettesActes').innerHTML = Math.round(recettesActes).toLocaleString('fr-FR') + ' FCFA';
+            document.getElementById('rapportRecettesPharma').innerHTML = Math.round(recettesPharma).toLocaleString('fr-FR') + ' FCFA';
+            document.getElementById('rapportNbActes').innerHTML = nbActes;
+            document.getElementById('rapportNbPharma').innerHTML = nbPharma;
+            
+            hideLoader();
+        })
+        .catch(error => {
+            hideLoader();
+            console.error('Erreur:', error);
+            alert('Erreur lors de la génération du rapport');
+        });
+}
+
+function exporterRapport() {
+    const dateDebut = document.getElementById('rapportDateDebut').value;
+    const dateFin = document.getElementById('rapportDateFin').value;
+    
+    if (!dateDebut || !dateFin) {
+        alert('Veuillez sélectionner une période avant d\'exporter');
+        return;
+    }
+    
+    const url = `/api/finances/export/csv?date_debut=${dateDebut}&date_fin=${dateFin}`;
+    window.open(url, '_blank');
+}
+
+function imprimerRapport() {
+    window.print();
+}
+
+// ============================================
+// INITIALISATION
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    chargerSolde();
+    chargerDetailFinances();
+    
+    // Définir les dates par défaut pour le rapport
+    const today = new Date();
+    const lastMonth = new Date();
+    lastMonth.setMonth(today.getMonth() - 1);
+    
+    const dateDebut = document.getElementById('rapportDateDebut');
+    const dateFin = document.getElementById('rapportDateFin');
+    
+    if (dateDebut) dateDebut.value = lastMonth.toISOString().split('T')[0];
+    if (dateFin) dateFin.value = today.toISOString().split('T')[0];
+    
+    // Générer automatiquement le rapport au chargement
+    setTimeout(function() {
+        genererRapport();
+    }, 500);
+});
+
+// Régénérer quand on clique sur l'onglet Rapports
+const rapportsTab = document.getElementById('rapports-tab');
+if (rapportsTab) {
+    rapportsTab.addEventListener('click', function() {
+        genererRapport();
+    });
 }
 </script>
 {% endblock %}

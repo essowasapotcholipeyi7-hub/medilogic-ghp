@@ -1,0 +1,233 @@
+<!-- templates/factures/facture_print.html -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facture #{{ facture.numero_facture }}</title>
+    <style>
+        {% set format = request.args.get('format', '80mm') %}
+        
+        {% if format == '80mm' %}
+        @media print, screen {
+            @page { size: 80mm auto; margin: 3mm; }
+            body { 
+                width: 80mm; 
+                font-size: 8px; 
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 5px;
+            }
+            * { color: black !important; font-weight: bold !important; }
+            .container { width: 100%; padding: 0; }
+            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 8px; }
+            .header h2 { margin: 0; font-size: 12px; }
+            .header p { margin: 2px 0; font-size: 8px; }
+            table { width: 100%; border-collapse: collapse; font-size: 7px; }
+            table td, table th { padding: 2px 1px; border-bottom: 1px solid #ddd; }
+            .totaux { margin-top: 5px; padding-top: 5px; border-top: 2px solid #000; }
+            .totaux div { display: flex; justify-content: space-between; padding: 1px 0; }
+            .total { font-size: 10px; font-weight: bold; border-top: 2px solid #000; padding-top: 5px; margin-top: 5px; }
+            .footer { text-align: center; font-size: 6px; margin-top: 8px; border-top: 1px solid #000; padding-top: 5px; }
+            .no-print { display: none !important; }
+            img { max-height: 30px; }
+            i, .fas, .far, .fab { display: none !important; }
+        }
+        {% else %}
+        @media print {
+            @page { size: A4; margin: 10mm; }
+        }
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f8f9fa;
+            padding: 20px;
+        }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #667eea; padding-bottom: 15px; margin-bottom: 20px; }
+        .header h2 { margin: 0; color: #1a1a2e; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        table th { background: #f8f9fa; padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6; }
+        table td { padding: 8px 10px; border-bottom: 1px solid #eee; }
+        .totaux { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 15px; max-width: 350px; margin-left: auto; }
+        .totaux .ligne { display: flex; justify-content: space-between; padding: 4px 0; }
+        .total { font-size: 18px; font-weight: bold; border-top: 2px solid #dc3545; padding-top: 10px; margin-top: 10px; color: #dc3545; }
+        .footer { text-align: center; color: #6c757d; font-size: 11px; margin-top: 20px; padding-top: 15px; border-top: 1px solid #dee2e6; }
+        .no-print { text-align: center; margin-top: 20px; }
+        .no-print button { padding: 10px 35px; margin: 0 5px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
+        .btn-print { background: #667eea; color: white; }
+        .btn-pdf { background: #28a745; color: white; }
+        .btn-close { background: #6c757d; color: white; }
+        .statut { display: inline-block; padding: 3px 15px; border-radius: 20px; font-weight: bold; }
+        .statut-paye { background: #d4edda; color: #155724; }
+        .statut-partiel { background: #cce5ff; color: #004085; }
+        .statut-attente { background: #fff3cd; color: #856404; }
+        .statut-retard { background: #f8d7da; color: #721c24; }
+        {% endif %}
+    </style>
+</head>
+<body>
+    <div class="container" id="factureContenu">
+        <!-- En-tête -->
+        <div class="header">
+            <div>
+                <h2>{{ structure.nom or 'Medilogic-GHP' }}</h2>
+                <p style="margin: 0; font-size: 10px; color: #6c757d;">
+                    {{ structure.adresse or '' }}<br>
+                    Tél: {{ structure.telephone or '' }}
+                </p>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-weight: bold; font-size: 14px;">FACTURE</div>
+                <p style="margin: 2px 0; font-weight: bold;">N° {{ facture.numero_facture }}</p>
+                <p style="margin: 0; font-size: 10px; color: #6c757d;">{{ date_actuelle }}</p>
+            </div>
+        </div>
+
+        <!-- Infos patient -->
+        <div style="margin-bottom: 10px;">
+            <strong>Patient :</strong> {{ facture.patient_nom }}<br>
+            <strong>Téléphone :</strong> {{ facture.patient_telephone or 'Non renseigné' }}<br>
+            <strong>Échéance :</strong> {{ facture.date_echeance.strftime('%d/%m/%Y') if facture.date_echeance else '-' }}
+        </div>
+
+        <!-- Articles -->
+        <table>
+            <thead>
+                <tr>
+                    <th>Article</th>
+                    <th style="text-align: center;">Qté</th>
+                    <th style="text-align: right;">Prix</th>
+                    <th style="text-align: right;">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for article in articles %}
+                <tr>
+                    <td>{{ article.nom }}</td>
+                    <td style="text-align: center;">{{ article.quantite }}</td>
+                    <td style="text-align: right;">{{ article.prix_unitaire|default(0)|round(0)|int }} F</td>
+                    <td style="text-align: right;">{{ article.total|default(0)|round(0)|int }} F</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+<!-- Dans facture_print.html -->
+{% for article in articles %}
+<tr>
+    <td>{{ article.nom }}</td>
+    <td style="text-align: center;">{{ article.quantite }}</td>
+    <td style="text-align: right;">
+        {# 🔥 ESSAYER TOUS LES FORMATS DE PRIX POSSIBLES #}
+        {% set prix = article.prix_unitaire|default(article.prix|default(article.prix_reel|default(article.prix_vente|default(0)))) %}
+        {{ prix|round(0)|int }} F
+    </td>
+    <td style="text-align: right;">
+        {% set prix = article.prix_unitaire|default(article.prix|default(article.prix_reel|default(article.prix_vente|default(0)))) %}
+        {% set total = prix * (article.quantite|default(1)) %}
+        {{ total|round(0)|int }} F
+    </td>
+</tr>
+{% endfor %}
+        <!-- Totaux -->
+        <div class="totaux">
+            <div class="ligne">
+                <span>Sous-total</span>
+                <span>{{ facture.sous_total|default(0)|round(0)|int }} FCFA</span>
+            </div>
+            {% if facture.prise_en_charge > 0 %}
+            <div class="ligne" style="color:#28a745;">
+                <span>Prise en charge ({{ facture.taux_assurance }}%)</span>
+                <span>- {{ facture.prise_en_charge|default(0)|round(0)|int }} FCFA</span>
+            </div>
+            {% endif %}
+            {% if facture.prise_en_charge2 > 0 %}
+            <div class="ligne" style="color:#17a2b8;">
+                <span>Prise en charge ({{ facture.taux_assurance2 }}%)</span>
+                <span>- {{ facture.prise_en_charge2|default(0)|round(0)|int }} FCFA</span>
+            </div>
+            {% endif %}
+            <div class="ligne" style="font-weight: bold; border-top: 2px solid #dee2e6; padding-top: 8px; margin-top: 5px;">
+                <span>NET À PAYER</span>
+                <span>{{ facture.net_a_payer|default(0)|round(0)|int }} FCFA</span>
+            </div>
+            
+            <div class="ligne" style="color:#28a745; font-weight: bold; border-top: 1px dashed #28a745; padding-top: 5px; margin-top: 5px;">
+                <span>✅ Montant payé</span>
+                <span>{{ facture.montant_paye|default(0)|round(0)|int }} FCFA</span>
+            </div>
+            
+            {% if facture.reste_a_payer > 0 %}
+            <div class="ligne" style="color:#dc3545; font-weight: bold; font-size: 1.1em; border-top: 1px dashed #dc3545; padding-top: 5px; margin-top: 5px;">
+                <span>⏳ Reste à payer</span>
+                <span>{{ facture.reste_a_payer|default(0)|round(0)|int }} FCFA</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Statut -->
+        <div style="text-align: center; margin-top: 10px;">
+            {% set statut_labels = {
+                'en_attente': 'En attente de paiement',
+                'partielle': 'Paiement partiel',
+                'payee': 'Facture payée ✅',
+                'en_retard': '⚠️ En retard',
+                'impayee': '⚠️ Impayée',
+                'annulee': 'Annulée'
+            } %}
+            <span class="statut statut-{{ facture.statut }}">
+                {{ statut_labels.get(facture.statut, facture.statut) }}
+            </span>
+        </div>
+
+        <!-- Historique des paiements -->
+        {% if paiements and paiements|length > 0 %}
+        <div style="margin-top: 10px; font-size: 8px;">
+            <strong>Historique des paiements :</strong>
+            {% for p in paiements %}
+            <div style="display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #eee;">
+                <span>{{ p.date[:10] if p.date else '-' }}</span>
+                <span>{{ p.montant|round(0)|int }} FCFA</span>
+                <span>{{ p.mode }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Notes -->
+        {% if facture.notes %}
+        <div style="margin-top: 8px; font-size: 8px;">
+            <strong>Notes :</strong> {{ facture.notes }}
+        </div>
+        {% endif %}
+
+        <!-- Pied de page -->
+        <div class="footer">
+            Merci de votre confiance !<br>
+            {{ structure.nom or 'Medilogic-GHP' }}
+        </div>
+    </div>
+
+    <!-- Boutons -->
+    <div class="no-print">
+        <button class="btn-print" onclick="window.print()">🖨️ Imprimer</button>
+        <button class="btn-pdf" onclick="telechargerPDF()">📄 PDF</button>
+        <button class="btn-close" onclick="window.close()">✖ Fermer</button>
+    </div>
+
+    <script>
+    function telechargerPDF() {
+        const element = document.getElementById('factureContenu');
+        const format = '{{ request.args.get("format", "80mm") }}';
+        const opt = {
+            margin: format === '80mm' ? [0.3, 0.3, 0.3, 0.3] : [0.5, 0.5, 0.5, 0.5],
+            filename: 'facture_{{ facture.numero_facture }}.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'in', format: format === '80mm' ? [2.8346, 11.6929] : 'a4', orientation: 'portrait' }
+        };
+        html2pdf().set(opt).from(element).save();
+    }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</body>
+</html> 

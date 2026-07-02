@@ -14,7 +14,10 @@
         <a class="nav-link" href="{{ url_for('pharma_vente') }}">
             <i class="fas fa-pills"></i> Pharmacie
         </a>
-
+<!-- Dans sidebar_menu.html -->
+<a class="nav-link" href="{{ url_for('factures') }}">
+    <i class="fas fa-file-invoice"></i> Factures clients
+</a>
         <!-- Référentiels AMU avec sous-menu -->
         <div class="dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="amuDropdown" data-bs-toggle="dropdown" aria-expanded="false">
@@ -59,6 +62,15 @@
                 <i class="fas fa-stethoscope"></i> Consultation & Prise en charge
             </a>
         {% endif %}
+
+<!-- Dans sidebar_menu.html -->
+{% if session.role in ['admin', 'comptable', 'gestionnaire'] %}
+<li class="nav-item">
+    <a class="nav-link" href="{{ url_for('gestion_stock') }}">
+        <i class="fas fa-boxes"></i> Gestion des stocks
+    </a>
+</li>
+{% endif %}
 
         <!-- ============================================ -->
         <!-- ADMINISTRATION -->

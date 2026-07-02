@@ -58,11 +58,7 @@
                     <div class="col-md-3 text-center">
                         <div class="border rounded p-2">
                             <small class="text-muted">Chiffre d'affaires</small>
-                            {% if session.is_admin %}
                             <h3 class="text-success mb-0" id="statCA">0 F</h3>
-                            {% else %}
-                            <h3 class="text-muted mb-0">•••••••</h3>
-                            {% endif %}
                         </div>
                     </div>
                     <div class="col-md-3 text-center">
@@ -153,7 +149,16 @@
                         <label class="form-label small">Heure fin</label>
                         <input type="time" id="filtreHeureFin" class="form-control form-control-sm" onchange="filtrerHistorique()">
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-3">
+                        <label class="form-label small">Statut paiement</label>
+                        <select id="filtreStatutPaiement" class="form-control form-control-sm" onchange="filtrerHistorique()">
+                            <option value="">Tous</option>
+                            <option value="total">✅ Paiement total</option>
+                            <option value="partiel">⚠️ Paiement partiel</option>
+                            <option value="impaye">❌ Impayé</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
                         <label class="form-label small">Recherche</label>
                         <div class="input-group">
                             <span class="input-group-text bg-white">
@@ -176,15 +181,6 @@
                         </button>
                         <button class="btn btn-info btn-sm ms-2" onclick="chargerHistorique()">
                             <i class="fas fa-sync-alt"></i> Rafraichir
-                        </button>
-                        <button class="btn btn-outline-primary btn-sm ms-2" onclick="filtrerParPriseDeService()">
-                            <i class="fas fa-sun"></i> Prise service (8h-16h)
-                        </button>
-                        <button class="btn btn-outline-warning btn-sm ms-2" onclick="filtrerParFinService()">
-                            <i class="fas fa-moon"></i> Fin service (16h-23h)
-                        </button>
-                        <button class="btn btn-outline-dark btn-sm ms-2" onclick="filtrerGardeNuit()">
-                            <i class="fas fa-moon"></i> Garde nuit (16h-8h)
                         </button>
                         <span class="ms-3 text-muted">
                             <i class="fas fa-chart-simple"></i> 
@@ -213,13 +209,17 @@
                                 <th>Patient</th>
                                 <th>Type</th>
                                 <th>Détail</th>
-                                <th>Montant</th>
-                                <th>Assurance</th>
+                                <th>PBR</th>
+                                <th>Net à payer</th>
+                                <th>Payé</th>
+                                <th>Reste</th>
+                                <th>Statut paiement</th>
+                                <th>Assurances</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="ventesList">
-                            <tr><td colspan="8" class="text-center">Chargement...</td></tr>
+                            <tr><td colspan="12" class="text-center">Chargement...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -313,6 +313,7 @@ function chargerHistorique() {
     
     fetch('/api/ventes/all')
         .then(function(response) {
+            if (!response.ok) throw new Error('Erreur HTTP: ' + response.status);
             return response.json();
         })
         .then(function(ventes) {
@@ -325,7 +326,7 @@ function chargerHistorique() {
         .catch(function(error) {
             console.error('❌ Erreur:', error);
             document.getElementById('ventesList').innerHTML = 
-                '<tr><td colspan="8" class="text-center text-danger">❌ Erreur de chargement</td></tr>';
+                '<tr><td colspan="12" class="text-center text-danger">❌ Erreur de chargement</td></tr>';
             hideLoader();
         });
 }
@@ -338,7 +339,7 @@ function filtrerHistorique() {
     if (!tbody) return;
     
     if (!toutesLesVentes || toutesLesVentes.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Aucune vente trouvée</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted">Aucune vente trouvée</td></tr>';
         document.getElementById('resultCount').innerText = '0';
         return;
     }
@@ -351,6 +352,7 @@ function filtrerHistorique() {
     var heureFin = document.getElementById('filtreHeureFin').value;
     var dateDebut = document.getElementById('filtreDateDebut').value;
     var dateFin = document.getElementById('filtreDateFin').value;
+    var filtreStatutPaiement = document.getElementById('filtreStatutPaiement').value;
     
     var html = '';
     var count = 0;
@@ -375,7 +377,7 @@ function filtrerHistorique() {
         
         // Filtre par date
         if (visible && (dateDebut || dateFin)) {
-            var dateVente = v.date ? new Date(v.date) : null;
+            var dateVente = v.date_vente ? new Date(v.date_vente) : null;
             if (dateVente) {
                 if (dateDebut) {
                     var debut = new Date(dateDebut);
@@ -390,12 +392,60 @@ function filtrerHistorique() {
             }
         }
         
+        // 🔥 Filtre par statut de paiement
+        if (visible && filtreStatutPaiement) {
+            var reste = v.reste_a_payer || 0;
+            var montantDonne = v.montant_donne || 0;
+            var netAPayer = v.net_a_payer || 0;
+            
+            if (filtreStatutPaiement === 'total') {
+                if (reste > 0 || montantDonne < netAPayer) visible = false;
+            } else if (filtreStatutPaiement === 'partiel') {
+                if (reste <= 0 || montantDonne >= netAPayer) visible = false;
+            } else if (filtreStatutPaiement === 'impaye') {
+                if (montantDonne > 0) visible = false;
+            }
+        }
+        
         if (visible) {
             count++;
-            var dateStr = v.date ? new Date(v.date).toLocaleString('fr-FR') : '-';
+            var dateObj = v.date_vente ? new Date(v.date_vente) : null;
+            var dateStr = dateObj ? dateObj.toLocaleString('fr-FR') : '-';
+            
             var typeLabel = v.type === 'actes' ? 'Acte' : 'Pharmacie';
             var badgeClass = v.type === 'actes' ? 'bg-primary' : 'bg-success';
-            var montant = Math.round(v.net_a_payer || 0).toLocaleString();
+            
+            var netAPayer = v.net_a_payer || 0;
+            var montantDonne = v.montant_donne || 0;
+            var resteAPayer = v.reste_a_payer || 0;
+            var pbr = v.base_remboursement || 0;
+            
+            // 🔥 Déterminer le statut de paiement
+            var statutPaiement = '';
+            var statutBadge = '';
+            if (resteAPayer > 0 && montantDonne === 0) {
+                statutPaiement = '❌ Impayé';
+                statutBadge = 'bg-dark';
+            } else if (resteAPayer > 0 && montantDonne > 0) {
+                statutPaiement = '⚠️ Partiel';
+                statutBadge = 'bg-warning';
+            } else {
+                statutPaiement = '✅ Total';
+                statutBadge = 'bg-success';
+            }
+            
+            // 🔥 Assurances
+            var assurance1 = v.assurance_nom || v.type_assurance || 'Non assuré';
+            if (assurance1 === 'amu_cnss') assurance1 = 'AMU-CNSS';
+            else if (assurance1 === 'amu_inam') assurance1 = 'AMU-INAM';
+            
+            var assurance2 = v.assurance2_nom || '';
+            var assurancesText = assurance1;
+            if (assurance2 && assurance2 !== '' && assurance2 !== 'Aucune') {
+                assurancesText += ' + ' + assurance2 + ' (' + (v.taux_assurance2 || 0) + '%)';
+            }
+            
+            var factureNumero = v.facture_numero || '';
             
             html += '<tr>';
             html += '<td><strong>#' + (v.ID || i+1) + '</strong></td>';
@@ -403,11 +453,19 @@ function filtrerHistorique() {
             html += '<td>' + (v.patient_nom || 'Patient') + '</td>';
             html += '<td><span class="badge ' + badgeClass + '">' + typeLabel + '</span></td>';
             html += '<td>' + (v.detail || '-') + '</td>';
-            html += '<td><strong>' + montant + ' FCFA</strong></td>';
-            html += '<td>' + (v.taux_assurance || 0) + '%</td>';
+            html += '<td>' + (pbr > 0 ? Math.round(pbr).toLocaleString() + ' F' : '-') + '</td>';
+            html += '<td><strong>' + Math.round(netAPayer).toLocaleString() + ' F</strong></td>';
+            html += '<td style="color:#28a745; font-weight:bold;">' + Math.round(montantDonne).toLocaleString() + ' F</td>';
+            html += '<td style="color:#dc3545; font-weight:bold;">' + Math.round(resteAPayer).toLocaleString() + ' F</td>';
+            html += '<td><span class="badge ' + statutBadge + '">' + statutPaiement + '</span>';
+            if (factureNumero) {
+                html += '<br><small class="text-muted">Facture: ' + factureNumero + '</small>';
+            }
+            html += '</td>';
+            html += '<td>' + assurancesText + '</td>';
             html += '<td>';
             html += '<button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(' + (v.ID || i+1) + ', \'' + v.type + '\')"><i class="fas fa-print"></i></button>';
-            if (isAdmin) {
+            if (isAdmin && v.statut !== 'annulee') {
                 html += ' <button class="btn btn-sm btn-danger" onclick="annulerVente(' + (v.ID || i+1) + ', \'' + v.type + '\')"><i class="fas fa-ban"></i></button>';
             }
             html += '</td>';
@@ -415,7 +473,7 @@ function filtrerHistorique() {
         }
     }
     
-    tbody.innerHTML = html || '<tr><td colspan="8" class="text-center text-muted">Aucun résultat</td></tr>';
+    tbody.innerHTML = html || '<tr><td colspan="12" class="text-center text-muted">Aucun résultat</td></tr>';
     document.getElementById('resultCount').innerText = count;
 }
 
@@ -493,14 +551,15 @@ function calculerStats(debut, fin) {
     
     for (var i = 0; i < toutesLesVentes.length; i++) {
         var v = toutesLesVentes[i];
-        var dateVente = v.date || '';
+        var dateVente = v.date_vente || '';
         if (dateVente) {
             var date = new Date(dateVente);
             if (date < debut || date > fin) continue;
         }
         
         totalVentes++;
-        totalCA += v.net_a_payer || 0;
+        // 🔥 CA = ce qui a été payé (montant donné), pas le net à payer total
+        totalCA += v.montant_donne || 0;
         
         if (v.type === 'actes') {
             totalActes++;
@@ -518,7 +577,7 @@ function calculerStats(debut, fin) {
     }
     
     document.getElementById('statTotalVentes').innerText = totalVentes;
-    document.getElementById('statCA').innerHTML = totalCA.toLocaleString() + ' F';
+    document.getElementById('statCA').innerHTML = Math.round(totalCA).toLocaleString() + ' F';
     document.getElementById('statActes').innerText = totalActes;
     document.getElementById('statPharma').innerText = totalPharma;
     
@@ -574,6 +633,7 @@ function resetFiltres() {
     document.getElementById('filtreDateFin').value = '';
     document.getElementById('filtreHeureDebut').value = '';
     document.getElementById('filtreHeureFin').value = '';
+    document.getElementById('filtreStatutPaiement').value = '';
     document.getElementById('dateDebutGroup').style.display = 'none';
     document.getElementById('dateFinGroup').style.display = 'none';
     filtrerHistorique();
@@ -588,36 +648,6 @@ function changerPeriodeFiltre() {
     var periode = document.getElementById('periodeFiltre').value;
     document.getElementById('dateDebutGroup').style.display = periode === 'personnalise' ? 'block' : 'none';
     document.getElementById('dateFinGroup').style.display = periode === 'personnalise' ? 'block' : 'none';
-    filtrerHistorique();
-}
-
-function filtrerParPriseDeService() {
-    document.getElementById('periodeFiltre').value = 'aujourdhui';
-    document.getElementById('filtreHeureDebut').value = '08:00';
-    document.getElementById('filtreHeureFin').value = '16:00';
-    filtrerHistorique();
-}
-
-function filtrerParFinService() {
-    document.getElementById('periodeFiltre').value = 'aujourdhui';
-    document.getElementById('filtreHeureDebut').value = '16:00';
-    document.getElementById('filtreHeureFin').value = '23:59';
-    filtrerHistorique();
-}
-
-function filtrerGardeNuit() {
-    var hier = new Date();
-    hier.setDate(hier.getDate() - 1);
-    var dateHier = hier.toISOString().split('T')[0];
-    var aujourdhui = new Date().toISOString().split('T')[0];
-    
-    document.getElementById('periodeFiltre').value = 'personnalise';
-    document.getElementById('filtreDateDebut').value = dateHier;
-    document.getElementById('filtreDateFin').value = aujourdhui;
-    document.getElementById('filtreHeureDebut').value = '16:00';
-    document.getElementById('filtreHeureFin').value = '08:00';
-    document.getElementById('dateDebutGroup').style.display = 'block';
-    document.getElementById('dateFinGroup').style.display = 'block';
     filtrerHistorique();
 }
 
@@ -695,18 +725,16 @@ function imprimerHistorique() {
     html += '<style>body{font-family:Arial;padding:20px;}h2{color:#667eea;}table{width:100%;border-collapse:collapse;margin-top:20px;}th,td{border:1px solid #ddd;padding:8px;}th{background:#667eea;color:white;}</style>';
     html += '</head><body><h2>📋 HISTORIQUE DES VENTES</h2>';
     html += '<div>' + new Date().toLocaleString() + '</div>';
-    html += '<table><thead><tr><th>N°</th><th>Date</th><th>Patient</th><th>Type</th><th>Détail</th><th>Montant</th><th>Assurance</th></tr></thead><tbody>';
+    html += '<table><thead><tr><th>N°</th><th>Date</th><th>Patient</th><th>Type</th><th>Détail</th><th>PBR</th><th>Net</th><th>Payé</th><th>Reste</th><th>Statut</th><th>Assurances</th></tr></thead><tbody>';
     
     for (var i = 0; i < rows.length; i++) {
         var cells = rows[i].cells;
         if (cells.length > 1 && rows[i].style.display !== 'none') {
-            html += '<tr><td>' + (cells[0]?.innerText || '') + '</td>';
-            html += '<td>' + (cells[1]?.innerText || '') + '</td>';
-            html += '<td>' + (cells[2]?.innerText || '') + '</td>';
-            html += '<td>' + (cells[3]?.innerText || '') + '</td>';
-            html += '<td>' + (cells[4]?.innerText || '') + '</td>';
-            html += '<td>' + (cells[5]?.innerText || '') + '</td>';
-            html += '<td>' + (cells[6]?.innerText || '') + '</td></tr>';
+            html += '<tr>';
+            for (var j = 0; j < cells.length - 1; j++) {
+                html += '<td>' + (cells[j]?.innerText || '') + '</td>';
+            }
+            html += '</tr>';
         }
     }
     

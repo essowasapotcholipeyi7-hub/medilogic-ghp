@@ -15,28 +15,24 @@
         
         body {
             width: 80mm;
-            font-size: 9px;
+            font-size: 8px;
             background: white;
         }
         
-        /* 🔥 TOUT en NOIR et GRAS */
         * {
             color: black !important;
             font-weight: bold !important;
         }
         
-        /* Force NOIR pour tous les éléments */
         body, div, p, span, strong, b, td, th, li, .text-muted, .small, h1, h2, h3, h4, h5, h6 {
             color: black !important;
             font-weight: bold !important;
         }
         
-        /* Supprimer TOUTES les couleurs */
         .text-danger, .text-success, .text-primary, .text-warning, .text-info {
             color: black !important;
         }
         
-        /* Badges et fonds en noir */
         .badge, .bg-primary, .bg-success, .bg-warning, .bg-danger, .bg-info {
             background: black !important;
             color: white !important;
@@ -56,7 +52,7 @@
         }
         
         .card-body {
-            padding: 5px !important;
+            padding: 3px !important;
         }
         
         .row {
@@ -69,16 +65,16 @@
         }
         
         h1, h2, h3, h4 {
-            margin: 3px 0;
-            font-size: 11px;
+            margin: 2px 0;
+            font-size: 10px;
         }
         
         table {
-            font-size: 8px;
+            font-size: 7px;
         }
         
         table td, table th {
-            padding: 3px 2px !important;
+            padding: 2px 1px !important;
         }
         
         .text-end, .text-start, .text-center {
@@ -90,7 +86,7 @@
         }
         
         hr {
-            margin: 5px 0;
+            margin: 3px 0;
             border-top: 1px solid black !important;
         }
         
@@ -100,21 +96,23 @@
         }
         
         img {
-            max-height: 40px !important;
+            max-height: 30px !important;
             filter: grayscale(100%) contrast(150%) brightness(80%) !important;
             -webkit-filter: grayscale(100%) contrast(150%) brightness(80%) !important;
         }
-        /* Supprimer les icônes */
+        
         i, .fas, .far, .fab {
             display: none !important;
         }
+        
+        .icone-ok { color: #28a745; }
+        .icone-ko { color: #dc3545; }
     }
-
-    .recu-header p {
-        font-size: 8px;
-        margin: 2px 0;
-    }
-
+    
+    .icone-ok { color: #28a745; font-weight: bold; }
+    .icone-ko { color: #dc3545; font-weight: bold; }
+    .icone-warning { color: #ffc107; font-weight: bold; }
+    
     @media screen {
         body {
             background: #e9ecef;
@@ -134,6 +132,22 @@
             margin: 10mm;
         }
     }
+    
+    .icone-ok { color: #28a745; font-weight: bold; }
+    .icone-ko { color: #dc3545; font-weight: bold; }
+    .icone-warning { color: #ffc107; font-weight: bold; }
+    
+    .statut-pris-en-charge {
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-weight: 600;
+        display: inline-block;
+    }
+    .statut-amu-ok { background: #d4edda; color: #155724; }
+    .statut-amu-ko { background: #f8d7da; color: #721c24; }
+    .statut-cac-ok { background: #d1ecf1; color: #0c5460; }
+    .statut-cac-ko { background: #f8d7da; color: #721c24; }
 </style>
 {% endif %}
 {% endblock %}
@@ -206,36 +220,71 @@
                     <strong>Paiement :</strong> {{ mode_paiement }}<br>
                 </div>
                 
-                <!-- ===== TABLEAU DES ARTICLES ===== -->
+                <!-- ===== TABLEAU DES ARTICLES AVEC ICÔNES ===== -->
                 <table style="width:100%; border-collapse: collapse; font-size: 12px;">
                     <thead>
-                        <tr style="background:#f8f9fa;">
-                            <th style="padding:5px; text-align:left; width:50%;">Article</th>
-                            <th style="padding:5px; text-align:center; width:15%;">Qté</th>
-                            <th style="padding:5px; text-align:right; width:15%;">P.U.</th>
-                            <th style="padding:5px; text-align:right; width:20%;">Total</th>
+                        <tr style="background:#f8f9fa; border-bottom: 2px solid #dee2e6;">
+                            <th style="padding:8px; text-align:left; width:30%;">Article</th>
+                            <th style="padding:8px; text-align:center; width:8%;">Qté</th>
+                            <th style="padding:8px; text-align:right; width:15%;">Prix</th>
+                            <th style="padding:8px; text-align:right; width:15%;">PBR</th>
+                            <th style="padding:8px; text-align:right; width:17%;">Total</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for article in articles %}
                         <tr style="border-bottom:1px solid #eee;">
-                            <td style="padding:6px;">{{ article.nom }}</td>
+                            <td style="padding:8px; font-weight:500;">
+                                <!-- 🔥 ICÔNE DE PRISE EN CHARGE À CÔTÉ DU NOM -->
+                                {% if article.prise_en_charge_amu and article.prise_en_charge_cac %}
+                                    <span class="icone-ok">✅</span>
+                                {% elif article.prise_en_charge_amu and not article.prise_en_charge_cac %}
+                                    <span class="icone-warning">⚠️</span>
+                                {% elif not article.prise_en_charge_amu and article.prise_en_charge_cac %}
+                                    <span class="icone-warning">⚠️</span>
+                                {% else %}
+                                    <span class="icone-ko">❌</span>
+                                {% endif %}
+                                {{ article.nom }}
+                            </td>
                             <td style="text-align:center;">{{ article.quantite }}</td>
                             <td style="text-align:right;">{{ article.prix_unitaire|default(0)|round(0)|int }} F</td>
-                            <td style="text-align:right;">{{ article.total|default(0)|round(0)|int }} F</td>
+                            <td style="text-align:right;">
+                                {% if article.pbr and article.pbr > 0 %}
+                                    {{ article.pbr|round(0)|int }} F
+                                {% else %}
+                                    <span style="color:#6c757d;">-</span>
+                                {% endif %}
+                            </td>
+                            <td style="text-align:right; font-weight:600;">{{ article.total|default(0)|round(0)|int }} F</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
 
                 <hr>
+
+                <!-- ===== LÉGENDE DES ICÔNES ===== -->
+                <div style="font-size: 9px; color: #6c757d; margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
+                    <span><span class="icone-ok">✅</span> AMU & CAC</span>
+                    <span><span class="icone-warning">⚠️</span> Partiel</span>
+                    <span><span class="icone-ko">❌</span> Non pris en charge</span>
+                </div>
                 
-                <!-- ===== TOTAUX AVEC DOUBLE ASSURANCE ===== -->
+                <!-- ===== TOTAUX AVEC DOUBLE ASSURANCE ET PBR ===== -->
                 <div style="margin-top:10px;">
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Sous-total :</span>
+                        <span>Sous-total clinique :</span>
                         <span><strong>{{ sous_total|default(0)|round(0)|int }} FCFA</strong></span>
                     </div>
+                    
+                    <!-- 🔥 BASE REMBOURSEMENT (PBR) - UNIQUEMENT SI PATIENT ASSURÉ -->
+                    {% if base_remboursement and base_remboursement > 0 and taux_assurance > 0 %}
+                    <div style="display:flex; justify-content:space-between; color:#6c757d; font-size: 0.95em; border-top:1px dashed #ddd; padding-top:3px; margin-top:3px;">
+                        <span>Base remboursement (PBR AMU) :</span>
+                        <span><strong>{{ base_remboursement|default(0)|round(0)|int }} FCFA</strong></span>
+                    </div>
+                    {% endif %}
                     
                     <!-- 🔥 Prise en charge principale -->
                     {% if prise_en_charge > 0 %}
@@ -267,12 +316,13 @@
                     {% endif %}
                     {% endif %}
                     
+                    <!-- 🔥 NET À PAYER -->
                     <div style="display:flex; justify-content:space-between; font-weight:bold; margin-top:8px; padding-top:8px; border-top:2px solid #ddd;">
                         <span>NET À PAYER :</span>
                         <span style="color:#dc3545;">{{ net_a_payer|default(0)|round(0)|int }} FCFA</span>
                     </div>
                     
-                    <!-- 🔥 NOUVEAU : MONTANT DONNÉ ET RENDU -->
+                    <!-- 🔥 MONTANT DONNÉ ET RENDU -->
                     {% if montant_donne and montant_donne > 0 %}
                     <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:1px dashed #ddd;">
                         <span>Montant donné :</span>
@@ -281,6 +331,23 @@
                     <div style="display:flex; justify-content:space-between; color:#28a745; font-weight:bold; margin-top:4px; padding-top:4px; border-top:1px dashed #28a745;">
                         <span>Rendu au patient :</span>
                         <span><strong>{{ rendu|default(0)|round(0)|int }} FCFA</strong></span>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- 🔥 RESTE À PAYER (si paiement partiel) -->
+                    {% if reste_a_payer and reste_a_payer > 0 %}
+                    <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:2px solid #dc3545; background: #fff3cd; padding: 5px 10px; border-radius: 5px;">
+                        <span style="font-weight:bold; color:#856404;">
+                            <i class="fas fa-exclamation-triangle"></i> RESTE À PAYER :
+                        </span>
+                        <span style="font-weight:bold; color:#dc3545; font-size: 1.1em;">
+                            {{ reste_a_payer|default(0)|round(0)|int }} FCFA
+                        </span>
+                    </div>
+                    <div style="font-size: 10px; color: #856404; margin-top: 3px; text-align: center;">
+                        <i class="fas fa-info-circle"></i> 
+                        Une facture a été créée pour le solde restant. 
+                        N° Facture : {% if numero_facture %}{{ numero_facture }}{% else %}en cours{% endif %}
                     </div>
                     {% endif %}
                 </div>
@@ -321,10 +388,7 @@ function telechargerPDF() {
 }
 
 function fermerOuRediriger() {
-    // Essayer de fermer la fenêtre
     window.close();
-    
-    // Si la fenêtre n'est pas fermée après 500ms, rediriger
     setTimeout(function() {
         if (!window.closed) {
             window.location.href = "{{ url_for('dashboard') }}";

@@ -133,26 +133,27 @@
                                     </select>
                                 </div>
                                 <div class="col-md-2">
-                                    <label class="form-label small">Statut</label>
-                                    <select id="filtreStatut" class="form-control form-control-sm" onchange="appliquerFiltres()">
+                                    <label class="form-label small">Statut paiement</label>
+                                    <select id="filtreStatutPaiement" class="form-control form-control-sm" onchange="appliquerFiltres()">
                                         <option value="tous">Tous</option>
-                                        <option value="validee">Validees</option>
-                                        <option value="annulee">Annulees</option>
+                                        <option value="total">✅ Total</option>
+                                        <option value="partiel">⚠️ Partiel</option>
+                                        <option value="impaye">❌ Impayé</option>
                                     </select>
                                 </div>
                             </div>
                             <div class="row mt-2 g-2">
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <label class="form-label small">Patient</label>
                                     <input type="text" id="filtrePatient" class="form-control form-control-sm" 
                                            placeholder="Nom du patient" onkeyup="appliquerFiltres()">
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <label class="form-label small">Vendeur</label>
                                     <input type="text" id="filtreVendeur" class="form-control form-control-sm" 
                                            placeholder="Nom du vendeur" onkeyup="appliquerFiltres()">
                                 </div>
-                                <div class="col-md-4 d-flex gap-2">
+                                <div class="col-md-6 d-flex gap-2">
                                     <button class="btn btn-primary btn-sm" onclick="appliquerFiltres()">
                                         <i class="fas fa-search"></i> Filtrer
                                     </button>
@@ -176,21 +177,25 @@
                                         <th>Heure</th>
                                         <th>Patient</th>
                                         <th>Type</th>
-                                        <th>Detail</th>
-                                        <th>Montant</th>
-                                        <th>Assurance principale</th>
-                                        <th>Assurance complementaire</th>
+                                        <th>Détail</th>
+                                        <th>PBR</th>
+                                        <th>Net à payer</th>
+                                        <th>Payé</th>
+                                        <th>Reste</th>
+                                        <th>Statut paiement</th>
+                                        <th>Assurances</th>
                                         <th>Vendeur</th>
                                         <th>Statut</th>
                                     </tr>
                                 </thead>
                                 <tbody id="ventesStatsList">
-                                    <tr><td colspan="11" class="text-center">Chargement...</td></tr>
+                                    <tr><td colspan="14" class="text-center">Chargement...</td></tr>
                                 </tbody>
                                 <tfoot class="table-light">
                                     <tr class="fw-bold">
-                                        <td colspan="6" class="text-end">Total :</td>
-                                        <td id="totalMontantFooter">0 FCFA</td>
+                                        <td colspan="8" class="text-end">Total encaissé :</td>
+                                        <td id="totalPayeFooter">0 FCFA</td>
+                                        <td id="totalResteFooter">0 FCFA</td>
                                         <td colspan="4"></td>
                                     </tr>
                                 </tfoot>
@@ -237,7 +242,6 @@
                             </div>
                             <div class="alert alert-info mt-3 mb-0 small">
                                 <i class="fas fa-info-circle"></i> Les factures sont generees automatiquement a partir des ventes (actes + pharmacie) des patients assures.
-                                Selectionnez un mois et cliquez sur "Generer factures du mois" pour creer/actualiser les factures.
                             </div>
                         </div>
 
@@ -269,7 +273,7 @@
                             </div>
                         </div>
                         
-                        <!-- 🔥 TABLEAU FACTURES AVEC TYPE ASSURANCE -->
+                        <!-- Tableau factures -->
                         <div class="table-responsive">
                             <table class="table table-hover" id="facturesTable">
                                 <thead class="table-light">
@@ -363,7 +367,7 @@ function chargerVentes() {
             toutesLesVentes = ventes;
             
             if (ventes.length === 0) {
-                ventesList.innerHTML = '<tr><td colspan="11" class="text-center">Aucune vente enregistree</td></tr>';
+                ventesList.innerHTML = '<tr><td colspan="14" class="text-center">Aucune vente enregistree</td></tr>';
                 return;
             }
             
@@ -372,7 +376,7 @@ function chargerVentes() {
         })
         .catch(error => {
             console.error('Erreur:', error);
-            ventesList.innerHTML = '<tr><td colspan="11" class="text-center text-danger">Erreur de chargement</td></tr>';
+            ventesList.innerHTML = '<tr><td colspan="14" class="text-center text-danger">Erreur de chargement</td></tr>';
         });
 }
 
@@ -381,13 +385,19 @@ function afficherVentes(ventes) {
     if (!tbody) return;
     tbody.innerHTML = '';
     
-    let totalMontant = 0;
+    let totalPaye = 0;
+    let totalReste = 0;
     let totalActes = 0;
     let totalPharma = 0;
     
     ventes.forEach(vente => {
-        const montant = vente.net_a_payer || 0;
-        totalMontant += montant;
+        const montantDonne = vente.montant_donne || 0;
+        const resteAPayer = vente.reste_a_payer || 0;
+        const netAPayer = vente.net_a_payer || 0;
+        const pbr = vente.base_remboursement || 0;
+        
+        totalPaye += montantDonne;
+        totalReste += resteAPayer;
         
         if (vente.type === 'actes') totalActes++;
         else if (vente.type === 'pharmacie' || vente.type === 'pharma') totalPharma++;
@@ -395,19 +405,40 @@ function afficherVentes(ventes) {
         const row = tbody.insertRow();
         
         let dateStr = '', heureStr = '';
-        if (vente.date) {
+        if (vente.date_vente) {
             try {
-                const dateObj = new Date(vente.date);
+                const dateObj = new Date(vente.date_vente);
                 if (!isNaN(dateObj.getTime())) {
                     dateStr = dateObj.toLocaleDateString('fr-FR');
                     heureStr = dateObj.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
-                } else {
-                    dateStr = vente.date.split('T')[0] || vente.date.split(' ')[0];
-                    heureStr = vente.date.split('T')[1]?.substring(0, 5) || vente.date.split(' ')[1]?.substring(0, 5);
                 }
-            } catch(e) {
-                dateStr = vente.date;
-            }
+            } catch(e) {}
+        }
+        
+        // 🔥 Déterminer le statut de paiement
+        var statutPaiement = '';
+        var statutBadge = '';
+        if (resteAPayer > 0 && montantDonne === 0) {
+            statutPaiement = '❌ Impayé';
+            statutBadge = 'bg-dark';
+        } else if (resteAPayer > 0 && montantDonne > 0) {
+            statutPaiement = '⚠️ Partiel';
+            statutBadge = 'bg-warning';
+        } else {
+            statutPaiement = '✅ Total';
+            statutBadge = 'bg-success';
+        }
+        
+        // 🔥 Assurances
+        var assurance1 = vente.assurance_nom || vente.type_assurance || 'Non assuré';
+        if (assurance1 === 'amu_cnss') assurance1 = 'AMU-CNSS';
+        else if (assurance1 === 'amu_inam') assurance1 = 'AMU-INAM';
+        else if (assurance1 === 'non_assure') assurance1 = 'Non assuré';
+        
+        var assurance2 = vente.assurance2_nom || '';
+        var assurancesText = assurance1;
+        if (assurance2 && assurance2 !== '' && assurance2 !== 'Aucune') {
+            assurancesText += ' + ' + assurance2 + ' (' + (vente.taux_assurance2 || 0) + '%)';
         }
         
         row.insertCell(0).innerHTML = vente.ID || '-';
@@ -419,44 +450,31 @@ function afficherVentes(ventes) {
         typeCell.innerHTML = (vente.type === 'actes') ? '<span class="badge bg-primary">Acte</span>' : '<span class="badge bg-success">Pharmacie</span>';
         
         row.insertCell(5).innerHTML = vente.detail || '-';
-        row.insertCell(6).innerHTML = Math.round(montant).toLocaleString('fr-FR') + ' FCFA';
+        row.insertCell(6).innerHTML = (pbr > 0 ? Math.round(pbr).toLocaleString('fr-FR') + ' F' : '-');
+        row.insertCell(7).innerHTML = Math.round(netAPayer).toLocaleString('fr-FR') + ' F';
+        row.insertCell(8).innerHTML = '<span style="color:#28a745;font-weight:bold;">' + Math.round(montantDonne).toLocaleString('fr-FR') + ' F</span>';
+        row.insertCell(9).innerHTML = '<span style="color:#dc3545;font-weight:bold;">' + Math.round(resteAPayer).toLocaleString('fr-FR') + ' F</span>';
+        row.insertCell(10).innerHTML = '<span class="badge ' + statutBadge + '">' + statutPaiement + '</span>';
+        row.insertCell(11).innerHTML = assurancesText;
+        row.insertCell(12).innerHTML = vente.created_by_nom || '-';
         
-        // 🔥 Assurance principale (index 7)
-        const assurance1 = vente.assurance_nom || vente.type_assurance || 'Non assure';
-        let assurance1Display = assurance1;
-        if (assurance1 === 'amu_cnss') assurance1Display = 'AMU-CNSS';
-        else if (assurance1 === 'amu_inam') assurance1Display = 'AMU-INAM';
-        row.insertCell(7).innerHTML = assurance1Display + ' (' + (vente.taux_assurance || 0) + '%)';
-        
-        // 🔥 Assurance complementaire (index 8)
-        const assurance2 = vente.assurance2_nom || '';
-        const taux2 = vente.taux_assurance2 || 0;
-        if (assurance2 && assurance2 !== '' && assurance2 !== 'Aucune') {
-            row.insertCell(8).innerHTML = assurance2 + ' (' + taux2 + '%)';
-        } else {
-            row.insertCell(8).innerHTML = '<span class="text-muted">-</span>';
-        }
-        
-        row.insertCell(9).innerHTML = vente.created_by_nom || '-';
-        
-        const statutCell = row.insertCell(10);
+        const statutCell = row.insertCell(13);
         const statut = vente.statut || 'validee';
         statutCell.innerHTML = (statut === 'annulee') ? '<span class="badge bg-danger">Annulee</span>' : '<span class="badge bg-success">Validee</span>';
     });
     
-    const totalMontantFooter = document.getElementById('totalMontantFooter');
-    if (totalMontantFooter) {
-        totalMontantFooter.innerHTML = Math.round(totalMontant).toLocaleString('fr-FR') + ' FCFA';
-    }
+    const totalPayeFooter = document.getElementById('totalPayeFooter');
+    const totalResteFooter = document.getElementById('totalResteFooter');
+    if (totalPayeFooter) totalPayeFooter.innerHTML = Math.round(totalPaye).toLocaleString('fr-FR') + ' FCFA';
+    if (totalResteFooter) totalResteFooter.innerHTML = Math.round(totalReste).toLocaleString('fr-FR') + ' FCFA';
 }
-
 function updateStats(ventes) {
     let totalMontant = 0;
     let totalActes = 0;
     let totalPharma = 0;
     
     ventes.forEach(vente => {
-        totalMontant += (vente.net_a_payer || 0);
+        totalMontant += (vente.montant_donne || 0);
         if (vente.type === 'actes') totalActes++;
         else if (vente.type === 'pharmacie' || vente.type === 'pharma') totalPharma++;
     });
@@ -482,19 +500,23 @@ function appliquerFiltres() {
     const filtrePatient = document.getElementById('filtrePatient')?.value.toLowerCase().trim() || '';
     const filtreVendeur = document.getElementById('filtreVendeur')?.value.toLowerCase().trim() || '';
     const filtreType = document.getElementById('filtreType')?.value || 'tous';
-    const filtreStatut = document.getElementById('filtreStatut')?.value || 'tous';
+    const filtreStatutPaiement = document.getElementById('filtreStatutPaiement')?.value || 'tous';
     
     const ventesFiltrees = toutesLesVentes.filter(vente => {
         let dateVente = '', heureVente = '';
-        if (vente.date) {
-            dateVente = vente.date.split('T')[0] || vente.date.split(' ')[0];
-            heureVente = vente.date.split('T')[1]?.substring(0, 5) || vente.date.split(' ')[1]?.substring(0, 5);
+        if (vente.date_vente) {
+            dateVente = vente.date_vente.split('T')[0] || vente.date_vente.split(' ')[0];
+            heureVente = vente.date_vente.split('T')[1]?.substring(0, 5) || vente.date_vente.split(' ')[1]?.substring(0, 5);
         }
         
         const patient = (vente.patient_nom || '').toLowerCase();
-        const vendeur = (vente.created_by_nom || vente.vendeur || 'system').toLowerCase();
+        const vendeur = (vente.created_by_nom || '').toLowerCase();
         const type = vente.type;
-        const statutValue = vente.statut || 'validee';
+        
+        // 🔥 Filtre statut paiement
+        const reste = vente.reste_a_payer || 0;
+        const montantDonne = vente.montant_donne || 0;
+        const netAPayer = vente.net_a_payer || 0;
         
         if (dateDebut && dateFin && dateVente) {
             if (dateVente < dateDebut || dateVente > dateFin) return false;
@@ -513,8 +535,14 @@ function appliquerFiltres() {
             }
         }
         
-        if (filtreStatut !== 'tous') {
-            if (statutValue !== filtreStatut) return false;
+        if (filtreStatutPaiement !== 'tous') {
+            if (filtreStatutPaiement === 'total') {
+                if (reste > 0 || montantDonne < netAPayer) return false;
+            } else if (filtreStatutPaiement === 'partiel') {
+                if (reste <= 0 || montantDonne >= netAPayer) return false;
+            } else if (filtreStatutPaiement === 'impaye') {
+                if (montantDonne > 0) return false;
+            }
         }
         
         return true;
@@ -530,9 +558,9 @@ function resetFiltres() {
         if (el) el.value = '';
     });
     const filtreType = document.getElementById('filtreType');
-    const filtreStatut = document.getElementById('filtreStatut');
+    const filtreStatutPaiement = document.getElementById('filtreStatutPaiement');
     if (filtreType) filtreType.value = 'tous';
-    if (filtreStatut) filtreStatut.value = 'tous';
+    if (filtreStatutPaiement) filtreStatutPaiement.value = 'tous';
     
     if (toutesLesVentes.length > 0) {
         afficherVentes(toutesLesVentes);
@@ -542,12 +570,12 @@ function resetFiltres() {
 
 function exporterCSV() {
     const rows = document.querySelectorAll('#ventesStatsList tr');
-    let csvContent = "ID;Date;Heure;Patient;Type;Detail;Montant;Assurance principale;Assurance complementaire;Vendeur;Statut\n";
+    let csvContent = "ID;Date;Heure;Patient;Type;Detail;PBR;Net a payer;Paye;Reste;Statut paiement;Assurances;Vendeur;Statut\n";
     
     rows.forEach(row => {
         const cells = row.cells;
         if (cells.length > 1 && cells[0].innerText !== 'Chargement...') {
-            csvContent += `"${cells[0].innerText}";"${cells[1].innerText}";"${cells[2].innerText}";"${cells[3].innerText}";"${cells[4].innerText}";"${cells[5].innerText}";"${cells[6].innerText}";"${cells[7].innerText}";"${cells[8].innerText}";"${cells[9].innerText}";"${cells[10].innerText}"\n`;
+            csvContent += `"${cells[0].innerText}";"${cells[1].innerText}";"${cells[2].innerText}";"${cells[3].innerText}";"${cells[4].innerText}";"${cells[5].innerText}";"${cells[6].innerText}";"${cells[7].innerText}";"${cells[8].innerText}";"${cells[9].innerText}";"${cells[10].innerText}";"${cells[11].innerText}";"${cells[12].innerText}";"${cells[13].innerText}"\n`;
         }
     });
     
@@ -559,7 +587,7 @@ function exporterCSV() {
     URL.revokeObjectURL(link.href);
 }
 
-// ========== ASSURANCES AVEC TYPE ==========
+// ========== ASSURANCES ==========
 function genererFactures() {
     const moisInput = document.getElementById('factureMois');
     if (!moisInput) return;
@@ -620,7 +648,6 @@ function chargerFactures() {
                 if (f.assurance === 'amu_cnss') assuranceText = 'AMU-CNSS';
                 if (f.assurance === 'amu_inam') assuranceText = 'AMU-INAM';
                 
-                // 🔥 TYPE D'ASSURANCE
                 const typeAssurance = f.type_assurance || 'principale';
                 const typeLabel = typeAssurance === 'principale' ? 'Principale' : 'Complémentaire';
                 const typeBadge = typeAssurance === 'principale' ? 'bg-primary' : 'bg-info';

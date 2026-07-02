@@ -1,0 +1,294 @@
+<!-- templates/factures/factures.html -->
+{% extends "base.html" %}
+
+{% block title %}Factures{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3 mb-4">
+        {% include 'sidebar_menu.html' %}
+    </div>
+    
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-file-invoice"></i> Factures</h5>
+                <div>
+                    <button class="btn btn-light btn-sm" onclick="rafraichir()">
+                        <i class="fas fa-sync-alt"></i> Rafraîchir
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Filtres -->
+                <div class="row mb-3">
+                    <div class="col-md-8">
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-outline-primary btn-sm active" onclick="filtrer('toutes')">Toutes</button>
+                            <button class="btn btn-outline-warning btn-sm" onclick="filtrer('en_attente')">En attente</button>
+                            <button class="btn btn-outline-info btn-sm" onclick="filtrer('partielle')">Partielles</button>
+                            <button class="btn btn-outline-danger btn-sm" onclick="filtrer('en_retard')">En retard</button>
+                            <button class="btn btn-outline-success btn-sm" onclick="filtrer('payee')">Payées</button>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <span id="totalFactures" class="badge bg-secondary">0 facture(s)</span>
+                    </div>
+                </div>
+                
+                <!-- Tableau -->
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered" id="facturesTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>N° Facture</th>
+                                <th>Patient</th>
+                                <th>Montant</th>
+                                <th>Payé</th>
+                                <th>Reste</th>
+                                <th>Échéance</th>
+                                <th>Statut</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="facturesBody">
+                            <tr><td colspan="8" class="text-center">Chargement...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Paiement -->
+<div class="modal fade" id="paiementModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-money-bill-wave"></i> Enregistrer un paiement</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="paiementForm">
+                    <input type="hidden" id="factureId">
+                    <div class="mb-3">
+                        <label>Facture</label>
+                        <input type="text" class="form-control" id="factureNumero" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label>Patient</label>
+                        <input type="text" class="form-control" id="facturePatient" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label>Montant total</label>
+                        <input type="text" class="form-control" id="factureTotal" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label>Reste à payer</label>
+                        <input type="text" class="form-control" id="factureReste" readonly style="font-weight:bold; color:#dc3545;">
+                    </div>
+                    <div class="mb-3">
+                        <label>Montant à payer *</label>
+                        <input type="number" class="form-control" id="montantPaiement" min="1" step="100" required>
+                    </div>
+                    <div class="mb-3">
+                        <label>Mode de paiement</label>
+                        <select class="form-control" id="modePaiement">
+                            <option value="especes">💰 Espèces</option>
+                            <option value="carte">💳 Carte bancaire</option>
+                            <option value="orange_money">📱 Orange Money</option>
+                            <option value="mtn_money">📱 MTN Money</option>
+                            <option value="cheque">📝 Chèque</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label>Notes</label>
+                        <textarea class="form-control" id="notesPaiement" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-success" onclick="confirmerPaiement()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let facturesData = [];
+
+// ========== CHARGER LES FACTURES ==========
+function chargerFactures(statut = 'toutes') {
+    const url = statut === 'toutes' ? '/api/factures' : `/api/factures?statut=${statut}`;
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            facturesData = data;
+            afficherFactures(data);
+            document.getElementById('totalFactures').textContent = data.length + ' facture(s)';
+        })
+        .catch(error => console.error('Erreur:', error));
+}
+
+// ========== AFFICHER LES FACTURES ==========
+function afficherFactures(factures) {
+    const tbody = document.getElementById('facturesBody');
+    tbody.innerHTML = '';
+    
+    if (factures.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center">Aucune facture trouvée</td></tr>';
+        return;
+    }
+    
+    factures.forEach(f => {
+        const statutColors = {
+            'en_attente': 'bg-warning',
+            'partielle': 'bg-info',
+            'payee': 'bg-success',
+            'en_retard': 'bg-danger',
+            'impayee': 'bg-dark',
+            'annulee': 'bg-secondary'
+        };
+        
+        const row = tbody.insertRow();
+        row.innerHTML = `
+            <td><strong>${f.numero_facture}</strong></td>
+            <td>${f.patient_nom}</td>
+            <td>${f.net_a_payer.toLocaleString()} FCFA</td>
+            <td style="color:#28a745;">${f.montant_paye.toLocaleString()} FCFA</td>
+            <td style="color:#dc3545; font-weight:bold;">${f.reste_a_payer.toLocaleString()} FCFA</td>
+            <td>${f.date_echeance}</td>
+            <td>
+                <span class="badge ${statutColors[f.statut] || 'bg-secondary'}">
+                    ${f.statut_label}
+                </span>
+                ${f.nb_paiements > 0 ? `<span class="badge bg-light text-dark ms-1">${f.nb_paiements} paiement(s)</span>` : ''}
+            </td>
+            <td>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-primary" onclick="voirFacture(${f.id})" title="Détails">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    ${f.statut !== 'payee' ? `
+                    <button class="btn btn-success" onclick="ouvrirPaiement(${f.id})" title="Paiement">
+                        <i class="fas fa-money-bill-wave"></i>
+                    </button>
+                    ` : ''}
+                    <button class="btn btn-secondary" onclick="imprimerRecu(${f.id})" title="Imprimer">
+                        <i class="fas fa-print"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+    });
+}
+
+// ========== FILTRER ==========
+function filtrer(statut) {
+    document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    chargerFactures(statut);
+}
+
+// ========== VOIR FACTURE ==========
+function voirFacture(id) {
+    window.location.href = `/facture/detail/${id}`;
+}
+
+// ========== OUVRIR PAIEMENT ==========
+function ouvrirPaiement(id) {
+    const facture = facturesData.find(f => f.id === id);
+    if (!facture) return;
+    
+    document.getElementById('factureId').value = id;
+    document.getElementById('factureNumero').value = facture.numero_facture;
+    document.getElementById('facturePatient').value = facture.patient_nom;
+    document.getElementById('factureTotal').value = facture.net_a_payer.toLocaleString() + ' FCFA';
+    document.getElementById('factureReste').value = facture.reste_a_payer.toLocaleString() + ' FCFA';
+    document.getElementById('montantPaiement').value = facture.reste_a_payer;
+    document.getElementById('montantPaiement').max = facture.reste_a_payer;
+    
+    new bootstrap.Modal(document.getElementById('paiementModal')).show();
+}
+
+// ========== CONFIRMER PAIEMENT ==========
+function confirmerPaiement() {
+    const factureId = document.getElementById('factureId').value;
+    const montant = parseFloat(document.getElementById('montantPaiement').value);
+    const modePaiement = document.getElementById('modePaiement').value;
+    const notes = document.getElementById('notesPaiement').value;
+    
+    if (!montant || montant <= 0) {
+        alert('Veuillez saisir un montant valide');
+        return;
+    }
+    
+    const facture = facturesData.find(f => f.id === parseInt(factureId));
+    if (montant > facture.reste_a_payer) {
+        alert(`Le montant (${montant.toLocaleString()} FCFA) dépasse le reste à payer (${facture.reste_a_payer.toLocaleString()} FCFA)`);
+        return;
+    }
+    
+    if (!confirm(`Confirmer le paiement de ${montant.toLocaleString()} FCFA pour la facture ${facture.numero_facture} ?`)) {
+        return;
+    }
+    
+    fetch(`/api/factures/${factureId}/paiement`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            montant: montant,
+            mode_paiement: modePaiement,
+            notes: notes
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`✅ Paiement enregistré !\nMontant: ${montant.toLocaleString()} FCFA\nReste à payer: ${data.reste_a_payer.toLocaleString()} FCFA`);
+            
+            // Fermer le modal
+            bootstrap.Modal.getInstance(document.getElementById('paiementModal')).hide();
+            
+            // Rafraîchir la liste
+            chargerFactures('toutes');
+            
+            // Si la facture est payée, proposer d'imprimer le reçu
+            if (data.statut === 'payee') {
+                if (confirm('La facture est entièrement payée. Voulez-vous imprimer le reçu ?')) {
+                    imprimerRecu(factureId);
+                }
+            } else {
+                // Proposer d'imprimer le reçu de paiement partiel
+                if (confirm('Voulez-vous imprimer le reçu de paiement ?')) {
+                    window.open(`/facture/recu_paiement/${data.paiement_id}?format=80mm`, '_blank');
+                }
+            }
+        } else {
+            alert('❌ Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('❌ Erreur: ' + error);
+    });
+}
+
+// ========== IMPRIMER REÇU ==========
+function imprimerRecu(factureId) {
+    window.open(`/facture/print/${factureId}?format=80mm`, '_blank');
+}
+
+// ========== RAFRAÎCHIR ==========
+function rafraichir() {
+    chargerFactures('toutes');
+}
+
+// ========== INIT ==========
+document.addEventListener('DOMContentLoaded', function() {
+    chargerFactures('toutes');
+});
+</script>
+{% endblock %} 

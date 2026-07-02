@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Administration Structure{% endblock %}
+{% block title %}Gestion des actes et produits{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -9,15 +9,9 @@
     </div>
 
     <div class="col-md-9">
-        <!-- Onglets -->
-        <ul class="nav nav-tabs mb-3" id="adminTab" role="tablist">
+        <ul class="nav nav-tabs mb-3" id="gestionTab" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="users-tab" data-bs-toggle="tab" data-bs-target="#users" type="button" role="tab">
-                    <i class="fas fa-users"></i> Utilisateurs
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="actes-tab" data-bs-toggle="tab" data-bs-target="#actes" type="button" role="tab">
+                <button class="nav-link active" id="actes-tab" data-bs-toggle="tab" data-bs-target="#actes" type="button" role="tab">
                     <i class="fas fa-stethoscope"></i> Actes médicaux
                 </button>
             </li>
@@ -27,96 +21,16 @@
                 </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="structure-tab" data-bs-toggle="tab" data-bs-target="#structure" type="button" role="tab">
-                    <i class="fas fa-building"></i> Ma structure
+                <button class="nav-link" id="stats-produits-tab" data-bs-toggle="tab" data-bs-target="#statsProduits" type="button" role="tab">
+                    <i class="fas fa-chart-bar"></i> Statistiques
                 </button>
             </li>
         </ul>
 
         <div class="tab-content">
 
-            <!-- ========== ONGLET UTILISATEURS ========== -->
-            <div class="tab-pane fade show active" id="users" role="tabpanel">
-                <div class="card">
-                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                        <h5><i class="fas fa-users"></i> Gestion des utilisateurs</h5>
-                        <button class="btn btn-light btn-sm" onclick="showAddUserModal()">
-                            <i class="fas fa-plus"></i> Nouvel utilisateur
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Nom</th>
-                                        <th>Email</th>
-                                        <th>Rôle</th>
-                                        <th>Statut</th>
-                                        <th>Date création</th>
-                                        <th>Actions</th>
-                                        <th>Dernière connexion</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="usersList">
-                                    {% for user in users %}
-                                    <tr>
-                                        <td>{{ user.ID }}</td>
-                                        <td>{{ user.nom }}</td>
-                                        <td>{{ user.email }}</td>
-                                        <td>
-                                            {% if user.role == 'admin' %}
-                                                <span class="badge bg-danger">Administrateur</span>
-                                            {% elif user.role == 'medecin' %}
-                                                <span class="badge bg-primary">Médecin</span>
-                                            {% elif user.role == 'paramedical' %}
-                                                <span class="badge bg-warning text-dark">Paramédical</span>
-                                            {% elif user.role == 'pharmacien' %}
-                                                <span class="badge bg-success">Pharmacien</span>
-                                            {% elif user.role == 'caissier' %}
-                                                <span class="badge bg-info">Caissier</span>
-                                            {% elif user.role == 'secretaire' %}
-                                                <span class="badge bg-secondary">Secrétaire</span>
-                                            {% else %}
-                                                <span class="badge bg-secondary">{{ user.role }}</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            {% if user.actif == 'oui' or user.actif == 'true' or user.actif == '1' %}
-                                                <span class="badge bg-success" id="statutBadge{{ user.ID }}">Actif</span>
-                                            {% else %}
-                                                <span class="badge bg-secondary" id="statutBadge{{ user.ID }}">Inactif</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>{{ user.created_at[:10] if user.created_at else '-' }}</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-warning" onclick="toggleUserStatus({{ user.ID }}, '{{ user.actif }}')" title="Activer/Désactiver">
-                                                <i class="fas fa-power-off"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-danger" onclick="deleteUser({{ user.ID }})" title="Supprimer">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-info" onclick='editUser({{ user.ID }}, "{{ user.nom }}", "{{ user.email }}", "{{ user.role }}", "{{ user.actif }}")' title="Modifier">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                        </td>
-                                        <td>{{ user.derniere_connexion or '-' }}</td>
-                                    </tr>
-                                    {% else %}
-                                    <tr>
-                                        <td colspan="7" class="text-center">Aucun utilisateur</td>
-                                     </tr>
-                                    {% endfor %}
-                                </tbody>
-                             </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- ========== ONGLET ACTES MÉDICAUX ========== -->
-            <div class="tab-pane fade" id="actes" role="tabpanel">
+            <div class="tab-pane fade show active" id="actes" role="tabpanel">
                 <div class="card">
                     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                         <h5><i class="fas fa-stethoscope"></i> Catalogue des actes</h5>
@@ -175,80 +89,180 @@
                 </div>
             </div>
 
-<!-- ========== ONGLET PRODUITS & STOCKS ========== -->
-<div class="tab-pane fade" id="gestionProduits" role="tabpanel">
-    <div class="card">
-        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-            <h5><i class="fas fa-boxes"></i> Gestion des produits & stocks</h5>
-            <button class="btn btn-light btn-sm" onclick="showAddProduitModal()">
-                <i class="fas fa-plus"></i> Nouveau produit
-            </button>
-        </div>
-        <div class="card-body">
-            <div class="mb-3">
-                <div class="input-group">
-                    <span class="input-group-text"><i class="fas fa-search"></i></span>
-                    <input type="text" id="searchProduitAdmin" class="form-control" placeholder="Rechercher un produit..." onkeyup="filterProduitsAdmin()">
-                    <button class="btn btn-outline-secondary" onclick="clearSearchProduitAdmin()">✖</button>
-                </div>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-bordered table-hover">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Nom</th>
-                            <th>Prix vente</th>
-                            <th>Prix achat</th>
-                            <th>PBR</th>
-                            <th>Stock</th>
-                            <th>Seuil</th>
-                            <th>Péremption</th>
-                            <th>Lot</th>
-                            <th>Marge</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="produitsAdminList">
-                        <tr><td colspan="10" class="text-center">Chargement...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
-
-            <!-- ========== ONGLET MA STRUCTURE ========== -->
-            <div class="tab-pane fade" id="structure" role="tabpanel">
+            <!-- ========== ONGLET PRODUITS & STOCKS ========== -->
+            <div class="tab-pane fade" id="gestionProduits" role="tabpanel">
                 <div class="card">
-                    <div class="card-header bg-primary text-white">
-                        <h5><i class="fas fa-building"></i> Informations de ma structure</h5>
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-boxes"></i> Gestion des produits & stocks</h5>
+                        <div>
+                            <button class="btn btn-light btn-sm me-2" onclick="showAddProduitModal()">
+                                <i class="fas fa-plus"></i> Nouveau produit
+                            </button>
+                            <button class="btn btn-light btn-sm" onclick="exporterProduitsCSV()">
+                                <i class="fas fa-file-excel"></i> Exporter
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body">
-                        <form id="structureForm">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Nom de la structure</label>
-                                    <input type="text" class="form-control" id="structureNom" value="{{ structure_info.get('nom', '') if structure_info else '' }}">
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Email</label>
-                                    <input type="email" class="form-control" id="structureEmail" value="{{ structure_info.get('email', '') if structure_info else '' }}">
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Téléphone</label>
-                                    <input type="tel" class="form-control" id="structureTelephone" value="{{ structure_info.get('telephone', '') if structure_info else '' }}">
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Adresse</label>
-                                    <input type="text" class="form-control" id="structureAdresse" value="{{ structure_info.get('adresse', '') if structure_info else '' }}">
-                                </div>
-                                <div class="col-md-12 mb-3">
-                                    <label class="form-label">Logo URL</label>
-                                    <input type="text" class="form-control" id="structureLogo" value="{{ structure_info.get('logo_url', '') if structure_info else '' }}" placeholder="https://...">
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-3">
+                                <div class="card bg-light border-0 shadow-sm">
+                                    <div class="card-body text-center">
+                                        <h6 class="text-primary" id="totalProduitsCard">0</h6>
+                                        <small class="text-muted">Total produits</small>
+                                    </div>
                                 </div>
                             </div>
-                            <button type="submit" class="btn btn-primary">Mettre à jour</button>
-                        </form>
+                            <div class="col-md-3">
+                                <div class="card bg-success bg-opacity-10 border-0 shadow-sm">
+                                    <div class="card-body text-center">
+                                        <h6 class="text-success" id="valeurStockCard">0 FCFA</h6>
+                                        <small class="text-muted">Valeur du stock</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-danger bg-opacity-10 border-0 shadow-sm">
+                                    <div class="card-body text-center">
+                                        <h6 class="text-danger" id="produitsPerimesCard">0</h6>
+                                        <small class="text-muted">Produits périmés</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-warning bg-opacity-10 border-0 shadow-sm">
+                                    <div class="card-body text-center">
+                                        <h6 class="text-warning" id="stockAlerteCard">0</h6>
+                                        <small class="text-muted">Stock bas</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                <input type="text" id="searchProduitAdmin" class="form-control" placeholder="Rechercher un produit..." onkeyup="filterProduitsAdmin()">
+                                <button class="btn btn-outline-secondary" onclick="clearSearchProduitAdmin()">✖</button>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Nom</th>
+                                        <th>Prix vente</th>
+                                        <th>Prix achat</th>
+                                        <th>PBR</th>
+                                        <th>Stock</th>
+                                        <th>Seuil</th>
+                                        <th>Péremption</th>
+                                        <th>Lot</th>
+                                        <th>Marge</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="produitsAdminList">
+                                    <tr><td colspan="10" class="text-center">Chargement...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ONGLET STATISTIQUES ========== -->
+            <div class="tab-pane fade" id="statsProduits" role="tabpanel">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5><i class="fas fa-chart-bar"></i> Statistiques des produits</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-3">
+                                <div class="card bg-light border-0 shadow-sm">
+                                    <div class="card-body text-center">
+                                        <h4 class="text-primary" id="statTotalProduits">0</h4>
+                                        <small class="text-muted">Total produits</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-success bg-opacity-10 border-0 shadow-sm">
+                                    <div class="card-body text-center">
+                                        <h4 class="text-success" id="statValeurStock">0 FCFA</h4>
+                                        <small class="text-muted">Valeur du stock</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-danger bg-opacity-10 border-0 shadow-sm">
+                                    <div class="card-body text-center">
+                                        <h4 class="text-danger" id="statPerimes">0</h4>
+                                        <small class="text-muted">Produits périmés</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-warning bg-opacity-10 border-0 shadow-sm">
+                                    <div class="card-body text-center">
+                                        <h4 class="text-warning" id="statBientotPerimes">0</h4>
+                                        <small class="text-muted">Bientôt périmés</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Top 10 produits par marge -->
+                        <div class="card mt-3">
+                            <div class="card-header bg-success text-white">
+                                <h6><i class="fas fa-chart-line"></i> Top 10 produits par marge</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Produit</th>
+                                                <th>Prix vente</th>
+                                                <th>Prix achat</th>
+                                                <th>Marge unitaire</th>
+                                                <th>Stock</th>
+                                                <th>Marge totale</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="topMargeList">
+                                            <tr><td colspan="7" class="text-center">Chargement...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Produits périmés -->
+                        <div class="card mt-3">
+                            <div class="card-header bg-danger text-white">
+                                <h6><i class="fas fa-calendar-times"></i> Produits périmés ou bientôt périmés</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Produit</th>
+                                                <th>Date péremption</th>
+                                                <th>Stock</th>
+                                                <th>Statut</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="peremptionList">
+                                            <tr><td colspan="4" class="text-center">Chargement...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -256,56 +270,7 @@
     </div>
 </div>
 
-<!-- Modal Utilisateur -->
-<div class="modal fade" id="userModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title" id="userModalTitle">Ajouter un utilisateur</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="userForm">
-                    <input type="hidden" id="userId">
-                    <div class="mb-3">
-                        <label class="form-label">Nom complet</label>
-                        <input type="text" class="form-control" id="userNom" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Email</label>
-                        <input type="email" class="form-control" id="userEmail" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Mot de passe</label>
-                        <input type="password" class="form-control" id="userPassword" placeholder="Laisser vide pour ne pas changer">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Rôle</label>
-                        <select class="form-control" id="userRole">
-                            <option value="caissier">Caissier</option>
-                            <option value="secretaire">Secretaire</option>
-                            <option value="medecin">Médecin</option>
-                            <option value="paramedical">Paramédical</option>
-                            <option value="pharmacien">Pharmacien</option>
-                            <option value="admin">Administrateur</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Statut</label>
-                        <select class="form-control" id="userActif">
-                            <option value="oui">Actif</option>
-                            <option value="non">Inactif</option>
-                        </select>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button class="btn btn-primary" onclick="saveUser()">Enregistrer</button>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- ========== MODALS ========== -->
 
 <!-- Modal Acte -->
 <div class="modal fade" id="acteModal" tabindex="-1">
@@ -360,7 +325,6 @@
                 <form id="produitForm">
                     <input type="hidden" id="produitId">
                     
-                    <!-- Informations générales -->
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Nom *</label>
@@ -381,7 +345,6 @@
                         </div>
                     </div>
                     
-                    <!-- Prix et PBR -->
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Prix vente (FCFA) *</label>
@@ -397,7 +360,6 @@
                         </div>
                     </div>
                     
-                    <!-- Stock et seuil -->
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Stock initial</label>
@@ -413,7 +375,6 @@
                         </div>
                     </div>
                     
-                    <!-- Péremption -->
                     <div class="row">
                         <div class="col-md-12 mb-3">
                             <label class="form-label">Date de péremption</label>
@@ -474,7 +435,7 @@ function clearSearchActe() {
     filterActes(); 
 }
 
-// ========== GESTION PRODUITS & STOCKS ==========
+// ========== GESTION PRODUITS ==========
 let tousLesProduits = [];
 
 function chargerProduitsAdmin() {
@@ -483,6 +444,7 @@ function chargerProduitsAdmin() {
         .then(data => { 
             tousLesProduits = data; 
             afficherProduitsAdmin(data); 
+            updateStats(data);
         })
         .catch(error => {
             console.error('Erreur:', error);
@@ -556,6 +518,198 @@ function clearSearchProduitAdmin() {
     afficherProduitsAdmin(tousLesProduits); 
 }
 
+function updateStats(produits) {
+    let total = produits.length;
+    let valeurStock = 0;
+    let perimes = 0;
+    let bientotPerimes = 0;
+    let stockAlerte = 0;
+    let topMarge = [];
+    
+    const today = new Date();
+    const dateLimite = new Date();
+    dateLimite.setDate(dateLimite.getDate() + 30);
+    
+    produits.forEach(p => {
+        valeurStock += (p.prix_achat || 0) * (p.quantite_stock || 0);
+        
+        if (p.quantite_stock <= p.seuil_alerte) stockAlerte++;
+        
+        if (p.date_peremption) {
+            const perempDate = new Date(p.date_peremption);
+            if (perempDate < today) {
+                perimes++;
+            } else if (perempDate <= dateLimite) {
+                bientotPerimes++;
+            }
+        }
+        
+        const marge = (p.prix_vente || 0) - (p.prix_achat || 0);
+        if (marge > 0 && p.quantite_stock > 0) {
+            topMarge.push({
+                nom: p.nom,
+                prix_vente: p.prix_vente,
+                prix_achat: p.prix_achat,
+                marge: marge,
+                stock: p.quantite_stock,
+                marge_totale: marge * p.quantite_stock
+            });
+        }
+    });
+    
+    topMarge.sort((a, b) => b.marge_totale - a.marge_totale);
+    topMarge = topMarge.slice(0, 10);
+    
+    // Cartes
+    document.getElementById('totalProduitsCard').textContent = total;
+    document.getElementById('valeurStockCard').textContent = Math.round(valeurStock).toLocaleString() + ' FCFA';
+    document.getElementById('produitsPerimesCard').textContent = perimes;
+    document.getElementById('stockAlerteCard').textContent = stockAlerte;
+    
+    // Statistiques
+    document.getElementById('statTotalProduits').textContent = total;
+    document.getElementById('statValeurStock').textContent = Math.round(valeurStock).toLocaleString() + ' FCFA';
+    document.getElementById('statPerimes').textContent = perimes;
+    document.getElementById('statBientotPerimes').textContent = bientotPerimes;
+    
+    // Top marge
+    const topMargeList = document.getElementById('topMargeList');
+    if (topMarge.length > 0) {
+        topMargeList.innerHTML = topMarge.map((p, i) => `
+            <tr>
+                <td>${i + 1}</td>
+                <td><strong>${p.nom}</strong></td>
+                <td>${p.prix_vente.toLocaleString()} F</td>
+                <td>${p.prix_achat.toLocaleString()} F</td>
+                <td class="text-success">${p.marge.toLocaleString()} F</td>
+                <td>${p.stock}</td>
+                <td class="text-success fw-bold">${p.marge_totale.toLocaleString()} F</td>
+            </tr>
+        `).join('');
+    } else {
+        topMargeList.innerHTML = '<tr><td colspan="7" class="text-center">Aucune donnée</td></tr>';
+    }
+    
+    // Produits périmés/bientôt périmés
+    const peremptionList = document.getElementById('peremptionList');
+    const produitsPerimes = produits.filter(p => {
+        if (!p.date_peremption) return false;
+        const perempDate = new Date(p.date_peremption);
+        return perempDate <= dateLimite;
+    });
+    
+    if (produitsPerimes.length > 0) {
+        peremptionList.innerHTML = produitsPerimes.map(p => {
+            const perempDate = new Date(p.date_peremption);
+            const estPerime = perempDate < today;
+            const joursRestants = Math.ceil((perempDate - today) / (1000 * 60 * 60 * 24));
+            return `
+                <tr>
+                    <td><strong>${p.nom}</strong></td>
+                    <td>${p.date_peremption}</td>
+                    <td>${p.quantite_stock}</td>
+                    <td>
+                        ${estPerime ? '<span class="badge bg-danger">Périmé</span>' : `<span class="badge bg-warning">${joursRestants} jours restants</span>`}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } else {
+        peremptionList.innerHTML = '<tr><td colspan="4" class="text-center text-success">✅ Aucun produit périmé ou bientôt périmé</td></tr>';
+    }
+}
+
+function exporterProduitsCSV() {
+    if (!tousLesProduits || tousLesProduits.length === 0) {
+        alert('Aucun produit à exporter');
+        return;
+    }
+    
+    let csvContent = "Nom;Prix vente;Prix achat;PBR;Stock;Seuil;Unité;Péremption;Lot;Marge\n";
+    tousLesProduits.forEach(p => {
+        const marge = (p.prix_vente || 0) - (p.prix_achat || 0);
+        csvContent += `"${p.nom}";${p.prix_vente || 0};${p.prix_achat || 0};${p.pbr || p.prix_vente || 0};${p.quantite_stock || 0};${p.seuil_alerte || 10};${p.unite || 'unité'};${p.date_peremption || ''};${p.lot || ''};${marge}\n`;
+    });
+    
+    const blob = new Blob(["\uFEFF" + csvContent], {type: 'text/csv;charset=utf-8;'});
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'produits.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
+
+// ========== ACTES ==========
+function showAddActeModal() {
+    document.getElementById('acteModalTitle').innerText = 'Ajouter un acte';
+    document.getElementById('acteId').value = '';
+    document.getElementById('acteForm').reset();
+    document.getElementById('actePBR').value = '';
+    new bootstrap.Modal(document.getElementById('acteModal')).show();
+}
+
+function editActe(id, nom, prix, pbr, description) {
+    document.getElementById('acteModalTitle').innerText = "Modifier l'acte";
+    document.getElementById('acteId').value = id;
+    document.getElementById('acteNom').value = nom;
+    document.getElementById('actePrix').value = prix;
+    document.getElementById('actePBR').value = pbr || prix;
+    document.getElementById('acteDescription').value = description || '';
+    new bootstrap.Modal(document.getElementById('acteModal')).show();
+}
+
+function saveActe() {
+    const data = {
+        id: document.getElementById('acteId').value,
+        nom: document.getElementById('acteNom').value,
+        code: document.getElementById('acteCode').value,
+        prix: parseInt(document.getElementById('actePrix').value),
+        pbr: parseInt(document.getElementById('actePBR').value) || parseInt(document.getElementById('actePrix').value),
+        description: document.getElementById('acteDescription').value
+    };
+    
+    if (!data.nom || !data.prix) {
+        alert('Veuillez remplir tous les champs obligatoires');
+        return;
+    }
+    
+    showLoader();
+    
+    fetch('/api/admin/actes', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => { 
+        hideLoader();
+        if(data.success) {
+            alert('Acte enregistré');
+            location.reload();
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+        }
+    });
+}
+
+function deleteActe(id) {
+    if (confirm('Supprimer cet acte ?')) {
+        showLoader();
+        fetch(`/api/admin/actes/${id}`, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(data => { 
+                hideLoader();
+                if(data.success) {
+                    alert('Acte supprimé');
+                    location.reload();
+                } else {
+                    alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+                }
+            });
+    }
+}
+
+// ========== PRODUITS ==========
 function showAddProduitModal() {
     document.getElementById('produitModalTitle').innerText = 'Ajouter un produit';
     document.getElementById('produitId').value = '';
@@ -622,7 +776,6 @@ function saveProduit() {
             alert(id ? '✓ Produit modifié' : '✓ Produit ajouté');
             bootstrap.Modal.getInstance(document.getElementById('produitModal')).hide();
             chargerProduitsAdmin();
-            if (typeof chargerProduits === 'function') chargerProduits();
         } else {
             alert('Erreur: ' + (data.error || 'Erreur inconnue'));
         }
@@ -649,6 +802,8 @@ function validerApprovisionnement() {
         return; 
     }
     
+    showLoader();
+    
     fetch(`/api/produits/${id}/approvisionner`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -656,11 +811,11 @@ function validerApprovisionnement() {
     })
     .then(r => r.json())
     .then(data => {
+        hideLoader();
         if (data.success) {
             alert(`✓ ${quantite} unité(s) ajoutée(s) au stock`);
             bootstrap.Modal.getInstance(document.getElementById('approModal')).hide();
             chargerProduitsAdmin();
-            if (typeof chargerProduits === 'function') chargerProduits();
         } else {
             alert('Erreur: ' + (data.error || 'Erreur inconnue'));
         }
@@ -669,213 +824,20 @@ function validerApprovisionnement() {
 
 function supprimerProduit(id) {
     if (confirm('Supprimer définitivement ce produit ?')) {
+        showLoader();
         fetch(`/api/admin/produits/${id}`, { method: 'DELETE' })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Produit supprimé');
-                    chargerProduitsAdmin();
-                    if (typeof chargerProduits === 'function') chargerProduits();
-                } else {
-                    alert('Erreur: ' + data.error);
-                }
-            });
-    }
-}
-// ========== GESTION ACTES ==========
-function showAddActeModal() {
-    document.getElementById('acteModalTitle').innerText = 'Ajouter un acte';
-    document.getElementById('acteId').value = '';
-    document.getElementById('acteForm').reset();
-    document.getElementById('actePBR').value = '';
-    new bootstrap.Modal(document.getElementById('acteModal')).show();
-}
-
-function editActe(id, nom, prix, pbr, description) {
-    document.getElementById('acteModalTitle').innerText = "Modifier l'acte";
-    document.getElementById('acteId').value = id;
-    document.getElementById('acteNom').value = nom;
-    document.getElementById('actePrix').value = prix;
-    document.getElementById('actePBR').value = pbr || prix;
-    document.getElementById('acteDescription').value = description || '';
-    new bootstrap.Modal(document.getElementById('acteModal')).show();
-}
-
-function saveActe() {
-    const data = {
-        id: document.getElementById('acteId').value,
-        nom: document.getElementById('acteNom').value,
-        code: document.getElementById('acteCode').value,
-        prix: parseInt(document.getElementById('actePrix').value),
-        pbr: parseInt(document.getElementById('actePBR').value) || parseInt(document.getElementById('actePrix').value),
-        description: document.getElementById('acteDescription').value
-    };
-    
-    if (!data.nom || !data.prix) {
-        alert('Veuillez remplir tous les champs obligatoires');
-        return;
-    }
-    
-    fetch('/api/admin/actes', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(data => { 
-        if(data.success) {
-            location.reload();
-        } else {
-            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
-        }
-    });
-}
-
-function deleteActe(id) {
-    if (confirm('Supprimer cet acte ?')) {
-        fetch(`/api/admin/actes/${id}`, { method: 'DELETE' })
-            .then(r => r.json())
-            .then(data => { 
-                if(data.success) {
-                    location.reload();
-                } else {
-                    alert('Erreur: ' + (data.error || 'Erreur inconnue'));
-                }
-            });
-    }
-}
-
-// ========== GESTION UTILISATEURS ==========
-function showAddUserModal() {
-    document.getElementById('userModalTitle').innerText = 'Ajouter un utilisateur';
-    document.getElementById('userId').value = '';
-    document.getElementById('userForm').reset();
-    document.getElementById('userActif').value = 'oui';
-    new bootstrap.Modal(document.getElementById('userModal')).show();
-}
-
-function editUser(id, nom, email, role, actif) {
-    document.getElementById('userModalTitle').innerText = 'Modifier un utilisateur';
-    document.getElementById('userId').value = id;
-    document.getElementById('userNom').value = nom;
-    document.getElementById('userEmail').value = email;
-    document.getElementById('userPassword').value = '';
-    document.getElementById('userRole').value = role;
-    document.getElementById('userActif').value = actif === 'oui' ? 'oui' : 'non';
-    new bootstrap.Modal(document.getElementById('userModal')).show();
-}
-
-function saveUser() {
-    const data = {
-        id: document.getElementById('userId').value,
-        nom: document.getElementById('userNom').value,
-        email: document.getElementById('userEmail').value,
-        password: document.getElementById('userPassword').value,
-        role: document.getElementById('userRole').value,
-        actif: document.getElementById('userActif').value
-    };
-    
-    if (!data.nom || !data.email) {
-        alert('Veuillez remplir tous les champs obligatoires');
-        return;
-    }
-    
-    showLoader();
-    
-    fetch('/api/admin/users', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(data => {
-        hideLoader();
-        if (data.success) {
-            alert(data.id ? 'Utilisateur modifié' : 'Utilisateur ajouté');
-            location.reload();
-        } else {
-            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
-        }
-    })
-    .catch(error => {
-        hideLoader();
-        alert('Erreur: ' + error);
-    });
-}
-
-function toggleUserStatus(userId, actuel) {
-    const nouveauStatut = (actuel === 'oui' || actuel === 'true' || actuel === '1') ? 'non' : 'oui';
-    const message = nouveauStatut === 'oui' ? 'activer' : 'désactiver';
-    
-    if (confirm(`Voulez-vous ${message} cet utilisateur ?`)) {
-        showLoader();
-        
-        fetch(`/api/admin/users/${userId}/toggle`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({actif: nouveauStatut})
-        })
-        .then(r => r.json())
-        .then(data => {
-            hideLoader();
-            if (data.success) {
-                alert(`Utilisateur ${message} avec succès`);
-                location.reload();
-            } else {
-                alert('Erreur: ' + data.error);
-            }
-        })
-        .catch(error => {
-            hideLoader();
-            alert('Erreur: ' + error);
-        });
-    }
-}
-
-function deleteUser(id) {
-    if (confirm('Supprimer cet utilisateur ?')) {
-        showLoader();
-        
-        fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
             .then(r => r.json())
             .then(data => {
                 hideLoader();
                 if (data.success) {
-                    alert('Utilisateur supprimé');
-                    location.reload();
+                    alert('Produit supprimé');
+                    chargerProduitsAdmin();
                 } else {
                     alert('Erreur: ' + data.error);
                 }
             });
     }
 }
-
-// ========== GESTION STRUCTURE ==========
-document.getElementById('structureForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const data = {
-        nom: document.getElementById('structureNom').value,
-        email: document.getElementById('structureEmail').value,
-        telephone: document.getElementById('structureTelephone').value,
-        adresse: document.getElementById('structureAdresse').value,
-        logo_url: document.getElementById('structureLogo').value
-    };
-    
-    fetch('/api/admin/structure', {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(data => { 
-        if(data.success) {
-            alert('✓ Structure mise à jour');
-            location.reload();
-        } else {
-            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
-        }
-    });
-});
 
 // ========== LOADER ==========
 function showLoader() {
@@ -895,7 +857,7 @@ function hideLoader() {
     if (loader) loader.style.display = 'none';
 }
 
-// Initialisation
+// ========== INITIALISATION ==========
 document.addEventListener('DOMContentLoaded', function() {
     chargerProduitsAdmin();
 });

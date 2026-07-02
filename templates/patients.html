@@ -46,15 +46,18 @@
                     <table class="table table-hover table-bordered" id="patientsTable">
                         <thead class="table-light">
                             <tr>
-                                <th style="width: 5%">ID</th>
-                                <th style="width: 18%">Nom complet</th>
-                                <th style="width: 12%">Téléphone</th>
-                                <th style="width: 15%">Adresse</th>
-                                <th style="width: 12%">Date naissance / Âge</th>
-                                <th style="width: 12%">Assurance</th>
-                                <th style="width: 5%">Taux</th>
-                                <th style="width: 12%">Assurance 2</th>
-                                <th style="width: 5%">Taux 2</th>
+                                <th style="width: 4%">ID</th>
+                                <th style="width: 15%">Nom complet</th>
+                                <th style="width: 10%">Téléphone</th>
+                                <th style="width: 12%">Adresse</th>
+                                <th style="width: 10%">Date naissance / Âge</th>
+                                <th style="width: 10%">Assurance</th>
+                                <th style="width: 4%">Taux</th>
+                                <th style="width: 10%">Assurance 2</th>
+                                <th style="width: 4%">Taux 2</th>
+                                <th style="width: 10%">Contact d'urgence</th>
+                                <th style="width: 8%">Tél. urgence</th>
+                                <th style="width: 6%">Lien</th>
                                 <th style="width: 5%">Actions</th>
                             </tr>
                         </thead>
@@ -93,6 +96,9 @@
                                     {% endif %}
                                 </td>
                                 <td style="vertical-align: middle; text-align: center;">{{ patient.taux_assurance2 or 0 }}%</td>
+                                <td style="vertical-align: middle;">{{ patient.personne_a_prevenir_nom or '-' }}</td>
+                                <td style="vertical-align: middle;">{{ patient.personne_a_prevenir_telephone or '-' }}</td>
+                                <td style="vertical-align: middle;">{{ patient.personne_a_prevenir_relation or '-' }}</td>
                                 <td style="vertical-align: middle; text-align: center;">
                                     <div class="btn-group btn-group-sm">
                                         <button class="btn btn-success" onclick='selectPatient({{ patient.ID }}, "{{ patient.nom }} {{ patient.prenom }}", "{{ patient.type_assurance }}", {{ patient.taux_prise_charge or 0 }}, "{{ patient.assurance2_nom or '' }}", {{ patient.taux_assurance2 or 0 }})' title="Sélectionner">
@@ -109,7 +115,7 @@
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="10" class="text-center">Aucun patient</td>
+                                <td colspan="13" class="text-center">Aucun patient</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -144,8 +150,8 @@
                             <input type="text" class="form-control" id="nom" required>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">Prénom</label>
-                            <input type="text" class="form-control" id="prenom">
+                            <label class="form-label">Prénom *</label>
+                            <input type="text" class="form-control" id="prenom" required>
                         </div>
                     </div>
                     <div class="mb-3">
@@ -156,6 +162,51 @@
                         <label class="form-label">Adresse</label>
                         <input type="text" class="form-control" id="adresse">
                     </div>
+                    
+                    <!-- ===== PERSONNE À PRÉVENIR ===== -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-warning text-dark">
+                            <h6><i class="fas fa-phone-alt"></i> Personne à prévenir (contact d'urgence)</h6>
+                            <span class="badge bg-light text-dark ms-2">Optionnel</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-2">
+                                    <label class="form-label">Nom complet</label>
+                                    <input type="text" class="form-control" id="personne_prevenir_nom" 
+                                           placeholder="Ex: Jean Dupont">
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <label class="form-label">Téléphone</label>
+                                    <input type="tel" class="form-control" id="personne_prevenir_telephone" 
+                                           placeholder="90 00 00 00">
+                                </div>
+                                <div class="col-md-2 mb-2">
+                                    <label class="form-label">Lien parenté</label>
+                                    <select class="form-control" id="personne_prevenir_relation">
+                                        <option value="">--</option>
+                                        <option value="Conjoint(e)">Conjoint(e)</option>
+                                        <option value="Enfant">Enfant</option>
+                                        <option value="Parent">Parent</option>
+                                        <option value="Frère/Sœur">Frère/Sœur</option>
+                                        <option value="Ami(e)">Ami(e)</option>
+                                        <option value="Collègue">Collègue</option>
+                                        <option value="Voisin(e)">Voisin(e)</option>
+                                        <option value="Autre">Autre</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <small class="text-muted">
+                                        <i class="fas fa-info-circle"></i> 
+                                        Personne à contacter en cas d'urgence.
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="mb-3">
                         <label class="form-label">Date de naissance <span class="text-muted">(optionnel)</span></label>
                         <input type="date" class="form-control" id="date_naissance" onchange="updateAgeFromDate()">
@@ -221,11 +272,6 @@
                                         <option value="autre">Autre</option>
                                     </select>
                                 </div>
-<div class="col-md-4 mb-2" id="autre_assurance2_div" style="display:none;">
-    <label class="form-label">Précisez le nom</label>
-    <input type="text" class="form-control" id="autre_assurance2" placeholder="Ex: MUTUELLE, CNPS...">
-</div>
-
                                 <div class="col-md-4 mb-2">
                                     <label class="form-label">Taux (%)</label>
                                     <input type="number" class="form-control" id="taux_assurance2" value="0" min="0" max="100" step="5">
@@ -233,6 +279,12 @@
                                 <div class="col-md-3 mb-2">
                                     <label class="form-label">N° Assuré</label>
                                     <input type="text" class="form-control" id="numero_assure2" placeholder="Numéro CAC">
+                                </div>
+                            </div>
+                            <div class="row" id="autre_assurance2_div" style="display:none;">
+                                <div class="col-md-12">
+                                    <label class="form-label">Précisez le nom</label>
+                                    <input type="text" class="form-control" id="autre_assurance2" placeholder="Ex: MUTUELLE, CNPS...">
                                 </div>
                             </div>
                             <div class="row">
@@ -284,9 +336,54 @@
                         <label class="form-label">Adresse</label>
                         <input type="text" class="form-control" id="editAdresse">
                     </div>
+                    
+                    <!-- ===== PERSONNE À PRÉVENIR (MODIFICATION) ===== -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-warning text-dark">
+                            <h6><i class="fas fa-phone-alt"></i> Personne à prévenir (contact d'urgence)</h6>
+                            <span class="badge bg-light text-dark ms-2">Optionnel</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-2">
+                                    <label class="form-label">Nom complet</label>
+                                    <input type="text" class="form-control" id="editPersonnePrevenirNom" 
+                                           placeholder="Ex: Jean Dupont">
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <label class="form-label">Téléphone</label>
+                                    <input type="tel" class="form-control" id="editPersonnePrevenirTelephone" 
+                                           placeholder="90 00 00 00">
+                                </div>
+                                <div class="col-md-2 mb-2">
+                                    <label class="form-label">Lien parenté</label>
+                                    <select class="form-control" id="editPersonnePrevenirRelation">
+                                        <option value="">--</option>
+                                        <option value="Conjoint(e)">Conjoint(e)</option>
+                                        <option value="Enfant">Enfant</option>
+                                        <option value="Parent">Parent</option>
+                                        <option value="Frère/Sœur">Frère/Sœur</option>
+                                        <option value="Ami(e)">Ami(e)</option>
+                                        <option value="Collègue">Collègue</option>
+                                        <option value="Voisin(e)">Voisin(e)</option>
+                                        <option value="Autre">Autre</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <small class="text-muted">
+                                        <i class="fas fa-info-circle"></i> 
+                                        Personne à contacter en cas d'urgence.
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="mb-3">
                         <label class="form-label">Date de naissance <span class="text-muted">(optionnel)</span></label>
-                        <input type="date" class="form-control" id="editDateNaissance">
+                        <input type="date" class="form-control" id="editDateNaissance" onchange="updateEditAge()">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Âge</label>
@@ -311,7 +408,7 @@
                                 </div>
                                 <div class="col-md-4 mb-2">
                                     <label class="form-label">Taux (%)</label>
-                                    <input type="number" class="form-control" id="editTaux" min="0" max="100">
+                                    <input type="number" class="form-control" id="editTaux" min="0" max="100" step="5">
                                 </div>
                                 <div class="col-md-3 mb-2" id="editNumeroAssureDiv" style="display:none;">
                                     <label class="form-label">N° Assuré</label>
@@ -356,6 +453,12 @@
                                     <input type="text" class="form-control" id="editNumeroAssure2" placeholder="Numéro CAC">
                                 </div>
                             </div>
+                            <div class="row" id="editAutreAssurance2Div" style="display:none;">
+                                <div class="col-md-12">
+                                    <label class="form-label">Précisez le nom</label>
+                                    <input type="text" class="form-control" id="editAutreAssurance2" placeholder="Ex: MUTUELLE, CNPS...">
+                                </div>
+                            </div>
                             <div class="row">
                                 <div class="col-md-12">
                                     <small class="text-muted">
@@ -376,14 +479,78 @@
     </div>
 </div>
 
+<!-- Modal de progression -->
+<div class="modal fade" id="progressModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center p-4">
+                <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+                    <span class="visually-hidden">Chargement...</span>
+                </div>
+                <h5 id="progressTitle">Traitement en cours...</h5>
+                <p id="progressMessage" class="text-muted mb-0">Veuillez patienter</p>
+                <div class="progress mt-3" style="height: 5px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-// Variables pour la pagination
+// ============================================
+// VARIABLES POUR LA PAGINATION
+// ============================================
 let allPatients = [];
 let currentPage = 1;
 let rowsPerPage = 10;
 let currentFiltered = [];
 
-// Fonction pour calculer l'âge
+// ============================================
+// FONCTIONS DE PROGRESSION
+// ============================================
+function showLoader(message) {
+    let modal = document.getElementById('progressModal');
+    if (!modal) {
+        const modalHtml = `
+            <div class="modal fade" id="progressModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-body text-center p-4">
+                            <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+                                <span class="visually-hidden">Chargement...</span>
+                            </div>
+                            <h5 id="progressTitle">Traitement en cours...</h5>
+                            <p id="progressMessage" class="text-muted mb-0">Veuillez patienter</p>
+                            <div class="progress mt-3" style="height: 5px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        modal = document.getElementById('progressModal');
+    }
+    
+    document.getElementById('progressTitle').innerText = message || 'Traitement en cours...';
+    document.getElementById('progressMessage').innerHTML = 'Veuillez patienter...';
+    const modalInstance = new bootstrap.Modal(modal);
+    modalInstance.show();
+}
+
+function hideLoader() {
+    const modal = document.getElementById('progressModal');
+    if (modal) {
+        const modalInstance = bootstrap.Modal.getInstance(modal);
+        if (modalInstance) modalInstance.hide();
+    }
+}
+
+// ============================================
+// FONCTIONS DE CALCUL D'ÂGE
+// ============================================
 function calculerAge(dateNaissance) {
     if (!dateNaissance) return '';
     const today = new Date();
@@ -396,39 +563,17 @@ function calculerAge(dateNaissance) {
     return age;
 }
 
-// Mettre à jour l'âge automatiquement
-function updateAge() {
-    const dateNaissance = document.getElementById('date_naissance').value;
-    const age = calculerAge(dateNaissance);
-    document.getElementById('age').value = age;
-}
-
-function updateEditAge() {
-    const dateNaissance = document.getElementById('editDateNaissance').value;
-    const age = calculerAge(dateNaissance);
-    document.getElementById('editAge').value = age;
-}
-
-// Calculer l'âge à partir de la date de naissance
 function updateAgeFromDate() {
     const dateNaissance = document.getElementById('date_naissance').value;
     const ageInput = document.getElementById('age');
     
     if (dateNaissance) {
-        const today = new Date();
-        const birthDate = new Date(dateNaissance);
-        let age = today.getFullYear() - birthDate.getFullYear();
-        const m = today.getMonth() - birthDate.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-            age--;
-        }
-        ageInput.value = age;
+        ageInput.value = calculerAge(dateNaissance);
     } else {
         ageInput.value = '';
     }
 }
 
-// Calculer la date de naissance approximative à partir de l'âge
 function updateDateFromAge() {
     const age = document.getElementById('age').value;
     const dateInput = document.getElementById('date_naissance');
@@ -443,33 +588,14 @@ function updateDateFromAge() {
     }
 }
 
-// Initialisation
-document.addEventListener('DOMContentLoaded', function() {
-    const rows = document.querySelectorAll('#patientsList tr.patient-row');
-    rows.forEach(row => {
-        const cells = row.cells;
-        allPatients.push({
-            element: row,
-            id: cells[0].innerText,
-            nomComplet: cells[1].innerText.toLowerCase(),
-            telephone: cells[2].innerText,
-            adresse: cells[3].innerText,
-            dateNaissance: cells[4].innerText,
-            assurance: cells[5].innerText.toLowerCase(),
-            taux: cells[6].innerText,
-            assurance2: cells[7]?.innerText || '',
-            taux2: cells[8]?.innerText || ''
-        });
-    });
-    currentFiltered = [...allPatients];
-    updateResultCount();
-    updatePagination();
-    displayPage(1);
-    
-    document.getElementById('date_naissance').addEventListener('change', updateAge);
-    document.getElementById('editDateNaissance').addEventListener('change', updateEditAge);
-});
+function updateEditAge() {
+    const dateNaissance = document.getElementById('editDateNaissance').value;
+    document.getElementById('editAge').value = calculerAge(dateNaissance);
+}
 
+// ============================================
+// PAGINATION
+// ============================================
 function filterPatients() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
     if (searchTerm === '') {
@@ -540,11 +666,14 @@ function changePage(page) {
     updatePagination();
 }
 
+// ============================================
+// EXPORT CSV
+// ============================================
 function exportToCSV() {
-    let csvContent = "ID,Nom complet,Téléphone,Adresse,Date naissance,Assurance,Taux,Assurance2,Taux2\n";
+    let csvContent = "ID,Nom complet,Téléphone,Adresse,Date naissance,Assurance,Taux,Assurance2,Taux2,Contact urgence,Tél urgence,Lien parenté\n";
     currentFiltered.forEach(p => {
         const cells = p.element.cells;
-        csvContent += `"${cells[0].innerText}","${cells[1].innerText}","${cells[2].innerText}","${cells[3].innerText}","${cells[4].innerText}","${cells[5].innerText}","${cells[6].innerText}","${cells[7]?.innerText || ''}","${cells[8]?.innerText || ''}"\n`;
+        csvContent += `"${cells[0].innerText}","${cells[1].innerText}","${cells[2].innerText}","${cells[3].innerText}","${cells[4].innerText}","${cells[5].innerText}","${cells[6].innerText}","${cells[7]?.innerText || ''}","${cells[8]?.innerText || ''}","${cells[9]?.innerText || ''}","${cells[10]?.innerText || ''}","${cells[11]?.innerText || ''}"\n`;
     });
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -554,7 +683,9 @@ function exportToCSV() {
     URL.revokeObjectURL(link.href);
 }
 
-// ========== GESTION ASSURANCE PRINCIPALE ==========
+// ============================================
+// GESTION ASSURANCE PRINCIPALE
+// ============================================
 function toggleTaux() {
     const type = document.getElementById('type_assurance').value;
     const tauxInput = document.getElementById('taux_prise_charge');
@@ -566,12 +697,7 @@ function toggleTaux() {
         tauxInput.readOnly = true;
         numeroDiv.style.display = 'none';
         autreDiv.style.display = 'none';
-    } else if (type === 'amu_cnss') {
-        tauxInput.value = 80;
-        tauxInput.readOnly = false;
-        numeroDiv.style.display = 'block';
-        autreDiv.style.display = 'none';
-    } else if (type === 'amu_inam') {
+    } else if (type === 'amu_cnss' || type === 'amu_inam') {
         tauxInput.value = 80;
         tauxInput.readOnly = false;
         numeroDiv.style.display = 'block';
@@ -595,12 +721,7 @@ function toggleEditTaux() {
         tauxInput.readOnly = true;
         numeroDiv.style.display = 'none';
         autreDiv.style.display = 'none';
-    } else if (type === 'amu_cnss') {
-        tauxInput.value = 80;
-        tauxInput.readOnly = false;
-        numeroDiv.style.display = 'block';
-        autreDiv.style.display = 'none';
-    } else if (type === 'amu_inam') {
+    } else if (type === 'amu_cnss' || type === 'amu_inam') {
         tauxInput.value = 80;
         tauxInput.readOnly = false;
         numeroDiv.style.display = 'block';
@@ -613,7 +734,9 @@ function toggleEditTaux() {
     }
 }
 
-// ========== GESTION ASSURANCE COMPLÉMENTAIRE ==========
+// ============================================
+// GESTION ASSURANCE COMPLÉMENTAIRE
+// ============================================
 function toggleAssurance2() {
     const type = document.getElementById('assurance2_nom').value;
     const tauxInput = document.getElementById('taux_assurance2');
@@ -635,10 +758,11 @@ function toggleAssurance2() {
         else if (type === 'autre') tauxInput.value = 50;
     }
 }
+
 function toggleEditAssurance2() {
-    const type = document.getElementById('assurance2_nom').value;
-    const tauxInput = document.getElementById('taux_assurance2');
-    const autreDiv = document.getElementById('autre_assurance2_div');
+    const type = document.getElementById('editAssurance2_nom').value;
+    const tauxInput = document.getElementById('editTauxAssurance2');
+    const autreDiv = document.getElementById('editAutreAssurance2Div');
     
     if (!type) {
         tauxInput.value = 0;
@@ -656,7 +780,10 @@ function toggleEditAssurance2() {
         else if (type === 'autre') tauxInput.value = 50;
     }
 }
-// ========== AJOUT PATIENT ==========
+
+// ============================================
+// AJOUT PATIENT
+// ============================================
 function showAddModal() {
     document.getElementById('patientForm').reset();
     document.getElementById('taux_prise_charge').value = 0;
@@ -666,6 +793,10 @@ function showAddModal() {
     document.getElementById('age').value = '';
     document.getElementById('taux_assurance2').value = 0;
     document.getElementById('taux_assurance2').readOnly = true;
+    document.getElementById('autre_assurance2_div').style.display = 'none';
+    document.getElementById('personne_prevenir_nom').value = '';
+    document.getElementById('personne_prevenir_telephone').value = '';
+    document.getElementById('personne_prevenir_relation').value = '';
     new bootstrap.Modal(document.getElementById('patientModal')).show();
 }
 
@@ -686,20 +817,18 @@ function savePatient() {
         dateNaissance = `${year}-01-01`;
     }
     
-    // 🔥 Gestion de l'assurance complémentaire "Autre"
+    // Gestion de l'assurance complémentaire "Autre"
     let assurance2Nom = document.getElementById('assurance2_nom').value;
     let autreAssurance2 = document.getElementById('autre_assurance2').value;
     
     if (assurance2Nom === 'autre' && autreAssurance2.trim() !== '') {
         assurance2Nom = autreAssurance2.trim();
     } else if (assurance2Nom === 'autre' && autreAssurance2.trim() === '') {
-        // Si l'utilisateur a sélectionné "Autre" mais n'a pas saisi de nom
         alert('Veuillez préciser le nom de l\'assurance complémentaire');
         document.getElementById('autre_assurance2').focus();
         return;
     }
     
-    // 🔥 Validation du taux d'assurance complémentaire si une assurance est sélectionnée
     let tauxAssurance2 = parseFloat(document.getElementById('taux_assurance2').value) || 0;
     if (assurance2Nom && assurance2Nom !== '' && tauxAssurance2 === 0) {
         if (!confirm(`Le taux de l'assurance complémentaire "${assurance2Nom}" est à 0%. Voulez-vous continuer ?`)) {
@@ -708,18 +837,25 @@ function savePatient() {
         }
     }
     
+    let personnePrevenirNom = document.getElementById('personne_prevenir_nom').value.trim();
+    let personnePrevenirTelephone = document.getElementById('personne_prevenir_telephone').value.trim();
+    let personnePrevenirRelation = document.getElementById('personne_prevenir_relation').value;
+    
     const patient = {
-        nom: document.getElementById('nom').value,
-        prenom: document.getElementById('prenom').value,
-        telephone: document.getElementById('telephone').value,
-        adresse: document.getElementById('adresse').value,
+        nom: document.getElementById('nom').value.trim(),
+        prenom: document.getElementById('prenom').value.trim(),
+        telephone: document.getElementById('telephone').value.trim(),
+        adresse: document.getElementById('adresse').value.trim(),
         date_naissance: dateNaissance || null,
         type_assurance: typeAssurance,
         taux_prise_charge: parseFloat(document.getElementById('taux_prise_charge').value) || 0,
-        numero_assure: document.getElementById('numero_assure').value || null,
+        numero_assure: document.getElementById('numero_assure').value.trim() || null,
         assurance2_nom: assurance2Nom || null,
         taux_assurance2: tauxAssurance2,
-        numero_assure2: document.getElementById('numero_assure2').value || null
+        numero_assure2: document.getElementById('numero_assure2').value.trim() || null,
+        personne_a_prevenir_nom: personnePrevenirNom || null,
+        personne_a_prevenir_telephone: personnePrevenirTelephone || null,
+        personne_a_prevenir_relation: personnePrevenirRelation || null
     };
     
     if (!patient.nom || !patient.telephone) {
@@ -727,7 +863,6 @@ function savePatient() {
         return;
     }
     
-    // 🔥 Vérification du taux principal
     let tauxPrincipal = patient.taux_prise_charge;
     if (patient.type_assurance !== 'non_assure' && tauxPrincipal === 0) {
         if (!confirm(`Le taux de l'assurance "${patient.type_assurance}" est à 0%. Voulez-vous continuer ?`)) {
@@ -758,7 +893,10 @@ function savePatient() {
         alert('❌ Erreur lors de l\'enregistrement: ' + error);
     });
 }
-// ========== MODIFICATION PATIENT ==========
+
+// ============================================
+// MODIFICATION PATIENT
+// ============================================
 function editPatient(id) {
     if (!id || id === 'undefined') {
         alert('Erreur: ID patient invalide');
@@ -788,11 +926,15 @@ function editPatient(id) {
         assuranceValue = 'amu_inam';
     } else if (!assuranceText.includes('non assuré')) {
         assuranceValue = 'autre';
-        autreAssuranceValue = cells[5].innerText;
+        autreAssuranceValue = cells[5].innerText.trim();
     }
     
     const assurance2Text = cells[7]?.innerText || '';
     const taux2Text = cells[8]?.innerText || '';
+    
+    const personnePrevenirNom = cells[9]?.innerText || '';
+    const personnePrevenirTelephone = cells[10]?.innerText || '';
+    const personnePrevenirRelation = cells[11]?.innerText || '';
     
     document.getElementById('editId').value = id;
     document.getElementById('editNom').value = nom;
@@ -812,6 +954,12 @@ function editPatient(id) {
     document.getElementById('editAssurance2_nom').value = assurance2Text.trim() || '';
     document.getElementById('editTauxAssurance2').value = parseFloat(taux2Text) || 0;
     document.getElementById('editNumeroAssure2').value = '';
+    document.getElementById('editAutreAssurance2').value = '';
+    document.getElementById('editAutreAssurance2Div').style.display = 'none';
+    
+    document.getElementById('editPersonnePrevenirNom').value = personnePrevenirNom || '';
+    document.getElementById('editPersonnePrevenirTelephone').value = personnePrevenirTelephone || '';
+    document.getElementById('editPersonnePrevenirRelation').value = personnePrevenirRelation || '';
     
     toggleEditTaux();
     toggleEditAssurance2();
@@ -828,24 +976,45 @@ function saveEditPatient() {
         typeAssurance = autreAssurance.trim();
     }
     
+    let personnePrevenirNom = document.getElementById('editPersonnePrevenirNom').value.trim();
+    let personnePrevenirTelephone = document.getElementById('editPersonnePrevenirTelephone').value.trim();
+    let personnePrevenirRelation = document.getElementById('editPersonnePrevenirRelation').value;
+    
+    // Gestion de l'assurance complémentaire "Autre"
+    let assurance2Nom = document.getElementById('editAssurance2_nom').value;
+    let autreAssurance2 = document.getElementById('editAutreAssurance2').value;
+    
+    if (assurance2Nom === 'autre' && autreAssurance2.trim() !== '') {
+        assurance2Nom = autreAssurance2.trim();
+    } else if (assurance2Nom === 'autre' && autreAssurance2.trim() === '') {
+        alert('Veuillez préciser le nom de l\'assurance complémentaire');
+        document.getElementById('editAutreAssurance2').focus();
+        return;
+    }
+    
     const patient = {
-        nom: document.getElementById('editNom').value,
-        prenom: document.getElementById('editPrenom').value,
-        telephone: document.getElementById('editTelephone').value,
-        adresse: document.getElementById('editAdresse').value,
+        nom: document.getElementById('editNom').value.trim(),
+        prenom: document.getElementById('editPrenom').value.trim(),
+        telephone: document.getElementById('editTelephone').value.trim(),
+        adresse: document.getElementById('editAdresse').value.trim(),
         date_naissance: document.getElementById('editDateNaissance').value || null,
         type_assurance: typeAssurance,
-        taux_prise_charge: document.getElementById('editTaux').value,
-        numero_assure: document.getElementById('editNumeroAssure').value,
-        assurance2_nom: document.getElementById('editAssurance2_nom').value || null,
+        taux_prise_charge: parseFloat(document.getElementById('editTaux').value) || 0,
+        numero_assure: document.getElementById('editNumeroAssure').value.trim() || null,
+        assurance2_nom: assurance2Nom || null,
         taux_assurance2: parseFloat(document.getElementById('editTauxAssurance2').value) || 0,
-        numero_assure2: document.getElementById('editNumeroAssure2').value || null
+        numero_assure2: document.getElementById('editNumeroAssure2').value.trim() || null,
+        personne_a_prevenir_nom: personnePrevenirNom || null,
+        personne_a_prevenir_telephone: personnePrevenirTelephone || null,
+        personne_a_prevenir_relation: personnePrevenirRelation || null
     };
     
     if (!patient.nom || !patient.telephone) {
         alert('Veuillez remplir les champs obligatoires');
         return;
     }
+    
+    showLoader('Modification du patient...');
     
     fetch(`/api/patients/${id}`, {
         method: 'PUT',
@@ -854,18 +1023,23 @@ function saveEditPatient() {
     })
     .then(response => response.json())
     .then(data => {
+        hideLoader();
         if(data.success) {
+            alert('✅ Patient modifié avec succès !');
             location.reload();
         } else {
             alert('Erreur: ' + (data.error || 'Erreur inconnue'));
         }
     })
     .catch(error => {
+        hideLoader();
         alert('Erreur lors de la modification: ' + error);
     });
 }
 
-// ========== SÉLECTION PATIENT ==========
+// ============================================
+// SÉLECTION PATIENT
+// ============================================
 function selectPatient(id, nom, assurance, taux, assurance2, taux2) {
     if (!id || id === 'undefined') {
         alert('Erreur: ID patient invalide');
@@ -897,7 +1071,9 @@ function selectPatient(id, nom, assurance, taux, assurance2, taux2) {
     }
 }
 
-// ========== ENVOI LIEN WHATSAPP ==========
+// ============================================
+// ENVOI LIEN WHATSAPP
+// ============================================
 function envoyerLienPatient(id, nom, telephone) {
     if (!id || id === 'undefined') {
         alert('Erreur: ID patient invalide');
@@ -929,15 +1105,36 @@ function envoyerLienPatient(id, nom, telephone) {
         });
 }
 
-function chargerPatients() {
-    showLoader();
+// ============================================
+// INITIALISATION
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    const rows = document.querySelectorAll('#patientsList tr.patient-row');
+    rows.forEach(row => {
+        const cells = row.cells;
+        allPatients.push({
+            element: row,
+            id: cells[0].innerText,
+            nomComplet: cells[1].innerText.toLowerCase(),
+            telephone: cells[2].innerText,
+            adresse: cells[3].innerText,
+            dateNaissance: cells[4].innerText,
+            assurance: cells[5].innerText.toLowerCase(),
+            taux: cells[6].innerText,
+            assurance2: cells[7]?.innerText || '',
+            taux2: cells[8]?.innerText || '',
+            contactUrgence: cells[9]?.innerText || '',
+            telephoneUrgence: cells[10]?.innerText || '',
+            lienParente: cells[11]?.innerText || ''
+        });
+    });
+    currentFiltered = [...allPatients];
+    updateResultCount();
+    updatePagination();
+    displayPage(1);
     
-    fetch('/api/patients')
-        .then(response => response.json())
-        .then(data => {
-            hideLoader();
-        })
-        .catch(() => hideLoader());
-}
+    document.getElementById('date_naissance').addEventListener('change', updateAgeFromDate);
+    document.getElementById('editDateNaissance').addEventListener('change', updateEditAge);
+});
 </script>
 {% endblock %}

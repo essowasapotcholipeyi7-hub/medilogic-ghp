@@ -1,0 +1,210 @@
+<!-- templates/factures/recu_paiement.html -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reçu de paiement #{{ paiement.id }}</title>
+    <style>
+        {% set format = request.args.get('format', '80mm') %}
+        
+        {% if format == '80mm' %}
+        @media print, screen {
+            @page { size: 80mm auto; margin: 3mm; }
+            body { 
+                width: 80mm; 
+                font-size: 9px; 
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 5px;
+            }
+            * { color: black !important; font-weight: bold !important; }
+            .container { width: 100%; padding: 0; }
+            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 8px; }
+            .header h2 { margin: 0; font-size: 14px; }
+            .header p { margin: 2px 0; font-size: 9px; }
+            table { width: 100%; border-collapse: collapse; font-size: 8px; }
+            table td, table th { padding: 3px 2px; border-bottom: 1px solid #ddd; }
+            .totaux { margin-top: 8px; padding-top: 5px; border-top: 2px solid #000; }
+            .totaux div { display: flex; justify-content: space-between; padding: 2px 0; }
+            .total { font-size: 12px; font-weight: bold; border-top: 2px solid #000; padding-top: 5px; margin-top: 5px; }
+            .footer { text-align: center; font-size: 7px; margin-top: 10px; border-top: 1px solid #000; padding-top: 5px; }
+            .no-print { display: none !important; }
+            img { max-height: 40px; }
+            i, .fas, .far, .fab { display: none !important; }
+        }
+        {% else %}
+        @media print {
+            @page { size: A4; margin: 10mm; }
+        }
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f8f9fa;
+            padding: 20px;
+        }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #667eea; padding-bottom: 15px; margin-bottom: 20px; }
+        .header h2 { margin: 0; color: #1a1a2e; }
+        .header .badge { background: #28a745; color: white; padding: 5px 15px; border-radius: 30px; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        table th { background: #f8f9fa; padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6; }
+        table td { padding: 8px 10px; border-bottom: 1px solid #eee; }
+        .totaux { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 15px; }
+        .totaux .ligne { display: flex; justify-content: space-between; padding: 4px 0; }
+        .total { font-size: 18px; font-weight: bold; border-top: 2px solid #dc3545; padding-top: 10px; margin-top: 10px; color: #dc3545; }
+        .footer { text-align: center; color: #6c757d; font-size: 11px; margin-top: 20px; padding-top: 15px; border-top: 1px solid #dee2e6; }
+        .no-print { display: block; text-align: center; margin-top: 20px; }
+        .no-print button { padding: 10px 35px; margin: 0 5px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
+        .btn-print { background: #667eea; color: white; }
+        .btn-pdf { background: #28a745; color: white; }
+        .btn-close { background: #6c757d; color: white; }
+        .statut-paye { background: #d4edda; color: #155724; padding: 3px 12px; border-radius: 20px; font-weight: bold; }
+        .statut-partiel { background: #cce5ff; color: #004085; padding: 3px 12px; border-radius: 20px; font-weight: bold; }
+        {% endif %}
+    </style>
+</head>
+<body>
+    <div class="container" id="recuContenu">
+        <!-- En-tête -->
+        <div class="header">
+            <div>
+                <h2>{{ structure.nom or 'Medilogic-GHP' }}</h2>
+                <p style="margin: 0; font-size: 10px; color: #6c757d;">
+                    {{ structure.adresse or '' }}<br>
+                    Tél: {{ structure.telephone or '' }}
+                </p>
+            </div>
+            <div style="text-align: right;">
+                <div class="badge">REÇU DE PAIEMENT</div>
+                <p style="margin: 2px 0; font-weight: bold;">N° {{ paiement.numero_facture }}</p>
+                <p style="margin: 0; font-size: 10px; color: #6c757d;">{{ date_actuelle }}</p>
+            </div>
+        </div>
+
+        <!-- Infos patient -->
+        <div style="margin-bottom: 10px;">
+            <strong>Patient :</strong> {{ paiement.patient_nom }}<br>
+            <strong>Téléphone :</strong> {{ paiement.patient_telephone or 'Non renseigné' }}
+        </div>
+
+        <!-- Articles -->
+        <table>
+            <thead>
+                <tr>
+                    <th>Article</th>
+                    <th style="text-align: center;">Qté</th>
+                    <th style="text-align: right;">Prix</th>
+                    <th style="text-align: right;">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for article in paiement.articles %}
+                <tr>
+                    <td>{{ article.nom }}</td>
+                    <td style="text-align: center;">{{ article.quantite }}</td>
+                    <td style="text-align: right;">{{ article.prix_unitaire|default(0)|round(0)|int }} F</td>
+                    <td style="text-align: right;">{{ article.total|default(0)|round(0)|int }} F</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+<!-- Dans recu_paiement.html -->
+{% for article in paiement.articles %}
+<tr>
+    <td>{{ article.nom }}</td>
+    <td style="text-align: center;">{{ article.quantite }}</td>
+    <td style="text-align: right;">
+        {# 🔥 ESSAYER TOUS LES FORMATS DE PRIX POSSIBLES #}
+        {% set prix = article.prix_unitaire|default(article.prix|default(article.prix_reel|default(article.prix_vente|default(0)))) %}
+        {{ prix|round(0)|int }} F
+    </td>
+    <td style="text-align: right;">
+        {% set prix = article.prix_unitaire|default(article.prix|default(article.prix_reel|default(article.prix_vente|default(0)))) %}
+        {% set total = prix * (article.quantite|default(1)) %}
+        {{ total|round(0)|int }} F
+    </td>
+</tr>
+{% endfor %}
+        <!-- Totaux -->
+        <div class="totaux">
+            <div class="ligne">
+                <span>Sous-total</span>
+                <span>{{ paiement.sous_total|default(0)|round(0)|int }} FCFA</span>
+            </div>
+            {% if paiement.prise_en_charge > 0 %}
+            <div class="ligne" style="color:#28a745;">
+                <span>Prise en charge ({{ paiement.taux_assurance }}%)</span>
+                <span>- {{ paiement.prise_en_charge|default(0)|round(0)|int }} FCFA</span>
+            </div>
+            {% endif %}
+            <div class="ligne" style="font-weight: bold; border-top: 2px solid #dee2e6; padding-top: 8px; margin-top: 5px;">
+                <span>NET À PAYER</span>
+                <span>{{ paiement.net_a_payer|default(0)|round(0)|int }} FCFA</span>
+            </div>
+            
+            <!-- 🔥 MONTANT PAYÉ -->
+            <div class="ligne" style="color:#28a745; font-weight: bold; font-size: 1.1em; border-top: 1px dashed #28a745; padding-top: 8px; margin-top: 5px;">
+                <span>✅ Montant payé aujourd'hui</span>
+                <span>{{ paiement.montant|default(0)|round(0)|int }} FCFA</span>
+            </div>
+            
+            <!-- 🔥 RESTE À PAYER -->
+            {% if paiement.reste_a_payer > 0 %}
+            <div class="ligne" style="color:#dc3545; font-weight: bold; border-top: 1px dashed #dc3545; padding-top: 5px; margin-top: 5px;">
+                <span>⏳ Reste à payer</span>
+                <span>{{ paiement.reste_a_payer|default(0)|round(0)|int }} FCFA</span>
+            </div>
+            {% else %}
+            <div class="ligne" style="color:#28a745; font-weight: bold; border-top: 1px solid #28a745; padding-top: 5px; margin-top: 5px;">
+                <span>✅ Facture entièrement payée</span>
+                <span>👏</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Infos paiement -->
+        <div style="margin-top: 10px; font-size: 10px;">
+            <strong>Mode de paiement :</strong> {{ paiement.mode_paiement or 'Espèces' }}<br>
+            {% if paiement.notes %}
+            <strong>Notes :</strong> {{ paiement.notes }}<br>
+            {% endif %}
+            <strong>Reçu par :</strong> {{ session.get('user_name', 'System') }}
+        </div>
+
+        <!-- Pied de page -->
+        <div class="footer">
+            Merci de votre confiance !<br>
+            {{ structure.nom or 'Medilogic-GHP' }}
+        </div>
+    </div>
+
+    <!-- Boutons -->
+    <div class="no-print">
+        <button class="btn-print" onclick="window.print()">🖨️ Imprimer</button>
+        <button class="btn-pdf" onclick="telechargerPDF()">📄 PDF</button>
+        <button class="btn-close" onclick="fermer()">✖ Fermer</button>
+    </div>
+
+    <script>
+    function telechargerPDF() {
+        const element = document.getElementById('recuContenu');
+        const format = '{{ request.args.get("format", "80mm") }}';
+        const opt = {
+            margin: format === '80mm' ? [0.3, 0.3, 0.3, 0.3] : [0.5, 0.5, 0.5, 0.5],
+            filename: 'recu_paiement_{{ paiement.numero_facture }}.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'in', format: format === '80mm' ? [2.8346, 11.6929] : 'a4', orientation: 'portrait' }
+        };
+        html2pdf().set(opt).from(element).save();
+    }
+    
+    function fermer() {
+        window.close();
+        setTimeout(() => { if (!window.closed) window.location.href = "{{ url_for('factures') }}"; }, 500);
+    }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</body>
+</html> 
