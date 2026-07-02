@@ -3167,54 +3167,45 @@ def api_get_produits():
         structure_id = session.get('structure_id')
         
         sheet_name = f"struct_{structure_id}_produits"
+        print(f"📂 Chargement des produits pour structure {structure_id}")
+        print(f"   Feuille: {sheet_name}")
         
         try:
             worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
             all_values = worksheet.get_all_values()
+            print(f"📊 Lignes brutes: {len(all_values)}")
             
             if len(all_values) <= 1:
+                print("⚠️ Aucune donnée trouvée")
                 return jsonify([])
             
             produits_liste = []
-            for row in all_values[1:]:
+            for i, row in enumerate(all_values[1:], start=1):
                 if not row or len(row) < 3:
                     continue
                 
                 try:
                     # A=0: ID, B=1: nom, C=2: prix_vente, D=3: pbr, 
                     # E=4: prix_achat, F=5: quantite_stock, G=6: seuil_alerte, 
-                    # H=7: unite, I=8: date_peremption, J=9: lot, K=10: structure_id,
-                    # L=11: prise_en_charge_amu, M=12: commentaire_amu, 
-                    # N=13: prise_en_charge_cac, O=14: commentaire_cac
+                    # H=7: unite, I=8: date_peremption, J=9: lot, K=10: structure_id
                     produit_id = row[0] if len(row) > 0 else None
                     nom = row[1].strip() if len(row) > 1 and row[1] else ''
                     prix_vente = float(row[2]) if len(row) > 2 and row[2] else 0
                     pbr = float(row[3]) if len(row) > 3 and row[3] else prix_vente
                     prix_achat = float(row[4]) if len(row) > 4 and row[4] else 0
-                    quantite_stock = int(float(row[5])) if len(row) > 5 and row[5] else 0
-                    seuil_alerte = int(float(row[6])) if len(row) > 6 and row[6] else 10
+                    
+                    # 🔥 Gérer les valeurs vides pour quantite_stock
+                    stock_raw = row[5].strip() if len(row) > 5 and row[5] else '0'
+                    quantite_stock = int(float(stock_raw)) if stock_raw and stock_raw != '' else 0
+                    
+                    # 🔥 Gérer les valeurs vides pour seuil_alerte
+                    seuil_raw = row[6].strip() if len(row) > 6 and row[6] else '10'
+                    seuil_alerte = int(float(seuil_raw)) if seuil_raw and seuil_raw != '' else 10
+                    
                     unite = row[7] if len(row) > 7 else 'unité'
                     date_peremption = row[8] if len(row) > 8 and row[8] else ''
                     lot = row[9] if len(row) > 9 and row[9] else ''
                     struct_id = row[10] if len(row) > 10 else None
-                    
-                    # 🔥 PRISE EN CHARGE AMU (colonne L - index 11)
-                    prise_amu = True
-                    if len(row) > 11 and row[11]:
-                        val = row[11].strip().lower()
-                        prise_amu = val in ['true', 'oui', 'yes', '1', 'vrai', 't']
-                    
-                    # 🔥 COMMENTAIRE AMU (colonne M - index 12)
-                    commentaire_amu = row[12] if len(row) > 12 and row[12] else ''
-                    
-                    # 🔥 PRISE EN CHARGE CAC (colonne N - index 13)
-                    prise_cac = True
-                    if len(row) > 13 and row[13]:
-                        val = row[13].strip().lower()
-                        prise_cac = val in ['true', 'oui', 'yes', '1', 'vrai', 't']
-                    
-                    # 🔥 COMMENTAIRE CAC (colonne O - index 14)
-                    commentaire_cac = row[14] if len(row) > 14 and row[14] else ''
                     
                     if struct_id is None or str(struct_id) == str(structure_id):
                         if nom:
@@ -3228,21 +3219,45 @@ def api_get_produits():
                                 'seuil_alerte': seuil_alerte,
                                 'unite': unite,
                                 'date_peremption': date_peremption,
-                                'lot': lot,
-                                'prise_en_charge_amu': prise_amu,
-                                'commentaire_amu': commentaire_amu,
-                                'prise_en_charge_cac': prise_cac,
-                                'commentaire_cac': commentaire_cac
+                                'lot': lot
                             })
                 except Exception as e:
+                    print(f"⚠️ Erreur ligne {i}: {e}")
                     continue
             
+            print(f"✅ {len(produits_liste)} produits chargés")
             return jsonify(produits_liste)
             
         except Exception as e:
-            return jsonify([])
+            print(f"⚠️ Feuille {sheet_name} non trouvée: {e}")
+            # Fallback: essayer sans préfixe
+            produits = sheets_helper.get_all_records('produits', use_prefix=False)
+            produits_liste = []
+            for p in produits:
+                if str(p.get('structure_id')) == str(structure_id):
+                    try:
+                        produits_liste.append({
+                            'id': p.get('ID'),
+                            'nom': p.get('nom', ''),
+                            'prix_vente': float(p.get('prix_vente', 0)),
+                            'pbr': float(p.get('pbr', p.get('prix_vente', 0))),
+                            'prix_achat': float(p.get('prix_achat', 0)),
+                            'quantite_stock': int(float(p.get('quantite_stock', 0))),
+                            'seuil_alerte': int(float(p.get('seuil_alerte', 10))),
+                            'unite': p.get('unite', 'unité'),
+                            'date_peremption': p.get('date_peremption', ''),
+                            'lot': p.get('lot', '')
+                        })
+                    except:
+                        continue
+            
+            print(f"✅ {len(produits_liste)} produits chargés (fallback)")
+            return jsonify(produits_liste)
         
     except Exception as e:
+        print(f"❌ Erreur GET produits: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify([]), 500
 
 @app.route('/api/produits/search')
