@@ -64,7 +64,7 @@
         {% endif %}
 
 <!-- Dans sidebar_menu.html -->
-{% if session.role in ['admin', 'comptable', 'gestionnaire'] %}
+{% if session.role in ['admin', 'comptable', 'gestionnaire', 'pharmacien'] %}
 <li class="nav-item">
     <a class="nav-link" href="{{ url_for('gestion_stock') }}">
         <i class="fas fa-boxes"></i> Gestion des stocks

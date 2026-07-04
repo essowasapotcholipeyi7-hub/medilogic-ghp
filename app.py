@@ -7204,7 +7204,7 @@ def gestion_stock():
     
     # Vérifier les droits (admin, comptable, gestionnaire)
     role = session.get('role', 'caissier')
-    if role not in ['admin', 'comptable', 'gestionnaire']:
+    if role not in ['admin', 'comptable', 'gestionnaire', 'pharmacien']:
         flash('Accès non autorisé', 'danger')
         return redirect(url_for('dashboard'))
     
