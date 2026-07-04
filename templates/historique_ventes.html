@@ -47,7 +47,7 @@
                         <button class="btn btn-primary btn-sm" onclick="appliquerStatsPersonnalise()">Appliquer</button>
                     </div>
                 </div>
-                
+                {% if session.is_admin %}
                 <div class="row">
                     <div class="col-md-3 text-center">
                         <div class="border rounded p-2">
@@ -74,7 +74,8 @@
                         </div>
                     </div>
                 </div>
-                
+                {% endif %}
+               
                 <div class="row mt-3">
                     <div class="col-md-6">
                         <div class="card bg-light">
