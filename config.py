@@ -5,12 +5,30 @@ load_dotenv()
 
 class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'medilogic-secret-key-2024')
-    GOOGLE_SHEETS_CREDENTIALS = 'credentials.json'
-    SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '1yLVp-zwjCFhYx5VZVZN1HXRRgYEyak8kiHHtwWpkLEE')
     ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', 'essowasainfo60@gmail.com')
+    DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://...')
     
-    # 🔥 AJOUTE CETTE LIGNE 🔥
-    DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://neondb_owner:npg_DZ0qes6UkjwE@ep-shy-night-a2mo7dj2-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require')
+    # ⭐ ENVIRONNEMENT
+    # En local: development, En production: production
+    FLASK_ENV = os.getenv('FLASK_ENV', 'development')
+    
+    # ⭐ Configuration du webhook
+    CONSULTATION_APP_URL = os.getenv('CONSULTATION_APP_URL', 'http://10.156.62.79:5000')
+    WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', 'mon_secret_webhook_123456')
+
+    SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '1yLVp-zwjCFhYx5VZVZN1HXRRgYEyak8kiHHtwWpkLEE')
+
+    @property
+    def WEBHOOK_URL(self):
+        return f"{self.CONSULTATION_APP_URL}/api/webhook/patient-created"
+    
+    @property
+    def IS_DEVELOPMENT(self):
+        return self.FLASK_ENV == 'development'
+    
+    @property
+    def IS_PRODUCTION(self):
+        return self.FLASK_ENV == 'production'
     
     # Email configuration
     MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')

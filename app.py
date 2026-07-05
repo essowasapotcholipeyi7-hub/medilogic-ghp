@@ -7250,6 +7250,203 @@ def lunetterie_vente():
                          lunettes=lunettes_filtrees,
                          patient_taux=patient_taux)
 
+
+# ==================== API DE SYNCHRONISATION ====================
+
+def require_api_key(f):
+    """Décorateur pour vérifier la clé API (depuis Google Sheets)"""
+    from functools import wraps
+    
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('Authorization', '').replace('Bearer ', '')
+        
+        if not api_key:
+            return jsonify({'error': 'Clé API requise'}), 401
+        
+        try:
+            structures = sheets_helper.get_all_records('structures', use_prefix=False)
+            structure = None
+            for s in structures:
+                if s.get('api_key') == api_key:
+                    structure = s
+                    break
+            
+            if not structure:
+                return jsonify({'error': 'Clé API invalide'}), 401
+            
+            return f(structure, *args, **kwargs)
+            
+        except Exception as e:
+            print(f"❌ Erreur vérification clé API: {e}")
+            return jsonify({'error': 'Erreur interne'}), 500
+            
+    return decorated_function
+
+
+@app.route('/api/test_public')
+def api_test_public():
+    """Endpoint de test public (sans authentification)"""
+    return jsonify({
+        'status': 'OK',
+        'message': 'API GHP est accessible',
+        'timestamp': datetime.now().isoformat()
+    })
+
+
+@app.route('/api/test')
+@require_api_key
+def api_test(structure):
+    """Endpoint de test pour vérifier la connexion API"""
+    return jsonify({
+        'status': 'OK',
+        'message': 'API GHP fonctionne',
+        'structure_id': structure.get('ID'),
+        'structure_nom': structure.get('nom')
+    })
+
+
+@app.route('/api/sync/patients')
+def api_sync_patients():
+    """Récupérer les patients d'une structure (avec token)"""
+    
+    token = request.args.get('token') or request.headers.get('X-API-Token')
+    
+    if not token:
+        return jsonify({'error': 'Token requis'}), 401
+    
+    try:
+        # Lire les structures depuis Google Sheets
+        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+        
+        structure = None
+        for s in structures:
+            if s.get('token') == token or s.get('TOKEN') == token:
+                structure = s
+                break
+        
+        if not structure:
+            return jsonify({'error': 'Token invalide'}), 401
+        
+        structure_id = int(structure.get('ID'))
+        structure_nom = structure.get('nom')
+        
+        print(f"✅ Token valide pour la structure {structure_id} - {structure_nom}")
+        
+        # ⭐ Récupérer les patients SANS archived (la colonne n'existe pas)
+        patients = db.execute_query("""
+            SELECT 
+                id, nom, prenom, telephone, adresse, date_naissance,
+                type_assurance, taux_prise_charge, numero_assure,
+                assurance2_nom, taux_assurance2, numero_assure2,
+                personne_a_prevenir_nom, personne_a_prevenir_telephone, 
+                personne_a_prevenir_relation
+            FROM patients 
+            WHERE structure_id = %s
+        """, (structure_id,))
+        
+        print(f"📊 {len(patients)} patients trouvés")
+        
+        result = []
+        for p in patients:
+            if isinstance(p, dict):
+                date_naissance = p.get('date_naissance')
+                result.append({
+                    'ID': p.get('id'),
+                    'nom': p.get('nom', ''),
+                    'prenom': p.get('prenom', ''),
+                    'telephone': p.get('telephone', ''),
+                    'adresse': p.get('adresse', ''),
+                    'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else None,
+                    'type_assurance': p.get('type_assurance', 'non_assure'),
+                    'taux_prise_charge': float(p.get('taux_prise_charge', 0)),
+                    'numero_assure': p.get('numero_assure', ''),
+                    'assurance2_nom': p.get('assurance2_nom', ''),
+                    'taux_assurance2': float(p.get('taux_assurance2', 0)),
+                    'numero_assure2': p.get('numero_assure2', ''),
+                    'personne_a_prevenir_nom': p.get('personne_a_prevenir_nom', ''),
+                    'personne_a_prevenir_telephone': p.get('personne_a_prevenir_telephone', ''),
+                    'personne_a_prevenir_relation': p.get('personne_a_prevenir_relation', '')
+                })
+        
+        return jsonify({
+            'structure_id': structure_id,
+            'structure_nom': structure_nom,
+            'total': len(result),
+            'patients': result
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+import os
+import requests
+from datetime import datetime
+import socket
+
+def get_webhook_url():
+    """
+    Retourne l'URL du webhook selon l'environnement
+    """
+    # ⭐ Variable d'environnement pour définir l'environnement
+    env = os.environ.get('APP_ENV', 'development')
+    
+    if env == 'production':
+        # 🚀 URL de production (Render)
+        return "https://medilogic-ghp.onrender.com/api/webhook/patient-created"
+    else:
+        # 💻 URL de développement (local)
+        return "http://10.156.62.79:5000/api/webhook/patient-created"
+
+def notify_consultation_app(patient_id, structure_id):
+    """
+    Notifier l'application de consultation de la création d'un patient
+    """
+    webhook_url = get_webhook_url()
+    
+    # ⭐ Token de sécurité (commun aux deux environnements)
+    webhook_secret = os.environ.get('WEBHOOK_SECRET', 'mon_secret_webhook_123456')
+    
+    headers = {
+        'X-Webhook-Token': webhook_secret,
+        'Content-Type': 'application/json'
+    }
+    
+    data = {
+        'patient_id': patient_id,
+        'structure_id': structure_id,
+        'timestamp': datetime.now().isoformat(),
+        'source': os.environ.get('APP_ENV', 'development')  # Pour savoir d'où ça vient
+    }
+    
+    print(f"📡 Envoi webhook à: {webhook_url}")
+    print(f"   Patient ID: {patient_id}")
+    print(f"   Structure ID: {structure_id}")
+    
+    try:
+        response = requests.post(webhook_url, json=data, headers=headers, timeout=5)
+        
+        if response.status_code == 200:
+            print(f"✅ Patient {patient_id} synchronisé immédiatement")
+            return True
+        else:
+            print(f"⚠️ Erreur webhook: {response.status_code}")
+            print(f"   Réponse: {response.text[:100]}")
+            return False
+            
+    except requests.exceptions.Timeout:
+        print(f"⏰ Timeout - Le scheduler fera la synchronisation")
+        return False
+    except requests.exceptions.ConnectionError:
+        print(f"🔌 Connexion impossible - Vérifie que l'app de consultation est allumée")
+        return False
+    except Exception as e:
+        print(f"❌ Erreur webhook: {e}")
+        return False
+
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut
     port = int(os.environ.get("PORT", 5000))
