@@ -31,6 +31,76 @@ def get_credentials_info():
 
     raise Exception("Aucun credential Google Sheets trouvé (variable GOOGLE_CREDENTIALS ou fichier credentials.json).")
 
+# sheets_helper.py - GHP
+
+def get_medicamentos(self, structure_id=None):
+    """
+    Récupère les médicaments depuis Google Sheets
+    La feuille est dynamique : struct_{structure_id}_produits
+    """
+    try:
+        if not self.enabled:
+            print("⚠️ Google Sheets désactivé")
+            return []
+        
+        if not structure_id:
+            print("⚠️ structure_id manquant pour récupérer les médicaments")
+            return []
+        
+        # Récupérer la feuille dynamique
+        spreadsheet = self.client.open_by_key(self.spreadsheet_id)
+        
+        # ⭐ Nom de la feuille : struct_{structure_id}_produits
+        sheet_name = f"struct_{structure_id}_produits"
+        
+        try:
+            worksheet = spreadsheet.worksheet(sheet_name)
+            print(f"📄 Feuille trouvée: {sheet_name}")
+        except Exception as e:
+            print(f"❌ Feuille '{sheet_name}' non trouvée: {e}")
+            return []
+        
+        # Récupérer toutes les lignes
+        records = worksheet.get_all_records()
+        
+        result = []
+        for row in records:
+            # Vérifier que le médicament a un nom
+            if not row.get('nom'):
+                continue
+            
+            # Gérer les valeurs NULL ou vides
+            quantite_stock = row.get('quantite_stock')
+            if quantite_stock == '' or quantite_stock is None:
+                quantite_stock = 0
+            
+            result.append({
+                'ID': row.get('ID'),
+                'nom': row.get('nom', ''),
+                'prix_vente': float(row.get('prix_vente', 0)) if row.get('prix_vente') else 0,
+                'pbr': float(row.get('pbr', 0)) if row.get('pbr') else 0,
+                'prix_achat': float(row.get('prix_achat', 0)) if row.get('prix_achat') else 0,
+                'quantite_stock': int(quantite_stock),
+                'seuil_alerte': int(row.get('seuil_alerte', 10)) if row.get('seuil_alerte') else 10,
+                'unite': row.get('unite', ''),
+                'date_peremption': row.get('date_peremption', ''),
+                'lot': row.get('lot', ''),
+                'structure_id': structure_id,
+                'prise_en_charge_amu': row.get('prise_en_charge_amu') == 'TRUE' or row.get('prise_en_charge_amu') == 'True' or row.get('prise_en_charge_amu') == 'OUI',
+                'commentaire_amu': row.get('commentaire_amu', ''),
+                'prise_en_charge_cac': row.get('prise_en_charge_cac') == 'TRUE' or row.get('prise_en_charge_cac') == 'True' or row.get('prise_en_charge_cac') == 'OUI',
+                'commentaire_cac': row.get('commentaire_cac', '')
+            })
+        
+        print(f"✅ {len(result)} médicaments récupérés depuis {sheet_name}")
+        return result
+        
+    except Exception as e:
+        print(f"❌ Erreur get_medicamentos: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
 class SheetsHelper:
     def __init__(self):
         self.scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']

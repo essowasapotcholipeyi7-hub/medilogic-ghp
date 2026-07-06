@@ -7401,14 +7401,22 @@ def get_webhook_url():
         # 💻 URL de développement (local)
         return "http://10.156.62.79:5000/api/webhook/patient-created"
 
+# Dans GHP - app.py ou le fichier qui fait l'appel webhook
+
+from config import Config
+import requests
+from datetime import datetime
+
 def notify_consultation_app(patient_id, structure_id):
     """
     Notifier l'application de consultation de la création d'un patient
+    Utilise la configuration de config.py
     """
-    webhook_url = get_webhook_url()
+    # ⭐ Récupérer l'URL depuis la config
+    webhook_url = Config.WEBHOOK_URL
     
-    # ⭐ Token de sécurité (commun aux deux environnements)
-    webhook_secret = os.environ.get('WEBHOOK_SECRET', 'mon_secret_webhook_123456')
+    # ⭐ Récupérer le token depuis la config
+    webhook_secret = Config.WEBHOOK_SECRET
     
     headers = {
         'X-Webhook-Token': webhook_secret,
@@ -7418,8 +7426,7 @@ def notify_consultation_app(patient_id, structure_id):
     data = {
         'patient_id': patient_id,
         'structure_id': structure_id,
-        'timestamp': datetime.now().isoformat(),
-        'source': os.environ.get('APP_ENV', 'development')  # Pour savoir d'où ça vient
+        'timestamp': datetime.now().isoformat()
     }
     
     print(f"📡 Envoi webhook à: {webhook_url}")
@@ -7446,6 +7453,48 @@ def notify_consultation_app(patient_id, structure_id):
     except Exception as e:
         print(f"❌ Erreur webhook: {e}")
         return False
+
+@app.route('/api/medicamentos', methods=['GET'])
+def api_medicamentos():
+    """
+    API pour récupérer les médicaments depuis Google Sheets
+    Feuille dynamique : struct_{structure_id}_produits
+    """
+    # Vérifier le token
+    token = request.args.get('token')
+    if not token:
+        return jsonify({'error': 'Token manquant'}), 401
+    
+    # Vérifier que le token est valide
+    from models import StructureMapping
+    mapping = StructureMapping.query.filter_by(api_key=token, actif=True).first()
+    if not mapping:
+        return jsonify({'error': 'Token invalide'}), 401
+    
+    try:
+        from sheets_helper import sheets_helper
+        
+        # ⭐ Passer le source_structure_id
+        medicamentos = sheets_helper.get_medicamentos(mapping.source_structure_id)
+        
+        if not medicamentos:
+            return jsonify({
+                'success': True,
+                'medicamentos': [],
+                'total': 0,
+                'structure_id': mapping.source_structure_id
+            })
+        
+        return jsonify({
+            'success': True,
+            'medicamentos': medicamentos,
+            'total': len(medicamentos),
+            'structure_id': mapping.source_structure_id
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur récupération médicaments: {e}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut
