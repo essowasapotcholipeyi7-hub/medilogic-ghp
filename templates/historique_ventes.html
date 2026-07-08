@@ -20,13 +20,13 @@
             <div class="card-body">
                 <div class="row mb-3">
                     <div class="col-md-8">
-                        <div class="btn-group" role="group">
-                            <button class="btn btn-outline-primary btn-sm" onclick="changerPeriodeStats('aujourdhui')">📅 Aujourd'hui</button>
-                            <button class="btn btn-outline-primary btn-sm" onclick="changerPeriodeStats('semaine')">📆 Cette semaine</button>
-                            <button class="btn btn-outline-primary btn-sm" onclick="changerPeriodeStats('mois')">📅 Ce mois</button>
-                            <button class="btn btn-outline-primary btn-sm" onclick="changerPeriodeStats('annee')">📊 Cette année</button>
-                            <button class="btn btn-outline-primary btn-sm" onclick="changerPeriodeStats('tous')">📋 Toutes</button>
-                            <button class="btn btn-outline-primary btn-sm" onclick="changerPeriodeStats('personnalise')">📅 Personnalisée</button>
+                        <div class="btn-group btn-group-sm flex-wrap" role="group">
+                            <button class="btn btn-outline-primary" onclick="changerPeriodeStats('aujourdhui')">📅 Aujourd'hui</button>
+                            <button class="btn btn-outline-primary" onclick="changerPeriodeStats('semaine')">📆 Semaine</button>
+                            <button class="btn btn-outline-primary" onclick="changerPeriodeStats('mois')">📅 Mois</button>
+                            <button class="btn btn-outline-primary" onclick="changerPeriodeStats('annee')">📊 Année</button>
+                            <button class="btn btn-outline-primary" onclick="changerPeriodeStats('tous')">📋 Toutes</button>
+                            <button class="btn btn-outline-primary" onclick="changerPeriodeStats('personnalise')">📅 Perso</button>
                         </div>
                     </div>
                     <div class="col-md-4 text-end">
@@ -47,7 +47,7 @@
                         <button class="btn btn-primary btn-sm" onclick="appliquerStatsPersonnalise()">Appliquer</button>
                     </div>
                 </div>
-                {% if session.is_admin %}
+                
                 <div class="row">
                     <div class="col-md-3 text-center">
                         <div class="border rounded p-2">
@@ -63,25 +63,24 @@
                     </div>
                     <div class="col-md-3 text-center">
                         <div class="border rounded p-2">
-                            <small class="text-muted">Actes médicaux</small>
+                            <small class="text-muted">Actes</small>
                             <h3 class="text-info mb-0" id="statActes">0</h3>
                         </div>
                     </div>
                     <div class="col-md-3 text-center">
                         <div class="border rounded p-2">
-                            <small class="text-muted">Ventes pharmacie</small>
+                            <small class="text-muted">Pharmacie</small>
                             <h3 class="text-warning mb-0" id="statPharma">0</h3>
                         </div>
                     </div>
                 </div>
-                {% endif %}
                
                 <div class="row mt-3">
                     <div class="col-md-6">
                         <div class="card bg-light">
                             <div class="card-body p-2">
-                                <h6><i class="fas fa-stethoscope"></i> Top 5 actes les plus vendus</h6>
-                                <table class="table table-sm table-borderless">
+                                <h6><i class="fas fa-stethoscope"></i> Top 5 actes</h6>
+                                <table class="table table-sm table-borderless mb-0">
                                     <tbody id="topActesTable">
                                         <tr><td colspan="2" class="text-muted">Chargement...</td></tr>
                                     </tbody>
@@ -92,8 +91,8 @@
                     <div class="col-md-6">
                         <div class="card bg-light">
                             <div class="card-body p-2">
-                                <h6><i class="fas fa-pills"></i> Top 5 produits les plus vendus</h6>
-                                <table class="table table-sm table-borderless">
+                                <h6><i class="fas fa-pills"></i> Top 5 produits</h6>
+                                <table class="table table-sm table-borderless mb-0">
                                     <tbody id="topProduitsTable">
                                         <tr><td colspan="2" class="text-muted">Chargement...</td></tr>
                                     </tbody>
@@ -105,94 +104,82 @@
             </div>
         </div>
 
-        <!-- FILTRES -->
+        <!-- FILTRES COMPACTS -->
         <div class="card mb-3">
-            <div class="card-header bg-secondary text-white">
-                <h5><i class="fas fa-filter"></i> Filtres</h5>
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-filter"></i> Filtres</h6>
+                <button class="btn btn-light btn-sm" onclick="toggleFiltres()">
+                    <i class="fas fa-chevron-down" id="filtreToggleIcon"></i>
+                </button>
             </div>
-            <div class="card-body">
-                <div class="row g-2 mb-2">
-                    <div class="col-md-3">
-                        <label class="form-label small">Periode</label>
+            <div class="card-body" id="filtresContainer">
+                <div class="row g-2">
+                    <div class="col-md-2">
+                        <label class="form-label small">Période</label>
                         <select id="periodeFiltre" class="form-control form-control-sm" onchange="changerPeriodeFiltre()">
-                            <option value="tous">Toutes les ventes</option>
+                            <option value="tous">Toutes</option>
                             <option value="aujourdhui">Aujourd'hui</option>
-                            <option value="semaine">Cette semaine</option>
-                            <option value="mois">Ce mois</option>
-                            <option value="annee">Cette annee</option>
-                            <option value="personnalise">Periode personnalisee</option>
+                            <option value="semaine">Semaine</option>
+                            <option value="mois">Mois</option>
+                            <option value="annee">Année</option>
+                            <option value="personnalise">Personnalisée</option>
                         </select>
                     </div>
-                    <div class="col-md-3" id="dateDebutGroup" style="display: none;">
-                        <label class="form-label small">Date debut</label>
+                    <div class="col-md-2" id="dateDebutGroup" style="display: none;">
+                        <label class="form-label small">Début</label>
                         <input type="date" id="filtreDateDebut" class="form-control form-control-sm">
                     </div>
-                    <div class="col-md-3" id="dateFinGroup" style="display: none;">
-                        <label class="form-label small">Date fin</label>
+                    <div class="col-md-2" id="dateFinGroup" style="display: none;">
+                        <label class="form-label small">Fin</label>
                         <input type="date" id="filtreDateFin" class="form-control form-control-sm">
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label small">Type de vente</label>
+                    <div class="col-md-2">
+                        <label class="form-label small">Type</label>
                         <select id="searchType" class="form-control form-control-sm" onchange="filtrerHistorique()">
-                            <option value="">Tous les types</option>
-                            <option value="actes">Actes medicaux</option>
-                            <option value="pharma">Pharmacie</option>
+                            <option value="">Tous</option>
+                            <option value="actes">Actes</option>
+                            <option value="pharmacie">Pharmacie</option>
                         </select>
                     </div>
-                </div>
-                
-                <div class="row g-2 mb-2">
-                    <div class="col-md-3">
-                        <label class="form-label small">Heure debut</label>
-                        <input type="time" id="filtreHeureDebut" class="form-control form-control-sm" onchange="filtrerHistorique()">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small">Heure fin</label>
-                        <input type="time" id="filtreHeureFin" class="form-control form-control-sm" onchange="filtrerHistorique()">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small">Statut paiement</label>
+                    <div class="col-md-2">
+                        <label class="form-label small">Statut</label>
                         <select id="filtreStatutPaiement" class="form-control form-control-sm" onchange="filtrerHistorique()">
                             <option value="">Tous</option>
-                            <option value="total">✅ Paiement total</option>
-                            <option value="partiel">⚠️ Paiement partiel</option>
+                            <option value="total">✅ Payé</option>
+                            <option value="partiel">⚠️ Partiel</option>
                             <option value="impaye">❌ Impayé</option>
                         </select>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label small">Recherche</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-white">
-                                <i class="fas fa-search text-primary"></i>
-                            </span>
-                            <input type="text" id="searchGlobal" class="form-control form-control-sm" 
-                                   placeholder="Patient, acte, produit..." 
+                        <div class="input-group input-group-sm">
+                            <input type="text" id="searchGlobal" class="form-control" 
+                                   placeholder="Patient..." 
                                    onkeyup="filtrerHistorique()">
-                            <button class="btn btn-outline-secondary btn-sm" onclick="clearSearch()" type="button">
+                            <button class="btn btn-outline-secondary" onclick="clearSearch()" type="button">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
                     </div>
                 </div>
-                
-                <div class="row g-2">
+                <div class="row mt-2">
                     <div class="col-md-12">
                         <button class="btn btn-secondary btn-sm" onclick="resetFiltres()">
-                            <i class="fas fa-sync-alt"></i> Reinitialiser
+                            <i class="fas fa-sync-alt"></i> Réinitialiser
                         </button>
                         <button class="btn btn-info btn-sm ms-2" onclick="chargerHistorique()">
-                            <i class="fas fa-sync-alt"></i> Rafraichir
+                            <i class="fas fa-sync-alt"></i> Rafraîchir
                         </button>
-                        <span class="ms-3 text-muted">
+                        <span class="ms-3 text-muted small">
                             <i class="fas fa-chart-simple"></i> 
-                            <span id="resultCount">0</span> resultat(s) trouve(s)
+                            <span id="resultCount">0</span> résultat(s)
                         </span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- LISTE DES VENTES -->
+        <!-- LISTE DES VENTES AVEC PAGINATION -->
         <div class="card">
             <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
                 <h5><i class="fas fa-history"></i> Liste des ventes</h5>
@@ -202,28 +189,55 @@
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-hover" id="ventesTable">
+                    <table class="table table-hover table-sm table-striped" id="ventesTable">
                         <thead class="table-light">
                             <tr>
-                                <th>N°</th>
-                                <th>Date</th>
-                                <th>Patient</th>
-                                <th>Type</th>
-                                <th>Détail</th>
-                                <th>PBR</th>
-                                <th>Net à payer</th>
-                                <th>Payé</th>
-                                <th>Reste</th>
-                                <th>Statut paiement</th>
-                                <th>Assurances</th>
-                                <th>Actions</th>
+                                <th style="width: 5%;">N°</th>
+                                <th style="width: 12%;">Date</th>
+                                <th style="width: 18%;">Patient</th>
+                                <th style="width: 8%;">Type</th>
+                                <th style="width: 12%;">Montant</th>
+                                <th style="width: 10%;">Payé</th>
+                                <th style="width: 10%;">Reste</th>
+                                <th style="width: 15%;">Statut</th>
+                                <th style="width: 10%;">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="ventesList">
-                            <tr><td colspan="12" class="text-center">Chargement...</td></tr>
+                            <tr><td colspan="9" class="text-center">Chargement...</td></tr>
                         </tbody>
                     </table>
                 </div>
+                
+                <!-- PAGINATION -->
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <nav>
+                            <ul class="pagination justify-content-center" id="paginationVentes"></ul>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL DÉTAILS VENTE -->
+<div class="modal fade" id="detailVenteModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-receipt"></i> Détails de la vente #<span id="detailVenteId"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detailVenteBody">
+                <div class="text-center">Chargement...</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                <button class="btn btn-primary" onclick="reimprimerDepuisDetail()">
+                    <i class="fas fa-print"></i> Réimprimer
+                </button>
             </div>
         </div>
     </div>
@@ -234,37 +248,29 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">Choisir le document à imprimer</h5>
+                <h5 class="modal-title">Choisir le document</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Format d'impression</label>
+                    <label class="form-label fw-semibold">Format</label>
                     <select id="printFormat" class="form-control">
-                        <option value="80mm">🎫 Format Ticket (80mm)</option>
-                        <option value="A4">📄 Format A4 (Standard)</option>
+                        <option value="80mm">🎫 Ticket (80mm)</option>
+                        <option value="A4">📄 A4</option>
                     </select>
                 </div>
-                
                 <div class="d-grid gap-2">
                     <button class="btn btn-outline-primary" onclick="printDocument('recu_client')">
                         <i class="fas fa-receipt"></i> Reçu Patient
                     </button>
-                    <button class="btn btn-outline-info" onclick="printDocument('les_deux_recus')">
-                        <i class="fas fa-copy"></i> Reçu Patient + Reçu Tiers Payant
-                    </button>
-                    <button class="btn btn-outline-secondary" onclick="printDocument('recu_structure')">
-                        <i class="fas fa-copy"></i> Reçu Structure (copie)
-                    </button>
                     <button class="btn btn-outline-success" onclick="printDocument('facture_client')">
                         <i class="fas fa-file-invoice"></i> Facture Patient
                     </button>
-                    <button class="btn btn-outline-danger" onclick="printDocument('facture_structure')">
-                        <i class="fas fa-archive"></i> Facture Structure (archive)
+                    <button class="btn btn-outline-secondary" onclick="printDocument('recu_structure')">
+                        <i class="fas fa-copy"></i> Reçu Structure
                     </button>
-                    <hr>
-                    <button class="btn btn-info" onclick="printDocument('les_deux')">
-                        <i class="fas fa-layer-group"></i> Les deux (Patient + Structure)
+                    <button class="btn btn-outline-info" onclick="printDocument('les_deux')">
+                        <i class="fas fa-layer-group"></i> Les deux
                     </button>
                 </div>
             </div>
@@ -280,6 +286,9 @@
 // VARIABLES GLOBALES
 // ============================================
 let toutesLesVentes = [];
+let ventesFiltrees = [];
+let currentPage = 1;
+let rowsPerPage = 10;
 let currentVenteId = null;
 let currentVenteType = null;
 let periodeStatsCourante = 'tous';
@@ -307,6 +316,21 @@ function hideLoader() {
 }
 
 // ============================================
+// TOGGLE FILTRES
+// ============================================
+function toggleFiltres() {
+    var container = document.getElementById('filtresContainer');
+    var icon = document.getElementById('filtreToggleIcon');
+    if (container.style.display === 'none') {
+        container.style.display = 'block';
+        icon.className = 'fas fa-chevron-up';
+    } else {
+        container.style.display = 'none';
+        icon.className = 'fas fa-chevron-down';
+    }
+}
+
+// ============================================
 // CHARGEMENT HISTORIQUE
 // ============================================
 function chargerHistorique() {
@@ -327,21 +351,21 @@ function chargerHistorique() {
         .catch(function(error) {
             console.error('❌ Erreur:', error);
             document.getElementById('ventesList').innerHTML = 
-                '<tr><td colspan="12" class="text-center text-danger">❌ Erreur de chargement</td></tr>';
+                '<tr><td colspan="9" class="text-center text-danger">❌ Erreur de chargement</td></tr>';
             hideLoader();
         });
 }
 
 // ============================================
-// AFFICHER LES VENTES
+// AFFICHER LES VENTES AVEC PAGINATION
 // ============================================
 function filtrerHistorique() {
-    var tbody = document.getElementById('ventesList');
-    if (!tbody) return;
-    
     if (!toutesLesVentes || toutesLesVentes.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted">Aucune vente trouvée</td></tr>';
+        document.getElementById('ventesList').innerHTML = 
+            '<tr><td colspan="9" class="text-center text-muted">Aucune vente trouvée</td></tr>';
         document.getElementById('resultCount').innerText = '0';
+        ventesFiltrees = [];
+        updatePagination();
         return;
     }
     
@@ -349,31 +373,32 @@ function filtrerHistorique() {
     var periode = document.getElementById('periodeFiltre').value;
     var searchType = document.getElementById('searchType').value;
     var searchGlobal = document.getElementById('searchGlobal').value.toLowerCase().trim();
-    var heureDebut = document.getElementById('filtreHeureDebut').value;
-    var heureFin = document.getElementById('filtreHeureFin').value;
     var dateDebut = document.getElementById('filtreDateDebut').value;
     var dateFin = document.getElementById('filtreDateFin').value;
     var filtreStatutPaiement = document.getElementById('filtreStatutPaiement').value;
     
-    var html = '';
-    var count = 0;
-    var isAdmin = {% if session.is_admin %}true{% else %}false{% endif %};
+    ventesFiltrees = [];
     
     for (var i = 0; i < toutesLesVentes.length; i++) {
         var v = toutesLesVentes[i];
         var visible = true;
         
         // Filtre par type
-        if (searchType && v.type !== searchType) {
-            visible = false;
+        if (searchType) {
+            var typeVente = (v.type || '').toLowerCase();
+            if (searchType === 'pharma' || searchType === 'pharmacie') {
+                if (typeVente !== 'pharma' && typeVente !== 'pharmacie') visible = false;
+            } else if (searchType === 'actes') {
+                if (typeVente !== 'actes') visible = false;
+            } else {
+                if (typeVente !== searchType) visible = false;
+            }
         }
         
         // Filtre global
         if (visible && searchGlobal) {
             var texte = (v.patient_nom || '') + ' ' + (v.detail || '') + ' ' + (v.net_a_payer || '');
-            if (texte.toLowerCase().indexOf(searchGlobal) === -1) {
-                visible = false;
-            }
+            if (texte.toLowerCase().indexOf(searchGlobal) === -1) visible = false;
         }
         
         // Filtre par date
@@ -393,7 +418,37 @@ function filtrerHistorique() {
             }
         }
         
-        // 🔥 Filtre par statut de paiement
+        // Filtre par période
+        if (visible && periode !== 'tous' && periode !== 'personnalise') {
+            var dateVente2 = v.date_vente ? new Date(v.date_vente) : null;
+            if (dateVente2) {
+                var aujourdhui = new Date();
+                aujourdhui.setHours(0, 0, 0, 0);
+                var debutPeriode = new Date(aujourdhui);
+                var finPeriode = new Date(aujourdhui);
+                finPeriode.setHours(23, 59, 59);
+                
+                if (periode === 'aujourdhui') {
+                    // Déjà défini
+                } else if (periode === 'semaine') {
+                    debutPeriode.setDate(debutPeriode.getDate() - debutPeriode.getDay());
+                    finPeriode.setDate(finPeriode.getDate() + (6 - finPeriode.getDay()));
+                    finPeriode.setHours(23, 59, 59);
+                } else if (periode === 'mois') {
+                    debutPeriode = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth(), 1);
+                    finPeriode = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth() + 1, 0);
+                    finPeriode.setHours(23, 59, 59);
+                } else if (periode === 'annee') {
+                    debutPeriode = new Date(aujourdhui.getFullYear(), 0, 1);
+                    finPeriode = new Date(aujourdhui.getFullYear(), 11, 31);
+                    finPeriode.setHours(23, 59, 59);
+                }
+                
+                if (dateVente2 < debutPeriode || dateVente2 > finPeriode) visible = false;
+            }
+        }
+        
+        // Filtre par statut paiement
         if (visible && filtreStatutPaiement) {
             var reste = v.reste_a_payer || 0;
             var montantDonne = v.montant_donne || 0;
@@ -409,77 +464,207 @@ function filtrerHistorique() {
         }
         
         if (visible) {
-            count++;
-            var dateObj = v.date_vente ? new Date(v.date_vente) : null;
-            var dateStr = dateObj ? dateObj.toLocaleString('fr-FR') : '-';
-            
-            var typeLabel = v.type === 'actes' ? 'Acte' : 'Pharmacie';
-            var badgeClass = v.type === 'actes' ? 'bg-primary' : 'bg-success';
-            
-            var netAPayer = v.net_a_payer || 0;
-            var montantDonne = v.montant_donne || 0;
-            var resteAPayer = v.reste_a_payer || 0;
-            var pbr = v.base_remboursement || 0;
-            
-            // 🔥 Déterminer le statut de paiement
-            var statutPaiement = '';
-            var statutBadge = '';
-            if (resteAPayer > 0 && montantDonne === 0) {
-                statutPaiement = '❌ Impayé';
-                statutBadge = 'bg-dark';
-            } else if (resteAPayer > 0 && montantDonne > 0) {
-                statutPaiement = '⚠️ Partiel';
-                statutBadge = 'bg-warning';
-            } else {
-                statutPaiement = '✅ Total';
-                statutBadge = 'bg-success';
-            }
-            
-            // 🔥 Assurances
-            var assurance1 = v.assurance_nom || v.type_assurance || 'Non assuré';
-            if (assurance1 === 'amu_cnss') assurance1 = 'AMU-CNSS';
-            else if (assurance1 === 'amu_inam') assurance1 = 'AMU-INAM';
-            
-            var assurance2 = v.assurance2_nom || '';
-            var assurancesText = assurance1;
-            if (assurance2 && assurance2 !== '' && assurance2 !== 'Aucune') {
-                assurancesText += ' + ' + assurance2 + ' (' + (v.taux_assurance2 || 0) + '%)';
-            }
-            
-            var factureNumero = v.facture_numero || '';
-            
-            html += '<tr>';
-            html += '<td><strong>#' + (v.ID || i+1) + '</strong></td>';
-            html += '<td>' + dateStr + '</td>';
-            html += '<td>' + (v.patient_nom || 'Patient') + '</td>';
-            html += '<td><span class="badge ' + badgeClass + '">' + typeLabel + '</span></td>';
-            html += '<td>' + (v.detail || '-') + '</td>';
-            html += '<td>' + (pbr > 0 ? Math.round(pbr).toLocaleString() + ' F' : '-') + '</td>';
-            html += '<td><strong>' + Math.round(netAPayer).toLocaleString() + ' F</strong></td>';
-            html += '<td style="color:#28a745; font-weight:bold;">' + Math.round(montantDonne).toLocaleString() + ' F</td>';
-            html += '<td style="color:#dc3545; font-weight:bold;">' + Math.round(resteAPayer).toLocaleString() + ' F</td>';
-            html += '<td><span class="badge ' + statutBadge + '">' + statutPaiement + '</span>';
-            if (factureNumero) {
-                html += '<br><small class="text-muted">Facture: ' + factureNumero + '</small>';
-            }
-            html += '</td>';
-            html += '<td>' + assurancesText + '</td>';
-            html += '<td>';
-            html += '<button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(' + (v.ID || i+1) + ', \'' + v.type + '\')"><i class="fas fa-print"></i></button>';
-            if (isAdmin && v.statut !== 'annulee') {
-                html += ' <button class="btn btn-sm btn-danger" onclick="annulerVente(' + (v.ID || i+1) + ', \'' + v.type + '\')"><i class="fas fa-ban"></i></button>';
-            }
-            html += '</td>';
-            html += '</tr>';
+            ventesFiltrees.push(v);
         }
     }
     
-    tbody.innerHTML = html || '<tr><td colspan="12" class="text-center text-muted">Aucun résultat</td></tr>';
-    document.getElementById('resultCount').innerText = count;
+    document.getElementById('resultCount').innerText = ventesFiltrees.length;
+    currentPage = 1;
+    updatePagination();
+    afficherPageVentes(1);
+}
+
+function afficherPageVentes(page) {
+    var tbody = document.getElementById('ventesList');
+    var start = (page - 1) * rowsPerPage;
+    var end = Math.min(start + rowsPerPage, ventesFiltrees.length);
+    var pageData = ventesFiltrees.slice(start, end);
+    
+    var html = '';
+    var isAdmin = {% if session.is_admin %}true{% else %}false{% endif %};
+    
+    for (var i = 0; i < pageData.length; i++) {
+        var v = pageData[i];
+        var dateObj = v.date_vente ? new Date(v.date_vente) : null;
+        var dateStr = dateObj ? dateObj.toLocaleString('fr-FR') : '-';
+        
+        var typeVente = (v.type || '').toLowerCase();
+        var typeLabel = '';
+        var badgeClass = '';
+        
+        if (typeVente === 'pharma' || typeVente === 'pharmacie') {
+            typeLabel = '💊 Pharma';
+            badgeClass = 'bg-success';
+        } else if (typeVente === 'actes') {
+            typeLabel = '🩺 Acte';
+            badgeClass = 'bg-primary';
+        } else {
+            typeLabel = typeVente || 'Inconnu';
+            badgeClass = 'bg-secondary';
+        }
+        
+        var netAPayer = v.net_a_payer || 0;
+        var montantDonne = v.montant_donne || 0;
+        var resteAPayer = v.reste_a_payer || 0;
+        
+        var statutPaiement = '';
+        var statutBadge = '';
+        if (resteAPayer > 0 && montantDonne === 0) {
+            statutPaiement = '❌ Impayé';
+            statutBadge = 'bg-dark';
+        } else if (resteAPayer > 0 && montantDonne > 0) {
+            statutPaiement = '⚠️ Partiel';
+            statutBadge = 'bg-warning';
+        } else {
+            statutPaiement = '✅ Total';
+            statutBadge = 'bg-success';
+        }
+        
+        var detail = v.detail || '';
+        if (detail.length > 30) detail = detail.substring(0, 27) + '...';
+        
+        html += '<tr>';
+        html += '<td><strong>#' + (v.ID || (start + i + 1)) + '</strong></td>';
+        html += '<td>' + dateStr + '</td>';
+        html += '<td><strong>' + (v.patient_nom || 'Patient') + '</strong></td>';
+        html += '<td><span class="badge ' + badgeClass + '">' + typeLabel + '</span></td>';
+        html += '<td class="text-end fw-bold">' + Math.round(netAPayer).toLocaleString() + ' F</td>';
+        html += '<td class="text-end" style="color:#28a745;">' + Math.round(montantDonne).toLocaleString() + ' F</td>';
+        html += '<td class="text-end" style="color:#dc3545;">' + Math.round(resteAPayer).toLocaleString() + ' F</td>';
+        html += '<td><span class="badge ' + statutBadge + '">' + statutPaiement + '</span></td>';
+        html += '<td>';
+        html += '<button class="btn btn-sm btn-outline-info" onclick="voirDetailVente(' + (v.ID || start + i + 1) + ', \'' + v.type + '\')" title="Détails">';
+        html += '<i class="fas fa-eye"></i></button>';
+        html += ' <button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(' + (v.ID || start + i + 1) + ', \'' + v.type + '\')" title="Imprimer">';
+        html += '<i class="fas fa-print"></i></button>';
+        if (isAdmin && v.statut !== 'annulee') {
+            html += ' <button class="btn btn-sm btn-outline-danger" onclick="annulerVente(' + (v.ID || start + i + 1) + ', \'' + v.type + '\')" title="Annuler">';
+            html += '<i class="fas fa-ban"></i></button>';
+        }
+        html += '</td>';
+        html += '</tr>';
+    }
+    
+    tbody.innerHTML = html || '<tr><td colspan="9" class="text-center text-muted">Aucun résultat</td></tr>';
+}
+
+function updatePagination() {
+    var totalPages = Math.ceil(ventesFiltrees.length / rowsPerPage);
+    var pagination = document.getElementById('paginationVentes');
+    
+    if (totalPages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
+    
+    var html = `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="changerPageVentes(${currentPage - 1}); return false;">«</a>
+                </li>`;
+    
+    var startPage = Math.max(1, currentPage - 2);
+    var endPage = Math.min(totalPages, startPage + 4);
+    
+    for (var i = startPage; i <= endPage; i++) {
+        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="changerPageVentes(${i}); return false;">${i}</a>
+                 </li>`;
+    }
+    
+    html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="changerPageVentes(${currentPage + 1}); return false;">»</a>
+             </li>`;
+    pagination.innerHTML = html;
+}
+
+function changerPageVentes(page) {
+    var totalPages = Math.ceil(ventesFiltrees.length / rowsPerPage);
+    if (page < 1 || page > totalPages) return;
+    currentPage = page;
+    afficherPageVentes(currentPage);
+    updatePagination();
 }
 
 // ============================================
-// STATISTIQUES
+// VOIR DÉTAIL D'UNE VENTE
+// ============================================
+function voirDetailVente(venteId, type) {
+    currentVenteId = venteId;
+    currentVenteType = type;
+    
+    var v = toutesLesVentes.find(function(item) {
+        return item.ID == venteId;
+    });
+    
+    if (!v) {
+        alert('Vente non trouvée');
+        return;
+    }
+    
+    document.getElementById('detailVenteId').textContent = venteId;
+    
+    var html = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6><i class="fas fa-user"></i> Patient</h6>
+                <p><strong>${v.patient_nom || 'Patient'}</strong></p>
+                <p class="text-muted small">ID: ${v.patient_id || '-'}</p>
+            </div>
+            <div class="col-md-6">
+                <h6><i class="fas fa-calendar"></i> Date</h6>
+                <p>${v.date_vente ? new Date(v.date_vente).toLocaleString('fr-FR') : '-'}</p>
+            </div>
+        </div>
+        <hr>
+        <div class="row">
+            <div class="col-md-4">
+                <h6><i class="fas fa-tag"></i> Type</h6>
+                <p><span class="badge ${v.type === 'actes' ? 'bg-primary' : 'bg-success'}">${v.type === 'actes' ? 'Acte' : 'Pharmacie'}</span></p>
+            </div>
+            <div class="col-md-4">
+                <h6><i class="fas fa-file-invoice"></i> Détail</h6>
+                <p>${v.detail || '-'}</p>
+            </div>
+            <div class="col-md-4">
+                <h6><i class="fas fa-shield-alt"></i> Assurances</h6>
+                <p>${v.assurance_nom || v.type_assurance || 'Non assuré'}</p>
+                ${v.assurance2_nom ? `<p class="text-muted small">+ ${v.assurance2_nom} (${v.taux_assurance2 || 0}%)</p>` : ''}
+            </div>
+        </div>
+        <hr>
+        <div class="row">
+            <div class="col-md-3">
+                <h6><i class="fas fa-coins"></i> PBR</h6>
+                <p class="text-primary">${(v.base_remboursement || 0).toLocaleString()} F</p>
+            </div>
+            <div class="col-md-3">
+                <h6><i class="fas fa-money-bill"></i> Net à payer</h6>
+                <p class="fw-bold">${(v.net_a_payer || 0).toLocaleString()} F</p>
+            </div>
+            <div class="col-md-3">
+                <h6><i class="fas fa-hand-holding-usd"></i> Payé</h6>
+                <p style="color:#28a745; font-weight:bold;">${(v.montant_donne || 0).toLocaleString()} F</p>
+            </div>
+            <div class="col-md-3">
+                <h6><i class="fas fa-arrow-right"></i> Reste</h6>
+                <p style="color:#dc3545; font-weight:bold;">${(v.reste_a_payer || 0).toLocaleString()} F</p>
+            </div>
+        </div>
+        ${v.facture_numero ? `<div class="alert alert-info mt-2"><i class="fas fa-file-invoice"></i> Facture: ${v.facture_numero}</div>` : ''}
+    `;
+    
+    document.getElementById('detailVenteBody').innerHTML = html;
+    new bootstrap.Modal(document.getElementById('detailVenteModal')).show();
+}
+
+function reimprimerDepuisDetail() {
+    bootstrap.Modal.getInstance(document.getElementById('detailVenteModal')).hide();
+    setTimeout(function() {
+        reimprimer(currentVenteId, currentVenteType);
+    }, 300);
+}
+
+// ============================================
+// STATISTIQUES (inchangé)
 // ============================================
 function changerPeriodeStats(periode) {
     periodeStatsCourante = periode;
@@ -559,16 +744,16 @@ function calculerStats(debut, fin) {
         }
         
         totalVentes++;
-        // 🔥 CA = ce qui a été payé (montant donné), pas le net à payer total
         totalCA += v.montant_donne || 0;
         
-        if (v.type === 'actes') {
+        var typeVente = (v.type || '').toLowerCase();
+        if (typeVente === 'actes' || typeVente === 'acte') {
             totalActes++;
             var detail = v.detail || '';
             if (detail) {
                 actesCount[detail] = (actesCount[detail] || 0) + 1;
             }
-        } else if (v.type === 'pharma' || v.type === 'pharmacie') {
+        } else if (typeVente === 'pharma' || typeVente === 'pharmacie') {
             totalPharma++;
             var detail2 = v.detail || '';
             if (detail2) {
@@ -589,20 +774,19 @@ function calculerStats(debut, fin) {
     
     var topActesHtml = '';
     for (var j = 0; j < topActes.length; j++) {
-        topActesHtml += '<tr><td>' + (j+1) + '. ' + topActes[j] + '</td><td class="text-end">' + actesCount[topActes[j]] + ' vendu(s)</td></tr>';
+        topActesHtml += '<tr><td>' + (j+1) + '. ' + topActes[j] + '</td><td class="text-end">' + actesCount[topActes[j]] + '</td></tr>';
     }
-    document.getElementById('topActesTable').innerHTML = topActesHtml || '<tr><td colspan="2" class="text-muted">Aucun acte vendu</td></tr>';
+    document.getElementById('topActesTable').innerHTML = topActesHtml || '<tr><td colspan="2" class="text-muted">Aucun acte</td></tr>';
     
-    // Top 5 produits
     var topProduits = Object.keys(produitsCount).sort(function(a, b) {
         return produitsCount[b] - produitsCount[a];
     }).slice(0, 5);
     
     var topProduitsHtml = '';
     for (var k = 0; k < topProduits.length; k++) {
-        topProduitsHtml += '<tr><td>' + (k+1) + '. ' + topProduits[k] + '</td><td class="text-end">' + produitsCount[topProduits[k]] + ' vendu(s)</td></tr>';
+        topProduitsHtml += '<tr><td>' + (k+1) + '. ' + topProduits[k] + '</td><td class="text-end">' + produitsCount[topProduits[k]] + '</td></tr>';
     }
-    document.getElementById('topProduitsTable').innerHTML = topProduitsHtml || '<tr><td colspan="2" class="text-muted">Aucun produit vendu</td></tr>';
+    document.getElementById('topProduitsTable').innerHTML = topProduitsHtml || '<tr><td colspan="2" class="text-muted">Aucun produit</td></tr>';
 }
 
 function appliquerStatsPersonnalise() {
@@ -632,8 +816,6 @@ function resetFiltres() {
     document.getElementById('searchGlobal').value = '';
     document.getElementById('filtreDateDebut').value = '';
     document.getElementById('filtreDateFin').value = '';
-    document.getElementById('filtreHeureDebut').value = '';
-    document.getElementById('filtreHeureFin').value = '';
     document.getElementById('filtreStatutPaiement').value = '';
     document.getElementById('dateDebutGroup').style.display = 'none';
     document.getElementById('dateFinGroup').style.display = 'none';
@@ -673,7 +855,7 @@ function printDocument(docType) {
         url = '/facture/' + currentVenteId + '/' + currentVenteType + '?format=' + format;
     } else if (docType === 'facture_structure') {
         url = '/facture_structure/' + currentVenteId + '/' + currentVenteType + '?format=' + format;
-    } else if (docType === 'les_deux_recus' || docType === 'les_deux') {
+    } else if (docType === 'les_deux') {
         window.open('/recu/' + currentVenteId + '/' + currentVenteType + '?format=' + format, '_blank');
         window.open('/recu_structure/' + currentVenteId + '/' + currentVenteType + '?format=' + format, '_blank');
         bootstrap.Modal.getInstance(document.getElementById('documentModal')).hide();
@@ -688,10 +870,10 @@ function printDocument(docType) {
 // ANNULATION
 // ============================================
 function annulerVente(venteId, type) {
-    var motif = prompt("Motif de l'annulation (optionnel) :", "Annulation manuelle");
+    var motif = prompt("Motif de l'annulation :", "Annulation manuelle");
     if (motif === null) return;
     
-    if (confirm('⚠️ Êtes-vous sûr de vouloir ANNULER cette vente ?')) {
+    if (confirm('⚠️ Annuler cette vente ?')) {
         showLoader('Annulation en cours...');
         
         fetch('/api/ventes/' + venteId + '/annuler', {
@@ -711,7 +893,7 @@ function annulerVente(venteId, type) {
         })
         .catch(function() {
             hideLoader();
-            alert('❌ Erreur lors de l\'annulation');
+            alert('❌ Erreur');
         });
     }
 }
@@ -723,16 +905,16 @@ function imprimerHistorique() {
     var rows = document.querySelectorAll('#ventesList tr');
     var printWindow = window.open('', '_blank');
     var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Historique des ventes</title>';
-    html += '<style>body{font-family:Arial;padding:20px;}h2{color:#667eea;}table{width:100%;border-collapse:collapse;margin-top:20px;}th,td{border:1px solid #ddd;padding:8px;}th{background:#667eea;color:white;}</style>';
+    html += '<style>body{font-family:Arial;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:6px;}th{background:#667eea;color:white;}</style>';
     html += '</head><body><h2>📋 HISTORIQUE DES VENTES</h2>';
     html += '<div>' + new Date().toLocaleString() + '</div>';
-    html += '<table><thead><tr><th>N°</th><th>Date</th><th>Patient</th><th>Type</th><th>Détail</th><th>PBR</th><th>Net</th><th>Payé</th><th>Reste</th><th>Statut</th><th>Assurances</th></tr></thead><tbody>';
+    html += '<table><thead><tr><th>N°</th><th>Date</th><th>Patient</th><th>Type</th><th>Montant</th><th>Payé</th><th>Reste</th><th>Statut</th></tr></thead><tbody>';
     
     for (var i = 0; i < rows.length; i++) {
         var cells = rows[i].cells;
         if (cells.length > 1 && rows[i].style.display !== 'none') {
             html += '<tr>';
-            for (var j = 0; j < cells.length - 1; j++) {
+            for (var j = 0; j < Math.min(cells.length - 1, 8); j++) {
                 html += '<td>' + (cells[j]?.innerText || '') + '</td>';
             }
             html += '</tr>';
@@ -748,12 +930,12 @@ function imprimerHistorique() {
 function imprimerStats() {
     var printWindow = window.open('', '_blank');
     var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Statistiques</title>';
-    html += '<style>body{font-family:Arial;padding:20px;}h2{color:#667eea;}.stats{display:flex;gap:20px;justify-content:center;margin:30px 0;}.stat{text-align:center;padding:15px;border:1px solid #ddd;border-radius:10px;min-width:150px;}.stat h3{color:#667eea;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:8px;}th{background:#667eea;color:white;}</style>';
-    html += '</head><body><h2>📊 STATISTIQUES DES VENTES</h2>';
-    html += '<div>' + document.getElementById('periodeStatsLabel').innerText + ' - ' + new Date().toLocaleString() + '</div>';
-    html += '<div class="stats">';
+    html += '<style>body{font-family:Arial;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:6px;}th{background:#667eea;color:white;}.stat{display:inline-block;padding:10px;margin:5px;border:1px solid #ddd;border-radius:5px;min-width:100px;text-align:center;}</style>';
+    html += '</head><body><h2>📊 STATISTIQUES</h2>';
+    html += '<div>' + document.getElementById('periodeStatsLabel').innerText + '</div>';
+    html += '<div>';
     html += '<div class="stat"><div>Total ventes</div><h3>' + document.getElementById('statTotalVentes').innerText + '</h3></div>';
-    html += '<div class="stat"><div>Chiffre d\'affaires</div><h3>' + document.getElementById('statCA').innerText + '</h3></div>';
+    html += '<div class="stat"><div>CA</div><h3>' + document.getElementById('statCA').innerText + '</h3></div>';
     html += '<div class="stat"><div>Actes</div><h3>' + document.getElementById('statActes').innerText + '</h3></div>';
     html += '<div class="stat"><div>Pharmacie</div><h3>' + document.getElementById('statPharma').innerText + '</h3></div>';
     html += '</div>';

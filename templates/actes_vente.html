@@ -259,6 +259,17 @@
     </div>
 </div>
 
+
+<!-- Bouton flottant pour revenir aux prescriptions reçues -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050;">
+    <a href="/prescriptions-recues" class="btn btn-success btn-lg rounded-circle shadow" 
+       style="width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; font-size: 28px;">
+        <i class="fas fa-prescription-bottle"></i>
+    </a>
+    <span class="badge bg-danger position-absolute top-0 start-0" id="prescriptionBadgeFloat" style="font-size: 14px;">0</span>
+</div>
+
+
 <!-- Modal de progression -->
 <div class="modal fade" id="progressModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
@@ -1718,6 +1729,89 @@ function chargerProformaBadge() {
         .catch(() => {});
 }
 
+
+document.addEventListener('DOMContentLoaded', function() {
+    // ⭐ Récupérer les articles à charger automatiquement depuis le backend
+    const articlesAuto = {{ articles_auto|tojson|safe }};
+    
+    if (articlesAuto && articlesAuto.length > 0) {
+        console.log(`📦 ${articlesAuto.length} article(s) à charger automatiquement`);
+        
+        // Charger chaque article dans le panier de vente
+        articlesAuto.forEach(article => {
+            ajouterArticleAuPanierVente(article);
+        });
+        
+        // Afficher une notification
+        showToast(`✅ ${articlesAuto.length} prescription(s) chargée(s) automatiquement`, 'success');
+        
+        // Mettre à jour l'affichage du panier
+        if (typeof afficherPanier === 'function') {
+            afficherPanier();
+        }
+        
+        // 🔥 Optionnel : marquer les articles comme déjà ajoutés
+        marquerArticlesAjoutes(articlesAuto);
+    }
+});
+
+// ⭐ Fonction pour ajouter un article au panier de vente
+function ajouterArticleAuPanierVente(article) {
+    // Vérifier si l'article est déjà dans le panier
+    const panierVente = JSON.parse(localStorage.getItem('panierVente') || '[]');
+    const existe = panierVente.some(item => item.prescription_id === article.prescription_id);
+    
+    if (!existe) {
+        panierVente.push({
+            id: article.id,
+            nom: article.nom,
+            prix: article.prix,
+            quantite: article.quantite || 1,
+            type: article.type || 'pharma',
+            prescription_id: article.prescription_id
+        });
+        localStorage.setItem('panierVente', JSON.stringify(panierVente));
+    }
+}
+
+// ⭐ Fonction optionnelle pour marquer les articles chargés automatiquement
+function marquerArticlesAjoutes(articles) {
+    articles.forEach(article => {
+        // Si vous avez des boutons ou des éléments dans la liste des produits
+        const element = document.querySelector(`[data-prescription-id="${article.prescription_id}"]`);
+        if (element) {
+            element.classList.add('text-success');
+            element.innerHTML += ' <i class="fas fa-check-circle text-success"></i>';
+        }
+    });
+}
+
+// ⭐ Fonction pour afficher les notifications (à adapter selon votre système)
+function showToast(message, type = 'info') {
+    // Si vous avez déjà une fonction showToast, utilisez-la
+    // Sinon, créez une notification simple
+    const container = document.querySelector('.toast-container') || (() => {
+        const c = document.createElement('div');
+        c.className = 'toast-container position-fixed top-0 end-0 p-3';
+        c.style.zIndex = '9999';
+        document.body.appendChild(c);
+        return c;
+    })();
+    
+    const toast = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-success' : type === 'warning' ? 'bg-warning' : 'bg-info';
+    toast.className = `toast show ${bgColor} text-white`;
+    toast.innerHTML = `
+        <div class="toast-body d-flex justify-content-between align-items-center">
+            <span>${message}</span>
+            <button type="button" class="btn-close btn-close-white" onclick="this.closest('.toast').remove()"></button>
+        </div>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 5000);
+}
+
+
 // ============================================
 // INITIALISATION
 // ============================================
@@ -1765,5 +1859,140 @@ document.addEventListener('DOMContentLoaded', function() {
         calculerRendu();
     };
 });
+
+// ============================================
+// ⭐ CHARGEMENT AUTOMATIQUE DES PRESCRIPTIONS (ACTES) - VERSION CORRIGÉE
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('=== CHARGEMENT AUTOMATIQUE ACTES ===');
+    
+    const articlesAuto = {{ articles_auto|tojson|safe }};
+    console.log('📦 Articles reçus du backend:', articlesAuto);
+    console.log('📦 Nombre d\'articles:', articlesAuto ? articlesAuto.length : 0);
+    
+    if (articlesAuto && articlesAuto.length > 0) {
+        console.log(`📦 ${articlesAuto.length} prescription(s) d'actes à charger automatiquement`);
+        
+        // Attendre que la page soit complètement chargée
+        setTimeout(function() {
+            const select = document.getElementById('acteSelect');
+            console.log('🔍 Select trouvé:', select);
+            
+            if (!select) {
+                console.error('❌ Select acteSelect non trouvé !');
+                return;
+            }
+            
+            console.log(`📋 Nombre d'options dans le select: ${select.options.length}`);
+            
+            let articlesCharges = 0;
+            
+            // ⭐ Utiliser une fonction récursive pour ajouter les articles un par un
+            function ajouterArticleSuivant(index) {
+                if (index >= articlesAuto.length) {
+                    // Tous les articles ont été ajoutés
+                    console.log(`📊 ${articlesCharges} actes chargés automatiquement sur ${articlesAuto.length}`);
+                    
+                    // Mettre à jour l'affichage du panier
+                    if (typeof afficherPanier === 'function') {
+                        console.log('🔄 Mise à jour du panier...');
+                        afficherPanier();
+                    }
+                    
+                    // Afficher une notification
+                    if (articlesCharges > 0) {
+                        showToastActes(`✅ ${articlesCharges} prescription(s) d'actes chargée(s) automatiquement`, 'success');
+                    }
+                    return;
+                }
+                
+                const article = articlesAuto[index];
+                console.log(`🔍 Traitement de l'article ${index + 1}/${articlesAuto.length}: ${article.nom}`);
+                
+                // Trouver l'acte correspondant dans le select
+                let trouve = false;
+                for (let i = 0; i < select.options.length; i++) {
+                    const option = select.options[i];
+                    // ⭐ Comparer par ID
+                    if (String(option.value) === String(article.id)) {
+                        console.log(`✅ Acte trouvé: ${option.text}`);
+                        
+                        // Sélectionner l'option
+                        select.selectedIndex = i;
+                        
+                        // Définir la quantité
+                        const quantiteInput = document.getElementById('quantite');
+                        if (quantiteInput) {
+                            quantiteInput.value = article.quantite || 1;
+                        }
+                        
+                        // ⭐ Appeler la fonction EXISTANTE
+                        try {
+                            ajouterActe();
+                            articlesCharges++;
+                            console.log(`✅ Acte ajouté au panier: ${article.nom}`);
+                        } catch (e) {
+                            console.error(`❌ Erreur lors de l'appel de ajouterActe():`, e);
+                        }
+                        
+                        trouve = true;
+                        break;
+                    }
+                }
+                
+                if (!trouve) {
+                    console.warn(`⚠️ Acte ID ${article.id} - ${article.nom} non trouvé dans la liste`);
+                    // Afficher les IDs disponibles pour déboguer
+                    console.log('📋 IDs disponibles dans le select:');
+                    for (let i = 1; i < Math.min(select.options.length, 20); i++) {
+                        console.log(`   - ${select.options[i].value}: ${select.options[i].text}`);
+                    }
+                }
+                
+                // ⭐ Attendre un peu avant de passer à l'article suivant
+                setTimeout(function() {
+                    ajouterArticleSuivant(index + 1);
+                }, 300);
+            }
+            
+            // Démarrer le chargement des articles
+            ajouterArticleSuivant(0);
+            
+        }, 1000);
+    } else {
+        console.log('ℹ️ Aucun article à charger automatiquement');
+    }
+});
+
+// ⭐ Fonction de notification pour actes (déjà présente, garder)
+function showToastActes(message, type = 'success') {
+    console.log('🔔 Notification:', message);
+    
+    if (typeof showToast === 'function') {
+        showToast(message, type);
+        return;
+    }
+    
+    const container = document.querySelector('.toast-container') || (() => {
+        const c = document.createElement('div');
+        c.className = 'toast-container position-fixed top-0 end-0 p-3';
+        c.style.zIndex = '9999';
+        document.body.appendChild(c);
+        return c;
+    })();
+    
+    const toast = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-success' : type === 'warning' ? 'bg-warning' : 'bg-info';
+    toast.className = `toast show ${bgColor} text-white`;
+    toast.style.opacity = '1';
+    toast.innerHTML = `
+        <div class="toast-body d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'} me-2"></i>${message}</span>
+            <button type="button" class="btn-close btn-close-white" onclick="this.closest('.toast').remove()"></button>
+        </div>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 5000);
+}
 </script>
 {% endblock %}

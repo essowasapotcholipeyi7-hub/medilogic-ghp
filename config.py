@@ -6,18 +6,25 @@ load_dotenv()
 class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'medilogic-secret-key-2024')
     ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', 'essowasainfo60@gmail.com')
-    DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://...')
     
-    # ⭐ ENVIRONNEMENT
-    # En local: development, En production: production
-    FLASK_ENV = os.getenv('FLASK_ENV', 'development')
+    # ⭐ Base de données (pour SQLAlchemy)
+    DATABASE_URL = os.getenv('DATABASE_URL')
     
-    # ⭐ Configuration du webhook
-    CONSULTATION_APP_URL = os.getenv('CONSULTATION_APP_URL', 'http://10.156.62.79:5000')
-    WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', 'mon_secret_webhook_123456')
-
+    # ⭐ SQLAlchemy
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'postgresql://...')
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+    # ⭐ Google Sheets
     SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '1yLVp-zwjCFhYx5VZVZN1HXRRgYEyak8kiHHtwWpkLEE')
-
+    
+    # ⭐ WEBHOOK CONFIGURATION
+    CONSULTATION_APP_URL = os.getenv('CONSULTATION_APP_URL', 'http://127.0.0.1:5000')
+    WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', 'mon_secret_webhook_123456')
+    
+    @property
+    def WEBHOOK_URL(self):
+        return f"{self.CONSULTATION_APP_URL}/api/webhook/patient-created"
+    
     @property
     def WEBHOOK_URL(self):
         return f"{self.CONSULTATION_APP_URL}/api/webhook/patient-created"

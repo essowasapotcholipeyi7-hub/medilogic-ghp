@@ -291,6 +291,15 @@
     </div>
 </div>
 
+<!-- Bouton flottant pour revenir aux prescriptions reçues -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050;">
+    <a href="/prescriptions-recues" class="btn btn-success btn-lg rounded-circle shadow" 
+       style="width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; font-size: 28px;">
+        <i class="fas fa-prescription-bottle"></i>
+    </a>
+    <span class="badge bg-danger position-absolute top-0 start-0" id="prescriptionBadgeFloat" style="font-size: 14px;">0</span>
+</div>
+
 <!-- Modal de progression -->
 <div class="modal fade" id="progressModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
@@ -1374,8 +1383,8 @@ function finaliserVente() {
         pbr: item.pbr || item.prix,
         quantite: item.quantite,
         total: item.total,
-        prise_en_charge_amu: item.prise_en_charge_amu,
-        prise_en_charge_cac: item.prise_en_charge_cac
+        prise_en_charge_amu: item.prise_en_charge_amu !== false,
+        prise_en_charge_cac: item.prise_en_charge_cac !== false
     }));
     
     const venteData = {
@@ -1402,9 +1411,13 @@ function finaliserVente() {
     };
     
     console.log('📦 Données de vente:', JSON.stringify(venteData, null, 2));
+    console.log('💰 Reste à payer:', resteAPayer);
     
     showProgress('Finalisation de la vente', 'Enregistrement en cours...');
     
+    // ============================================
+    // 1. ENVOI DE LA VENTE
+    // ============================================
     fetch('/api/ventes/pharma', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -1412,44 +1425,103 @@ function finaliserVente() {
     })
     .then(response => response.json())
     .then(data => {
-        hideProgress();
-        
-        if (data.success) {
-            alert(`✅ Vente enregistrée avec succès !\nID: ${data.vente_id}`);
-            
-            // Rediriger vers le reçu
-            const typeDoc = document.getElementById('typeDocument').value;
-            const format = document.getElementById('formatImpression').value;
-            
-            if (typeDoc === 'les_deux') {
-                window.open(`/recu/${data.vente_id}/pharma?format=${format}`, '_blank');
-                window.open(`/recu_structure/${data.vente_id}/pharma?format=${format}`, '_blank');
-                window.location.href = '/dashboard';
-            } else {
-                let baseUrl = '';
-                if (typeDoc === 'recu_client') baseUrl = `/recu/${data.vente_id}/pharma`;
-                else if (typeDoc === 'recu_structure') baseUrl = `/recu_structure/${data.vente_id}/pharma`;
-                else if (typeDoc === 'facture_client') baseUrl = `/facture/${data.vente_id}/pharma`;
-                else if (typeDoc === 'facture_structure') baseUrl = `/facture_structure/${data.vente_id}/pharma`;
-                else baseUrl = `/recu/${data.vente_id}/pharma`;
-                
-                window.location.href = `${baseUrl}?format=${format}`;
-            }
-            
-            // Vider le panier
-            panier = [];
-            afficherPanier();
-            
-        } else {
+        if (!data.success) {
+            hideProgress();
             alert('❌ Erreur: ' + (data.error || 'Erreur inconnue'));
+            return;
+        }
+        
+        console.log(`✅ Vente enregistrée avec ID: ${data.vente_id}`);
+        
+        // ============================================
+        // 2. CRÉATION AUTOMATIQUE DE FACTURE SI RESTE À PAYER > 0
+        // ============================================
+        if (resteAPayer > 0) {
+            console.log(`📋 Création d'une facture pour le reste à payer: ${resteAPayer} FCFA`);
+            
+            const dateEcheance = new Date();
+            dateEcheance.setDate(dateEcheance.getDate() + 7);
+            const dateEcheanceStr = dateEcheance.toISOString().split('T')[0];
+            
+            fetch('/api/factures/creer_automatique', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    vente_id: data.vente_id,
+                    date_echeance: dateEcheanceStr,
+                    mode_paiement: venteData.mode_paiement,
+                    montant_paye: montantDonne,
+                    reste_a_payer: resteAPayer,
+                    notes: `Paiement partiel pharmacie: ${montantDonne} FCFA payé, reste ${resteAPayer} FCFA`
+                })
+            })
+            .then(r => r.json())
+            .then(factureData => {
+                console.log('📄 Réponse facture:', factureData);
+                if (factureData.success) {
+                    console.log(`✅ Facture créée: ${factureData.numero_facture} (ID: ${factureData.facture_id})`);
+                    sessionStorage.setItem('lastFactureId', factureData.facture_id);
+                    sessionStorage.setItem('lastFactureNumero', factureData.numero_facture);
+                } else {
+                    console.error('❌ Erreur création facture:', factureData.error);
+                }
+                hideProgress();
+                redirigerApresVente(data.vente_id);
+            })
+            .catch(error => {
+                console.error('❌ Erreur fetch facture:', error);
+                hideProgress();
+                redirigerApresVente(data.vente_id);
+            });
+        } else {
+            // Paiement total, pas de facture nécessaire
+            console.log('✅ Paiement total, pas de facture nécessaire');
+            hideProgress();
+            redirigerApresVente(data.vente_id);
         }
     })
     .catch(error => {
         hideProgress();
+        console.error('❌ Erreur:', error);
         alert('❌ Erreur: ' + error);
     });
 }
 
+// ============================================
+// FONCTION DE REDIRECTION (NOUVELLE)
+// ============================================
+function redirigerApresVente(venteId) {
+    const typeDoc = document.getElementById('typeDocument').value;
+    const format = document.getElementById('formatImpression').value;
+    
+    console.log(`🔗 Redirection vers: type=${typeDoc}, format=${format}, vente=${venteId}`);
+    
+    // Vider le panier
+    panier = [];
+    afficherPanier();
+    
+    if (typeDoc === 'les_deux') {
+        window.open(`/recu/${venteId}/pharma?format=${format}`, '_blank');
+        window.open(`/recu_structure/${venteId}/pharma?format=${format}`, '_blank');
+        window.location.href = '/dashboard';
+        return;
+    }
+    
+    let baseUrl = '';
+    if (typeDoc === 'recu_client') {
+        baseUrl = `/recu/${venteId}/pharma`;
+    } else if (typeDoc === 'recu_structure') {
+        baseUrl = `/recu_structure/${venteId}/pharma`;
+    } else if (typeDoc === 'facture_client') {
+        baseUrl = `/facture/${venteId}/pharma`;
+    } else if (typeDoc === 'facture_structure') {
+        baseUrl = `/facture_structure/${venteId}/pharma`;
+    } else {
+        baseUrl = `/recu/${venteId}/pharma`;
+    }
+    
+    window.location.href = `${baseUrl}?format=${format}`;
+}
 // ============================================
 // CRÉER PROFORMA
 // ============================================
@@ -1582,5 +1654,120 @@ document.addEventListener('DOMContentLoaded', function() {
         calculerRendu();
     }, 500);
 });
+
+// ============================================
+// ⭐ CHARGEMENT AUTOMATIQUE DES PRESCRIPTIONS (PHARMA) - VERSION CORRIGÉE
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('=== CHARGEMENT AUTOMATIQUE PHARMA ===');
+    
+    const articlesAuto = {{ articles_auto|tojson|safe }};
+    console.log('📦 Articles reçus du backend:', articlesAuto);
+    console.log('📦 Nombre d\'articles:', articlesAuto ? articlesAuto.length : 0);
+    
+    if (articlesAuto && articlesAuto.length > 0) {
+        console.log(`📦 ${articlesAuto.length} prescription(s) pharmaceutiques à charger automatiquement`);
+        
+        setTimeout(function() {
+            const select = document.getElementById('produitSelect');
+            console.log('🔍 Select trouvé:', select);
+            
+            if (!select) {
+                console.error('❌ Select produitSelect non trouvé !');
+                return;
+            }
+            
+            console.log(`📋 Nombre d'options dans le select: ${select.options.length}`);
+            
+            let articlesCharges = 0;
+            
+            // ⭐ Fonction récursive pour ajouter les articles un par un
+            function ajouterArticleSuivant(index) {
+                if (index >= articlesAuto.length) {
+                    console.log(`📊 ${articlesCharges} produits chargés automatiquement sur ${articlesAuto.length}`);
+                    
+                    if (typeof afficherPanier === 'function') {
+                        console.log('🔄 Mise à jour du panier...');
+                        afficherPanier();
+                    }
+                    
+                    if (articlesCharges > 0) {
+                        showToastPharma(`✅ ${articlesCharges} prescription(s) pharmaceutiques chargée(s) automatiquement`, 'success');
+                    }
+                    return;
+                }
+                
+                const article = articlesAuto[index];
+                console.log(`🔍 Traitement de l'article ${index + 1}/${articlesAuto.length}: ${article.nom}`);
+                
+                let trouve = false;
+                for (let i = 0; i < select.options.length; i++) {
+                    const option = select.options[i];
+                    if (String(option.value) === String(article.id)) {
+                        console.log(`✅ Produit trouvé: ${option.text}`);
+                        
+                        select.selectedIndex = i;
+                        const quantiteInput = document.getElementById('quantite');
+                        if (quantiteInput) {
+                            quantiteInput.value = article.quantite || 1;
+                        }
+                        
+                        try {
+                            ajouterProduit();
+                            articlesCharges++;
+                            console.log(`✅ Produit ajouté au panier: ${article.nom}`);
+                        } catch (e) {
+                            console.error(`❌ Erreur lors de l'appel de ajouterProduit():`, e);
+                        }
+                        
+                        trouve = true;
+                        break;
+                    }
+                }
+                
+                if (!trouve) {
+                    console.warn(`⚠️ Produit ID ${article.id} - ${article.nom} non trouvé dans la liste`);
+                }
+                
+                // ⭐ Attendre avant de passer au suivant
+                setTimeout(function() {
+                    ajouterArticleSuivant(index + 1);
+                }, 300);
+            }
+            
+            ajouterArticleSuivant(0);
+            
+        }, 1000);
+    } else {
+        console.log('ℹ️ Aucun article à charger automatiquement');
+    }
+});
+
+function showToastPharma(message, type = 'success') {
+    if (typeof showToast === 'function') {
+        showToast(message, type);
+        return;
+    }
+    
+    const container = document.querySelector('.toast-container') || (() => {
+        const c = document.createElement('div');
+        c.className = 'toast-container position-fixed top-0 end-0 p-3';
+        c.style.zIndex = '9999';
+        document.body.appendChild(c);
+        return c;
+    })();
+    
+    const toast = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-success' : type === 'warning' ? 'bg-warning' : 'bg-info';
+    toast.className = `toast show ${bgColor} text-white`;
+    toast.innerHTML = `
+        <div class="toast-body d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'} me-2"></i>${message}</span>
+            <button type="button" class="btn-close btn-close-white" onclick="this.closest('.toast').remove()"></button>
+        </div>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 5000);
+}
 </script>
 {% endblock %}

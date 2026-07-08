@@ -8,7 +8,13 @@
         <a class="nav-link" href="{{ url_for('patients') }}">
             <i class="fas fa-users"></i> Patients
         </a>
-        <a class="nav-link" href="{{ url_for('actes_vente') }}">
+<li class="nav-item">
+    <a class="nav-link" href="/prescriptions-recues">
+        <i class="fas fa-prescription-bottle me-2 text-success"></i>
+        Prescriptions reçues
+        <span class="badge bg-danger ms-1" id="prescriptionBadge">0</span>
+    </a>
+</li>        <a class="nav-link" href="{{ url_for('actes_vente') }}">
             <i class="fas fa-stethoscope"></i> LABO/RADIO/Actes & Vente
         </a>
         <a class="nav-link" href="{{ url_for('pharma_vente') }}">

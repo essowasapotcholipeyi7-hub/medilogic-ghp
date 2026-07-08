@@ -31,87 +31,23 @@ def get_credentials_info():
 
     raise Exception("Aucun credential Google Sheets trouvé (variable GOOGLE_CREDENTIALS ou fichier credentials.json).")
 
-# sheets_helper.py - GHP
-
-def get_medicamentos(self, structure_id=None):
-    """
-    Récupère les médicaments depuis Google Sheets
-    La feuille est dynamique : struct_{structure_id}_produits
-    """
-    try:
-        if not self.enabled:
-            print("⚠️ Google Sheets désactivé")
-            return []
-        
-        if not structure_id:
-            print("⚠️ structure_id manquant pour récupérer les médicaments")
-            return []
-        
-        # Récupérer la feuille dynamique
-        spreadsheet = self.client.open_by_key(self.spreadsheet_id)
-        
-        # ⭐ Nom de la feuille : struct_{structure_id}_produits
-        sheet_name = f"struct_{structure_id}_produits"
-        
-        try:
-            worksheet = spreadsheet.worksheet(sheet_name)
-            print(f"📄 Feuille trouvée: {sheet_name}")
-        except Exception as e:
-            print(f"❌ Feuille '{sheet_name}' non trouvée: {e}")
-            return []
-        
-        # Récupérer toutes les lignes
-        records = worksheet.get_all_records()
-        
-        result = []
-        for row in records:
-            # Vérifier que le médicament a un nom
-            if not row.get('nom'):
-                continue
-            
-            # Gérer les valeurs NULL ou vides
-            quantite_stock = row.get('quantite_stock')
-            if quantite_stock == '' or quantite_stock is None:
-                quantite_stock = 0
-            
-            result.append({
-                'ID': row.get('ID'),
-                'nom': row.get('nom', ''),
-                'prix_vente': float(row.get('prix_vente', 0)) if row.get('prix_vente') else 0,
-                'pbr': float(row.get('pbr', 0)) if row.get('pbr') else 0,
-                'prix_achat': float(row.get('prix_achat', 0)) if row.get('prix_achat') else 0,
-                'quantite_stock': int(quantite_stock),
-                'seuil_alerte': int(row.get('seuil_alerte', 10)) if row.get('seuil_alerte') else 10,
-                'unite': row.get('unite', ''),
-                'date_peremption': row.get('date_peremption', ''),
-                'lot': row.get('lot', ''),
-                'structure_id': structure_id,
-                'prise_en_charge_amu': row.get('prise_en_charge_amu') == 'TRUE' or row.get('prise_en_charge_amu') == 'True' or row.get('prise_en_charge_amu') == 'OUI',
-                'commentaire_amu': row.get('commentaire_amu', ''),
-                'prise_en_charge_cac': row.get('prise_en_charge_cac') == 'TRUE' or row.get('prise_en_charge_cac') == 'True' or row.get('prise_en_charge_cac') == 'OUI',
-                'commentaire_cac': row.get('commentaire_cac', '')
-            })
-        
-        print(f"✅ {len(result)} médicaments récupérés depuis {sheet_name}")
-        return result
-        
-    except Exception as e:
-        print(f"❌ Erreur get_medicamentos: {e}")
-        import traceback
-        traceback.print_exc()
-        return []
-
 class SheetsHelper:
     def __init__(self):
         self.scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         self.structure_prefix = None
         self.structure_id = None
+        self._prix_cache = {}  # ⭐ Cache pour les prix
+        self._cache_duration = 300  # 5 minute
         
         # CACHE pour réduire les appels API
         self._cache = {}
         self._cache_duration = 10  # secondes
         self._batch_operations = []
         self._batch_timer = None
+        self.enabled = True
+        self.spreadsheet_id = Config.SPREADSHEET_ID
+
+
         
         try:
             if Config.SPREADSHEET_ID:
@@ -128,6 +64,7 @@ class SheetsHelper:
             print(f"⚠️ Erreur: {e}")
             raise e
     
+
     def init_structures_sheet(self):
         """Crée la feuille structures si elle n'existe pas"""
         try:
@@ -137,6 +74,162 @@ class SheetsHelper:
             headers = ["ID", "nom", "email", "telephone", "adresse", "mot_de_passe", "statut", "token", "date_inscription", "proprietaire", "date_occupation"]
             worksheet.append_row(headers)
             print("✅ Feuille 'structures' créée")
+
+    def get_medicamentos(self, structure_id):
+        """
+        Récupère les médicaments depuis Google Sheets
+        Feuille : struct_{structure_id}_produits
+        """
+        try:
+            if not self.enabled:
+                print("⚠️ Google Sheets désactivé")
+                return []
+            
+            if not structure_id:
+                print("⚠️ structure_id manquant")
+                return []
+            
+            # Récupérer la feuille
+            spreadsheet = self.client.open_by_key(self.spreadsheet_id)
+            sheet_name = f"struct_{structure_id}_produits"
+            
+            print(f"📄 Recherche de la feuille: {sheet_name}")
+            
+            try:
+                worksheet = spreadsheet.worksheet(sheet_name)
+            except Exception as e:
+                print(f"❌ Feuille '{sheet_name}' non trouvée: {e}")
+                return []
+            
+            # Récupérer toutes les lignes
+            records = worksheet.get_all_records()
+            
+            result = []
+            for row in records:
+                # Vérifier que le médicament a un nom
+                if not row.get('nom'):
+                    continue
+                
+                # Gérer les valeurs NULL
+                quantite_stock = row.get('quantite_stock')
+                if quantite_stock == '' or quantite_stock is None:
+                    quantite_stock = 0
+                
+                # Récupérer la valeur de prise_en_charge_amu (booléen)
+                prise_amu = row.get('prise_en_charge_amu')
+                if isinstance(prise_amu, str):
+                    prise_amu = prise_amu.upper() in ['TRUE', 'OUI', '1']
+                else:
+                    prise_amu = bool(prise_amu)
+                
+                # Récupérer la valeur de prise_en_charge_cac (booléen)
+                prise_cac = row.get('prise_en_charge_cac')
+                if isinstance(prise_cac, str):
+                    prise_cac = prise_cac.upper() in ['TRUE', 'OUI', '1']
+                else:
+                    prise_cac = bool(prise_cac)
+                
+                result.append({
+                    'ID': row.get('ID'),
+                    'nom': row.get('nom', ''),
+                    'prix_vente': float(row.get('prix_vente', 0)) if row.get('prix_vente') else 0,
+                    'pbr': float(row.get('pbr', 0)) if row.get('pbr') else 0,
+                    'prix_achat': float(row.get('prix_achat', 0)) if row.get('prix_achat') else 0,
+                    'quantite_stock': int(quantite_stock),
+                    'seuil_alerte': int(row.get('seuil_alerte', 10)) if row.get('seuil_alerte') else 10,
+                    'unite': row.get('unite', ''),
+                    'date_peremption': row.get('date_peremption', ''),
+                    'lot': row.get('lot', ''),
+                    'structure_id': structure_id,
+                    'prise_en_charge_amu': prise_amu,
+                    'commentaire_amu': row.get('commentaire_amu', ''),
+                    'prise_en_charge_cac': prise_cac,
+                    'commentaire_cac': row.get('commentaire_cac', '')
+                })
+            
+            print(f"✅ {len(result)} médicaments récupérés depuis {sheet_name}")
+            return result
+            
+        except Exception as e:
+            print(f"❌ Erreur get_medicamentos: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def get_prix_produit(self, structure_id, nom_produit):
+        """
+        Récupère le prix d'un produit avec cache
+        """
+        if not nom_produit:
+            return {'prix': 0, 'pbr': 0, 'unite': 'unité', 'trouve': False}
+        
+        # ⭐ Vérifier le cache
+        cache_key = f"produit_{structure_id}_{nom_produit.lower().strip()}"
+        if cache_key in self._prix_cache:
+            cached_data, timestamp = self._prix_cache[cache_key]
+            if time.time() - timestamp < self._cache_duration:
+                print(f"💾 Cache hit: {nom_produit}")
+                return cached_data
+        
+        # ⭐ Recherche dans Sheets
+        produits = self.get_medicamentos(structure_id)
+        result = {'prix': 0, 'pbr': 0, 'unite': 'unité', 'trouve': False}
+        
+        for p in produits:
+            nom = p.get('nom', '')
+            if nom and nom.lower().strip() == nom_produit.lower().strip():
+                result = {
+                    'prix': p.get('prix_vente', 0),
+                    'pbr': p.get('pbr', 0),
+                    'unite': p.get('unite', 'unité'),
+                    'trouve': True
+                }
+                break
+        
+        # ⭐ Mettre en cache
+        self._prix_cache[cache_key] = (result, time.time())
+        print(f"💾 Cache store: {nom_produit}")
+        return result
+    
+    def get_prix_acte(self, structure_id, nom_acte):
+        """
+        Récupère le prix d'un acte avec cache
+        """
+        if not nom_acte:
+            return {'prix': 0, 'pbr': 0, 'trouve': False}
+        
+        # ⭐ Vérifier le cache
+        cache_key = f"acte_{structure_id}_{nom_acte.lower().strip()}"
+        if cache_key in self._prix_cache:
+            cached_data, timestamp = self._prix_cache[cache_key]
+            if time.time() - timestamp < self._cache_duration:
+                print(f"💾 Cache hit: {nom_acte}")
+                return cached_data
+        
+        # ⭐ Recherche dans Sheets
+        actes = self.get_all_records('actes', use_prefix=True)
+        result = {'prix': 0, 'pbr': 0, 'trouve': False}
+        
+        for a in actes:
+            nom = a.get('nom', '')
+            if nom and nom.lower().strip() == nom_acte.lower().strip():
+                result = {
+                    'prix': float(a.get('prix', 0)),
+                    'pbr': float(a.get('pbr', 0)),
+                    'trouve': True
+                }
+                break
+        
+        # ⭐ Mettre en cache
+        self._prix_cache[cache_key] = (result, time.time())
+        print(f"💾 Cache store: {nom_acte}")
+        return result
+    
+    def clear_prix_cache(self):
+        """Vide le cache des prix"""
+        self._prix_cache = {}
+        print("🧹 Cache des prix vidé")
+
     
     def set_structure(self, structure_id, structure_nom=None):
         """Définit la structure active - FORMAT: struct_ID"""

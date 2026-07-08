@@ -10,7 +10,12 @@ import json
 import os
 import pandas as pd
 from io import BytesIO
-from db_helper import db
+
+# ⭐ Importer depuis db_helper et models
+from db_helper import db as db_helper
+from models import db, StructureMapping, Patient, Utilisateur, Structure
+
+
 
 # ========== DÉTECTION ENVIRONNEMENT ==========
 IS_PRODUCTION = os.environ.get('RENDER') == 'true' or os.environ.get('PRODUCTION') == 'true'
@@ -22,9 +27,148 @@ else:
 
 print(f"🔗 BASE_URL: {BASE_URL}")
 
+# Initialisation de l'application
 app = Flask(__name__)
 app.config.from_object(Config)
 app.secret_key = Config.SECRET_KEY
+
+# ⭐ Initialiser le db SQLAlchemy
+db.init_app(app)
+
+@app.after_request
+def auto_commit_after_request(response):
+    """
+    Commit automatique après chaque requête réussie (status < 400)
+    """
+    # Ne pas commiter pour les requêtes GET (lecture seule)
+    if request.method in ['POST', 'PUT', 'DELETE', 'PATCH']:
+        if response.status_code < 400:
+            try:
+                if db.session.is_active:
+                    db.session.commit()
+                    print(f"✅ Auto-commit après {request.method} {request.path}")
+            except Exception as e:
+                db.session.rollback()
+                print(f"❌ Erreur auto-commit: {e}")
+        else:
+            try:
+                if db.session.is_active:
+                    db.session.rollback()
+                    print(f"🔄 Rollback après {request.method} {request.path} (status: {response.status_code})")
+            except:
+                pass
+    
+    return response
+
+
+def convertir_prix(valeur):
+    """Convertit une valeur en float, gère les erreurs"""
+    if valeur is None or valeur == '' or valeur == '-':
+        return 0
+    try:
+        valeur_str = str(valeur).strip().replace(',', '.').replace(' ', '')
+        if valeur_str == '' or valeur_str == '-':
+            return 0
+        return float(valeur_str)
+    except (ValueError, TypeError):
+        return 0
+
+
+from sqlalchemy import text, inspect
+
+from sqlalchemy.exc import SQLAlchemyError
+
+import json
+
+def execute_query(query, params=None, commit=False):
+    """
+    Exécute une requête SQL avec SQLAlchemy.
+    
+    Args:
+        query (str): Requête SQL avec paramètres :nom ou %s
+        params (tuple|dict|list|None): Paramètres de la requête
+        commit (bool): Si True, commit la transaction
+    
+    Returns:
+        list: Résultats en dictionnaires pour SELECT/RETURNING
+        dict: Pour INSERT/UPDATE/DELETE sans RETURNING
+    """
+    try:
+        # ⭐ 1. NETTOYAGE DE LA REQUÊTE
+        query = query.replace('%%s', '%s')
+        
+        # ⭐ 2. SUPPRIMER LES CASTS EXPLICITES ::jsonb, ::text, etc.
+        # On les retire car SQLAlchemy gère automatiquement les types
+        import re
+        # Supprimer les ::jsonb, ::text, ::integer, etc. qui posent problème
+        query = re.sub(r'::\w+\s*,', ',', query)
+        query = re.sub(r'::\w+\s*\)', ')', query)
+        query = re.sub(r'::\w+\s*$', '', query)
+        
+        # ⭐ 3. PRÉPARATION DES PARAMÈTRES
+        dict_params = {}
+        
+        if params is not None:
+            if isinstance(params, (tuple, list)):
+                # Convertir en dict avec :p0, :p1, ...
+                dict_params = {f'p{i}': value for i, value in enumerate(params)}
+                # Remplacer les %s par :p0, :p1, ...
+                for i in range(len(params)):
+                    query = query.replace('%s', f':p{i}', 1)
+                    
+            elif isinstance(params, dict):
+                dict_params = params
+            else:
+                dict_params = {'p0': params}
+                query = query.replace('%s', ':p0', 1)
+        
+        # ⭐ 4. POUR LES JSON, S'ASSURER QU'ILS SONT EN STRING
+        if dict_params:
+            for key, value in dict_params.items():
+                if isinstance(value, (dict, list)):
+                    dict_params[key] = json.dumps(value, ensure_ascii=False)
+        
+        # ⭐ 5. EXÉCUTION DE LA REQUÊTE
+        if dict_params:
+            result = db.session.execute(text(query), dict_params)
+        else:
+            result = db.session.execute(text(query))
+        
+        # ⭐ 6. GESTION DU COMMIT
+        if commit:
+            db.session.commit()
+        
+        # ⭐ 7. RÉCUPÉRATION DES RÉSULTATS
+        query_upper = query.upper()
+        is_select = query_upper.lstrip().startswith('SELECT')
+        has_returning = 'RETURNING' in query_upper
+        
+        if is_select or has_returning:
+            rows = result.fetchall()
+            if rows:
+                return [dict(row._mapping) for row in rows]
+            return []
+        else:
+            affected_rows = result.rowcount
+            return {'affected_rows': affected_rows} if affected_rows >= 0 else None
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        print(f"❌ Erreur SQLAlchemy: {e}")
+        print(f"   Query: {query[:200]}...")
+        import traceback
+        traceback.print_exc()
+        raise
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur inattendue: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+# Assigner la fonction à db.execute_query
+db.execute_query = execute_query
+
+print("✅ db.execute_query défini avec succès")  # Pour vérifier
 
 # ========== CONFIGURATION EMAIL ==========
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
@@ -409,16 +553,28 @@ def register():
         return redirect(url_for('index'))
     
     return render_template('register.html')
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    from models import Patient
+    from datetime import datetime
+    from sqlalchemy import text
+    
+    # ⭐ Récupérer structure_id depuis la session
     structure_id = session.get('structure_id')
     
-    # ========== PATIENTS (depuis Neon) ==========
-    patients = db.execute_query("""
-        SELECT COUNT(*) as total FROM patients WHERE structure_id = %s
-    """, (structure_id,))
-    total_patients = patients[0]['total'] if patients else 0
+    if not structure_id:
+        flash('Structure non trouvée', 'danger')
+        return redirect(url_for('logout'))
+    
+    # ⭐ Compter les patients avec SQL pur (le plus fiable)
+    result = db.session.execute(
+        text("SELECT COUNT(*) FROM patients WHERE structure_id = :structure_id"),
+        {'structure_id': structure_id}
+    ).scalar()
+    
+    total_patients = result if result else 0
     
     today = datetime.now().strftime('%Y-%m-%d')
     
@@ -439,11 +595,6 @@ def dashboard():
     ventes_pharma = sheets_helper.get_all_records('ventes_pharma')
     ventes_pharma_filtrees = [v for v in ventes_pharma if str(v.get('structure_id')) == str(structure_id)]
     
-    # DEBUG - Afficher dans la console
-    print(f"\n📊 DASHBOARD DEBUG")
-    print(f"Structure ID: {structure_id}")
-    print(f"Ventes pharmacie totales pour cette structure: {len(ventes_pharma_filtrees)}")
-    
     ventes_pharma_today = 0
     ca_pharma_today = 0
     
@@ -452,14 +603,9 @@ def dashboard():
         if date_vente and date_vente.startswith(today):
             ventes_pharma_today += 1
             ca_pharma_today += float(v.get('net_a_payer', 0))
-            print(f"  - Vente pharma du jour: {date_vente} - {v.get('net_a_payer')} FCFA")
     
     # ========== CA TOTAL ==========
     ca_today = ca_actes_today + ca_pharma_today
-    
-    print(f"Ventes pharma aujourd'hui: {ventes_pharma_today}")
-    print(f"CA pharma aujourd'hui: {ca_pharma_today} FCFA")
-    print(f"CA total aujourd'hui: {ca_today} FCFA")
     
     # ========== ACTIVITÉS RÉCENTES ==========
     toutes_ventes = []
@@ -797,22 +943,37 @@ def check_sheets():
     except Exception as e:
         return jsonify({'error': str(e)})
 
+
 @app.route('/actes_vente')
 @login_required
 def actes_vente():
     """Page de vente d'actes"""
+    from sqlalchemy import text
+    
     structure_id = session.get('structure_id')
     
     # 🔥 Récupérer les actes depuis Google Sheets
-    actes = sheets_helper.get_all_records('actes')
+    actes = sheets_helper.get_all_records('actes', use_prefix=True)
     
     # Filtrer par structure
     actes_filtres = []
     for a in actes:
         if str(a.get('structure_id')) == str(structure_id):
             
-            # 🔥 Récupérer les valeurs avec gestion correcte
-            # Pour prise_en_charge_amu (colonne G)
+            def convertir_prix(valeur):
+                if valeur is None or valeur == '' or valeur == '-':
+                    return 0
+                try:
+                    valeur_str = str(valeur).strip().replace(',', '.').replace(' ', '')
+                    if valeur_str == '' or valeur_str == '-':
+                        return 0
+                    return float(valeur_str)
+                except (ValueError, TypeError):
+                    return 0
+            
+            prix = convertir_prix(a.get('prix'))
+            pbr = convertir_prix(a.get('pbr', a.get('prix')))
+            
             prise_amu_raw = a.get('prise_en_charge_amu')
             if prise_amu_raw is None or prise_amu_raw == '':
                 prise_amu = True
@@ -821,7 +982,6 @@ def actes_vente():
             else:
                 prise_amu = bool(prise_amu_raw)
             
-            # Pour prise_en_charge_cac (colonne I)
             prise_cac_raw = a.get('prise_en_charge_cac')
             if prise_cac_raw is None or prise_cac_raw == '':
                 prise_cac = True
@@ -832,9 +992,9 @@ def actes_vente():
             
             actes_filtres.append({
                 'ID': a.get('ID'),
-                'nom': a.get('nom'),
-                'prix': a.get('prix'),
-                'pbr': a.get('pbr', a.get('prix', 0)),
+                'nom': a.get('nom', ''),
+                'prix': prix,
+                'pbr': pbr if pbr > 0 else prix,
                 'description': a.get('description', ''),
                 'prise_en_charge_amu': prise_amu,
                 'commentaire_amu': a.get('commentaire_amu', ''),
@@ -842,25 +1002,222 @@ def actes_vente():
                 'commentaire_cac': a.get('commentaire_cac', '')
             })
     
-    patients = sheets_helper.get_all_records('patients')
-        
-    return render_template('actes_vente.html', actes=actes_filtres, patients=patients)
+    patients = sheets_helper.get_all_records('patients', use_prefix=True)
+    
+    # ⭐ Récupérer les prescriptions depuis NEON (table prescriptions_recues)
+    prescription_ids = request.args.get('prescription_ids', '')
+    articles_auto = []
+    
+    if prescription_ids:
+        ids_list = [int(id) for id in prescription_ids.split(',') if id.isdigit()]
+        if ids_list:
+            print(f"📋 Recherche des prescriptions avec IDs: {ids_list}")
+            
+            try:
+                # 🔥 Récupérer les prescriptions
+                result = db.session.execute(
+                    text("""
+                        SELECT * FROM prescriptions_recues
+                        WHERE id = ANY(:ids)
+                        AND structure_id = :structure_id
+                        AND type_prescription IN ('acte', 'actes')
+                    """),
+                    {"ids": ids_list, "structure_id": structure_id}
+                )
+                
+                prescriptions = result.fetchall()
+                print(f"📋 Nombre de prescriptions d'actes trouvées dans Neon: {len(prescriptions)}")
+                
+                for p in prescriptions:
+                    print(f"✅ Prescription trouvée: ID {p.id} - {p.medicament}")
+                    
+                    # ⭐ CHERCHER L'ACTE CORRESPONDANT DANS Google Sheets
+                    acte_trouve = None
+                    for acte in actes_filtres:
+                        if acte['nom'].lower().strip() == p.medicament.lower().strip():
+                            acte_trouve = acte
+                            break
+                    
+                    if acte_trouve:
+                        print(f"✅ Acte trouvé dans Sheets: ID {acte_trouve['ID']} - {acte_trouve['nom']}")
+                        
+                        articles_auto.append({
+                            'id': acte_trouve['ID'],  # ⭐ Utiliser l'ID de l'acte (pas celui de la prescription)
+                            'nom': p.medicament,
+                            'prix': float(p.prix_total) if p.prix_total else 0,
+                            'quantite': int(p.quantite) if p.quantite else 1,
+                            'pbr': float(p.pbr) if p.pbr else float(p.prix_total or 0),
+                            'prescription_id': p.id,  # Garder l'ID de la prescription pour référence
+                            'prise_en_charge_amu': True,
+                            'prise_en_charge_cac': True,
+                            'commentaire_amu': '',
+                            'commentaire_cac': ''
+                        })
+                        
+                        # ⭐ Mettre à jour le statut dans Neon
+                        db.session.execute(
+                            text("""
+                                UPDATE prescriptions_recues 
+                                SET statut = 'AU_PANIER' 
+                                WHERE id = :id
+                            """),
+                            {"id": p.id}
+                        )
+                        db.session.commit()
+                        print(f"📋 Prescription #{p.id} marquée AU_PANIER")
+                    else:
+                        print(f"⚠️ Acte non trouvé dans Sheets: {p.medicament}")
+                        print(f"   📋 Actes disponibles: {[a['nom'] for a in actes_filtres]}")
+                    
+            except Exception as e:
+                print(f"❌ Erreur lors de la récupération des prescriptions: {e}")
+                import traceback
+                traceback.print_exc()
+                db.session.rollback()
+    
+    print(f"📦 articles_auto (actes): {len(articles_auto)}")
+    
+    patient_taux = session.get('patient_taux', 0)
+    
+    return render_template('actes_vente.html', 
+                          actes=actes_filtres, 
+                          patients=patients,
+                          articles_auto=articles_auto,
+                          patientTaux=patient_taux)
+
 
 @app.route('/pharma_vente')
 @login_required
 def pharma_vente():
+    """Page de vente de pharmacie"""
+    from sqlalchemy import text
+    
+    structure_id = session.get('structure_id')
+    
+    def convertir_prix(valeur):
+        if valeur is None or valeur == '' or valeur == '-':
+            return 0
+        try:
+            valeur_str = str(valeur).strip().replace(',', '.').replace(' ', '')
+            if valeur_str == '' or valeur_str == '-':
+                return 0
+            return float(valeur_str)
+        except (ValueError, TypeError):
+            return 0
+    
     # 🔥 Lire les produits depuis Google Sheets
-    produits = sheets_helper.get_all_records('produits')
+    produits = sheets_helper.get_all_records('produits', use_prefix=True)
     
     # Filtrer par structure
-    structure_id = session.get('structure_id')
-    produits_filtres = [p for p in produits if str(p.get('structure_id')) == str(structure_id)]
+    produits_filtres = []
+    for p in produits:
+        if str(p.get('structure_id')) == str(structure_id):
+            
+            prix = convertir_prix(p.get('prix_vente'))
+            pbr = convertir_prix(p.get('pbr', p.get('prix_vente')))
+            stock = p.get('quantite_stock')
+            if stock is None or stock == '' or stock == '-':
+                stock = 0
+            try:
+                stock = int(stock)
+            except (ValueError, TypeError):
+                stock = 0
+            
+            produits_filtres.append({
+                'ID': p.get('ID'),
+                'nom': p.get('nom', ''),
+                'prix': prix,
+                'pbr': pbr if pbr > 0 else prix,
+                'stock': stock,
+                'description': p.get('description', ''),
+                'dosage': p.get('dosage', ''),
+                'forme': p.get('forme', ''),
+                'unite': p.get('unite', '')
+            })
     
-    patients = sheets_helper.get_all_records('patients')
+    patients = sheets_helper.get_all_records('patients', use_prefix=True)
     
     print(f"🔍 Produits trouvés dans Sheets: {len(produits_filtres)}")
     
-    return render_template('pharma_vente.html', produits=produits_filtres, patients=patients)
+    # ⭐ Récupérer les prescriptions depuis NEON (table prescriptions_recues)
+    prescription_ids = request.args.get('prescription_ids', '')
+    articles_auto = []
+    
+    if prescription_ids:
+        ids_list = [int(id) for id in prescription_ids.split(',') if id.isdigit()]
+        if ids_list:
+            print(f"📋 Recherche des prescriptions avec IDs: {ids_list}")
+            
+            try:
+                # 🔥 Récupérer les prescriptions
+                result = db.session.execute(
+                    text("""
+                        SELECT * FROM prescriptions_recues
+                        WHERE id = ANY(:ids)
+                        AND structure_id = :structure_id
+                        AND type_prescription IN ('medicament', 'pharma', 'pharmacie')
+                    """),
+                    {"ids": ids_list, "structure_id": structure_id}
+                )
+                
+                prescriptions = result.fetchall()
+                print(f"📋 Nombre de prescriptions pharmaceutiques trouvées dans Neon: {len(prescriptions)}")
+                
+                for p in prescriptions:
+                    print(f"✅ Prescription trouvée: ID {p.id} - {p.medicament}")
+                    
+                    # ⭐ CHERCHER LE PRODUIT CORRESPONDANT DANS Google Sheets
+                    produit_trouve = None
+                    for produit in produits_filtres:
+                        if produit['nom'].lower().strip() == p.medicament.lower().strip():
+                            produit_trouve = produit
+                            break
+                    
+                    if produit_trouve:
+                        print(f"✅ Produit trouvé dans Sheets: ID {produit_trouve['ID']} - {produit_trouve['nom']}")
+                        
+                        articles_auto.append({
+                            'id': produit_trouve['ID'],  # ⭐ Utiliser l'ID du produit (pas celui de la prescription)
+                            'nom': p.medicament,
+                            'prix': float(p.prix_total) if p.prix_total else 0,
+                            'quantite': int(p.quantite) if p.quantite else 1,
+                            'pbr': float(p.pbr) if p.pbr else float(p.prix_total or 0),
+                            'prescription_id': p.id,
+                            'dosage': p.dosage or '',
+                            'forme': p.forme or ''
+                        })
+                        
+                        # ⭐ Mettre à jour le statut dans Neon
+                        db.session.execute(
+                            text("""
+                                UPDATE prescriptions_recues 
+                                SET statut = 'AU_PANIER' 
+                                WHERE id = :id
+                            """),
+                            {"id": p.id}
+                        )
+                        db.session.commit()
+                        print(f"📋 Prescription #{p.id} marquée AU_PANIER")
+                    else:
+                        print(f"⚠️ Produit non trouvé dans Sheets: {p.medicament}")
+                        print(f"   📋 Produits disponibles: {[prod['nom'] for prod in produits_filtres]}")
+                    
+            except Exception as e:
+                print(f"❌ Erreur lors de la récupération des prescriptions: {e}")
+                import traceback
+                traceback.print_exc()
+                db.session.rollback()
+    
+    print(f"📦 Articles pharmaceutiques à charger automatiquement: {len(articles_auto)}")
+    
+    patient_taux = session.get('patient_taux', 0)
+    
+    return render_template('pharma_vente.html', 
+                          produits=produits_filtres, 
+                          patients=patients,
+                          articles_auto=articles_auto,
+                          patientTaux=patient_taux)
+
 
 @app.route('/facture/<int:vente_id>/<string:type>')
 @login_required
@@ -4573,7 +4930,7 @@ def api_get_actes():
         # Filtrer par structure
         actes_struct = []
         for a in actes:
-            sid = a.get('structure_id') or a.get('STRUCTURE_ID') or a.get('structureId')
+            sid = a.get('structure_id') or a.get('structure_id') or a.get('structureId')
             if sid is None or str(sid) == str(structure_id):
                 actes_struct.append(a)
         
@@ -6769,10 +7126,37 @@ def api_get_factures():
         structure_id = session.get('structure_id')
         statut = request.args.get('statut')
         
+        # 🔥 Spécifier explicitement les colonnes au lieu de SELECT *
         query = """
-            SELECT f.*, 
-                   COALESCE(p.total_paye, 0) as total_paye,
-                   COALESCE(p.nb_paiements, 0) as nb_paiements
+            SELECT 
+                f.id,
+                f.structure_id,
+                f.patient_id,
+                f.patient_nom,
+                f.patient_telephone,
+                f.numero_facture,
+                f.date_emission,
+                f.date_echeance,
+                f.sous_total,
+                f.taux_assurance,
+                f.prise_en_charge,
+                f.taux_assurance2,
+                f.prise_en_charge2,
+                f.net_a_payer,
+                f.montant_paye,
+                f.reste_a_payer,
+                f.statut,
+                f.articles,
+                f.mode_paiement,
+                f.notes,
+                f.created_by,
+                f.created_at,
+                f.updated_at,
+                f.base_remboursement,
+                f.assurances_data,
+                f.vente_id,
+                COALESCE(p.total_paye, 0) as total_paye,
+                COALESCE(p.nb_paiements, 0) as nb_paiements
             FROM factures f
             LEFT JOIN (
                 SELECT facture_id, 
@@ -6789,7 +7173,7 @@ def api_get_factures():
             query += " AND f.statut = %s"
             params.append(statut)
         
-        query += " ORDER BY f.date_echeance ASC, f.created_at DESC"
+        query += " ORDER BY f.created_at DESC"
         
         factures = db.execute_query(query, params)
         
@@ -6798,11 +7182,11 @@ def api_get_factures():
             if isinstance(f, dict):
                 result.append({
                     'id': f.get('id'),
-                    'numero_facture': f.get('numero_facture'),
-                    'patient_nom': f.get('patient_nom'),
-                    'patient_telephone': f.get('patient_telephone'),
-                    'date_emission': str(f.get('date_emission')),
-                    'date_echeance': str(f.get('date_echeance')),
+                    'numero_facture': f.get('numero_facture', ''),
+                    'patient_nom': f.get('patient_nom', 'Patient'),
+                    'patient_telephone': f.get('patient_telephone', ''),
+                    'date_emission': str(f.get('date_emission')) if f.get('date_emission') else '',
+                    'date_echeance': str(f.get('date_echeance')) if f.get('date_echeance') else '',
                     'sous_total': float(f.get('sous_total', 0)),
                     'taux_assurance': float(f.get('taux_assurance', 0)),
                     'prise_en_charge': float(f.get('prise_en_charge', 0)),
@@ -6811,23 +7195,28 @@ def api_get_factures():
                     'net_a_payer': float(f.get('net_a_payer', 0)),
                     'montant_paye': float(f.get('montant_paye', 0)),
                     'reste_a_payer': float(f.get('reste_a_payer', 0)),
-                    'statut': f.get('statut'),
+                    'statut': f.get('statut', 'en_attente'),
                     'statut_label': get_statut_label(f.get('statut')),
                     'nb_paiements': int(f.get('nb_paiements', 0) or 0),
                     'articles': f.get('articles', []),
-                    'mode_paiement': f.get('mode_paiement'),
-                    'notes': f.get('notes'),
-                    'created_by': f.get('created_by'),
-                    'created_at': str(f.get('created_at'))
+                    'mode_paiement': f.get('mode_paiement', 'especes'),
+                    'notes': f.get('notes', ''),
+                    'created_by': f.get('created_by', ''),
+                    'created_at': str(f.get('created_at')) if f.get('created_at') else '',
+                    'updated_at': str(f.get('updated_at')) if f.get('updated_at') else '',
+                    'base_remboursement': float(f.get('base_remboursement', 0)),
+                    'assurances_data': f.get('assurances_data', {}),
+                    'vente_id': f.get('vente_id')
                 })
             else:
+                # Format tuple
                 result.append({
-                    'id': f[0],
+                    'id': f[0] if len(f) > 0 else None,
                     'numero_facture': f[5] if len(f) > 5 else '',
-                    'patient_nom': f[3] if len(f) > 3 else '',
+                    'patient_nom': f[3] if len(f) > 3 else 'Patient',
                     'patient_telephone': f[4] if len(f) > 4 else '',
-                    'date_emission': str(f[6]) if len(f) > 6 else '',
-                    'date_echeance': str(f[7]) if len(f) > 7 else '',
+                    'date_emission': str(f[6]) if len(f) > 6 and f[6] else '',
+                    'date_echeance': str(f[7]) if len(f) > 7 and f[7] else '',
                     'sous_total': float(f[8]) if len(f) > 8 else 0,
                     'taux_assurance': float(f[9]) if len(f) > 9 else 0,
                     'prise_en_charge': float(f[10]) if len(f) > 10 else 0,
@@ -6836,14 +7225,18 @@ def api_get_factures():
                     'net_a_payer': float(f[13]) if len(f) > 13 else 0,
                     'montant_paye': float(f[14]) if len(f) > 14 else 0,
                     'reste_a_payer': float(f[15]) if len(f) > 15 else 0,
-                    'statut': f[16] if len(f) > 16 else '',
-                    'statut_label': get_statut_label(f[16] if len(f) > 16 else ''),
-                    'nb_paiements': int(f[24]) if len(f) > 24 and f[24] else 0,
-                    'articles': f[19] if len(f) > 19 else [],
-                    'mode_paiement': f[20] if len(f) > 20 else '',
-                    'notes': f[21] if len(f) > 21 else '',
-                    'created_by': f[22] if len(f) > 22 else '',
-                    'created_at': str(f[23]) if len(f) > 23 else ''
+                    'statut': f[16] if len(f) > 16 else 'en_attente',
+                    'statut_label': get_statut_label(f[16] if len(f) > 16 else 'en_attente'),
+                    'nb_paiements': int(f[26]) if len(f) > 26 and f[26] else 0,  # total_paye est à l'index 26
+                    'articles': f[17] if len(f) > 17 else [],
+                    'mode_paiement': f[18] if len(f) > 18 else 'especes',
+                    'notes': f[19] if len(f) > 19 else '',
+                    'created_by': f[20] if len(f) > 20 else '',
+                    'created_at': str(f[21]) if len(f) > 21 and f[21] else '',
+                    'updated_at': str(f[22]) if len(f) > 22 and f[22] else '',
+                    'base_remboursement': float(f[23]) if len(f) > 23 else 0,
+                    'assurances_data': f[24] if len(f) > 24 else {},
+                    'vente_id': f[25] if len(f) > 25 else None
                 })
         
         return jsonify(result)
@@ -7034,12 +7427,13 @@ def api_creer_facture_automatique():
             WHERE v.id = %s AND v.structure_id = %s
         """, (vente_id, structure_id))
         
-        if not vente:
+        if not vente or len(vente) == 0:
             return jsonify({'success': False, 'error': 'Vente non trouvée'}), 404
         
         v = vente[0]
         
-        # 🔥 RÉCUPÉRER LES ARTICLES AVEC LEURS PRIX CORRECTS
+        # Récupérer les articles avec leurs prix corrects
+        import json
         articles = []
         vente_type = v.get('type') if isinstance(v, dict) else v[3] if len(v) > 3 else 'actes'
         
@@ -7098,6 +7492,7 @@ def api_creer_facture_automatique():
                         article['total'] = article.get('prix_unitaire', 0) * article.get('quantite', 1)
                 articles = articles_data
         
+        # Récupérer les infos du patient
         patient_nom = v.get('patient_nom', 'Patient') if isinstance(v, dict) else v[2] if len(v) > 2 else 'Patient'
         patient_telephone = v.get('telephone', '') if isinstance(v, dict) else v[13] if len(v) > 13 else ''
         
@@ -7106,7 +7501,7 @@ def api_creer_facture_automatique():
         
         net_a_payer = float(v.get('net_a_payer', 0)) if isinstance(v, dict) else float(v[6]) if len(v) > 6 else 0
         
-        # 🔥 Récupérer base_remboursement
+        # Récupérer base_remboursement
         base_remboursement = float(v.get('base_remboursement', 0)) if isinstance(v, dict) else float(v[20]) if len(v) > 20 else 0
         
         if reste_a_payer <= 0:
@@ -7125,7 +7520,7 @@ def api_creer_facture_automatique():
         total = count[0]['total'] if count else 0
         numero_facture = f"F{structure_id}-{total+1:04d}"
         
-        # 🔥 Récupérer les assurances
+        # Récupérer les assurances
         assurances_data = v.get('assurances') if isinstance(v, dict) else None
         if isinstance(assurances_data, str):
             try:
@@ -7133,7 +7528,9 @@ def api_creer_facture_automatique():
             except:
                 assurances_data = None
         
-        # Créer la facture
+        # ⭐⭐⭐ CRÉER LA FACTURE AVEC commit=True ⭐⭐⭐
+        print(f"📝 Création facture - Vente #{vente_id}, Reste: {reste_a_payer} FCFA")
+        
         result = db.execute_query("""
             INSERT INTO factures (
                 structure_id, patient_id, patient_nom, patient_telephone,
@@ -7142,9 +7539,10 @@ def api_creer_facture_automatique():
                 taux_assurance2, prise_en_charge2,
                 net_a_payer, montant_paye, reste_a_payer,
                 articles, mode_paiement, notes, created_by,
-                base_remboursement, assurances_data
+                base_remboursement, assurances_data,
+                vente_id
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             structure_id,
@@ -7166,19 +7564,27 @@ def api_creer_facture_automatique():
             mode_paiement,
             f"{notes} - Vente #{vente_id}",
             user_name,
-            base_remboursement,  # 🔥 NOUVEAU
-            json.dumps(assurances_data, ensure_ascii=False) if assurances_data else None  # 🔥 NOUVEAU
-        ))
+            base_remboursement,
+            json.dumps(assurances_data, ensure_ascii=False) if assurances_data else None,
+            vente_id
+        ), commit=True)  # ⭐⭐⭐ commit=True OBLIGATOIRE ⭐⭐⭐
+        
+        if not result or len(result) == 0:
+            print("❌ Erreur: Aucun ID retourné pour la facture")
+            return jsonify({'success': False, 'error': 'Erreur insertion facture'}), 500
         
         facture_id = result[0]['id']
         
+        # ⭐⭐⭐ METTRE À JOUR LE STATUT DE LA VENTE AVEC commit=True ⭐⭐⭐
         db.execute_query("""
             UPDATE ventes SET statut = 'partielle' WHERE id = %s
-        """, (vente_id,))
+        """, (vente_id,), commit=True)  # ⭐⭐⭐ commit=True OBLIGATOIRE ⭐⭐⭐
         
-        print(f"✅ Facture automatique créée: {numero_facture} (reste: {reste_a_payer} FCFA)")
-        print(f"📦 Articles: {len(articles)}")
-        print(f"📊 Base remboursement (PBR): {base_remboursement} FCFA")
+        print(f"✅ Facture automatique créée: {numero_facture} (ID: {facture_id})")
+        print(f"   Reste à payer: {reste_a_payer} FCFA")
+        print(f"   Montant payé: {montant_paye} FCFA")
+        print(f"   Articles: {len(articles)}")
+        print(f"   Base remboursement (PBR): {base_remboursement} FCFA")
         
         return jsonify({
             'success': True,
@@ -7191,7 +7597,7 @@ def api_creer_facture_automatique():
         })
         
     except Exception as e:
-        print(f"❌ Erreur: {e}")
+        print(f"❌ Erreur création facture automatique: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -7309,6 +7715,7 @@ def api_test(structure):
 @app.route('/api/sync/patients')
 def api_sync_patients():
     """Récupérer les patients d'une structure (avec token)"""
+    from sqlalchemy import text
     
     token = request.args.get('token') or request.headers.get('X-API-Token')
     
@@ -7333,47 +7740,53 @@ def api_sync_patients():
         
         print(f"✅ Token valide pour la structure {structure_id} - {structure_nom}")
         
-        # ⭐ Récupérer les patients SANS archived (la colonne n'existe pas)
-        patients = db.execute_query("""
-            SELECT 
-                id, nom, prenom, telephone, adresse, date_naissance,
-                type_assurance, taux_prise_charge, numero_assure,
-                assurance2_nom, taux_assurance2, numero_assure2,
-                personne_a_prevenir_nom, personne_a_prevenir_telephone, 
-                personne_a_prevenir_relation
-            FROM patients 
-            WHERE structure_id = %s
-        """, (structure_id,))
+        # ⭐ Remplacer db.execute_query par db.session.execute avec text()
+        result = db.session.execute(
+            text("""
+                SELECT 
+                    id, nom, prenom, telephone, adresse, date_naissance,
+                    type_assurance, taux_prise_charge, numero_assure,
+                    assurance2_nom, taux_assurance2, numero_assure2,
+                    personne_a_prevenir_nom, personne_a_prevenir_telephone, 
+                    personne_a_prevenir_relation
+                FROM patients 
+                WHERE structure_id = :structure_id
+            """),
+            {'structure_id': structure_id}
+        )
+        
+        patients = result.fetchall()
         
         print(f"📊 {len(patients)} patients trouvés")
         
-        result = []
+        result_list = []
         for p in patients:
-            if isinstance(p, dict):
-                date_naissance = p.get('date_naissance')
-                result.append({
-                    'ID': p.get('id'),
-                    'nom': p.get('nom', ''),
-                    'prenom': p.get('prenom', ''),
-                    'telephone': p.get('telephone', ''),
-                    'adresse': p.get('adresse', ''),
-                    'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else None,
-                    'type_assurance': p.get('type_assurance', 'non_assure'),
-                    'taux_prise_charge': float(p.get('taux_prise_charge', 0)),
-                    'numero_assure': p.get('numero_assure', ''),
-                    'assurance2_nom': p.get('assurance2_nom', ''),
-                    'taux_assurance2': float(p.get('taux_assurance2', 0)),
-                    'numero_assure2': p.get('numero_assure2', ''),
-                    'personne_a_prevenir_nom': p.get('personne_a_prevenir_nom', ''),
-                    'personne_a_prevenir_telephone': p.get('personne_a_prevenir_telephone', ''),
-                    'personne_a_prevenir_relation': p.get('personne_a_prevenir_relation', '')
-                })
+            # p est un tuple ou un objet Row
+            # Accéder par index
+            date_naissance = p[5] if len(p) > 5 else None  # index 5 = date_naissance
+            result_list.append({
+                'ID': p[0],  # id
+                'nom': p[1] or '',  # nom
+                'prenom': p[2] or '',  # prenom
+                'telephone': p[3] or '',  # telephone
+                'adresse': p[4] or '',  # adresse
+                'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else None,
+                'type_assurance': p[6] or 'non_assure',  # type_assurance
+                'taux_prise_charge': float(p[7] or 0),  # taux_prise_charge
+                'numero_assure': p[8] or '',  # numero_assure
+                'assurance2_nom': p[9] or '',  # assurance2_nom
+                'taux_assurance2': float(p[10] or 0),  # taux_assurance2
+                'numero_assure2': p[11] or '',  # numero_assure2
+                'personne_a_prevenir_nom': p[12] or '',  # personne_a_prevenir_nom
+                'personne_a_prevenir_telephone': p[13] or '',  # personne_a_prevenir_telephone
+                'personne_a_prevenir_relation': p[14] or ''  # personne_a_prevenir_relation
+            })
         
         return jsonify({
             'structure_id': structure_id,
             'structure_nom': structure_nom,
-            'total': len(result),
-            'patients': result
+            'total': len(result_list),
+            'patients': result_list
         })
         
     except Exception as e:
@@ -7461,44 +7874,1232 @@ def api_medicamentos():
     """
     import traceback
     
+    token = request.args.get('token')
+    if not token:
+        return jsonify({'error': 'Token manquant'}), 401
+    
+    try:
+        # ⭐ Utiliser StructureMapping (doit être importé)
+        mapping = StructureMapping.query.filter_by(api_key=token, actif=True).first()
+        if not mapping:
+            return jsonify({'error': 'Token invalide'}), 401
+        
+        from sheets_helper import sheets_helper
+        
+        if not sheets_helper:
+            return jsonify({'error': 'sheets_helper non initialisé'}), 500
+        
+        medicamentos = sheets_helper.get_medicamentos(mapping.source_structure_id)
+        
+        return jsonify({
+            'success': True,
+            'medicamentos': medicamentos or [],
+            'total': len(medicamentos) if medicamentos else 0,
+            'structure_id': mapping.source_structure_id
+        })
+        
+    except NameError as e:
+        print(f"❌ Erreur: {e} - Vérifie que StructureMapping est importé")
+        return jsonify({'error': f'StructureMapping non défini: {str(e)}'}), 500
+    except Exception as e:
+        print(f"❌ Erreur récupération médicaments: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/prescriptions/<int:id>/delivrer', methods=['POST'])
+@login_required
+def delivrer_prescription(id):
+    """
+    Marquer une prescription comme délivrée (Pharmacie)
+    """
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
+    
+    try:
+        # ⭐ Vérifier que la prescription existe et est en attente
+        prescription = db.execute_query("""
+            SELECT * FROM prescriptions_recues 
+            WHERE id = %s AND structure_id = %s AND statut = 'EN_ATTENTE'
+        """, (id, structure_id))
+        
+        if not prescription:
+            return jsonify({'success': False, 'message': 'Prescription non trouvée ou déjà traitée'}), 404
+        
+        # ⭐ Mettre à jour le statut
+        db.execute_query("""
+            UPDATE prescriptions_recues 
+            SET statut = 'DELIVREE', delivre_le = %s
+            WHERE id = %s AND structure_id = %s
+        """, (datetime.now().isoformat(), id, structure_id))
+        
+        return jsonify({'success': True, 'message': '✅ Prescription délivrée avec succès'})
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/prescriptions/<int:id>/facturer', methods=['POST'])
+@login_required
+def facturer_prescription(id):
+    """
+    Marquer une prescription comme facturée (Actes)
+    """
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
+    
+    try:
+        # ⭐ Vérifier que la prescription existe et est en attente
+        prescription = db.execute_query("""
+            SELECT * FROM prescriptions_recues 
+            WHERE id = %s AND structure_id = %s AND statut = 'EN_ATTENTE'
+        """, (id, structure_id))
+        
+        if not prescription:
+            return jsonify({'success': False, 'message': 'Prescription non trouvée ou déjà traitée'}), 404
+        
+        # ⭐ Mettre à jour le statut
+        db.execute_query("""
+            UPDATE prescriptions_recues 
+            SET statut = 'FACTURE', facture_le = %s
+            WHERE id = %s AND structure_id = %s
+        """, (datetime.now().isoformat(), id, structure_id))
+        
+        return jsonify({'success': True, 'message': '✅ Acte facturé avec succès'})
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/prescriptions', methods=['POST'])
+def api_receive_prescriptions():
+    """
+    Reçoit les prescriptions depuis Consultation (API)
+    Gère les médicaments et les actes
+    """
+    from datetime import datetime
+    
     # Vérifier le token
     token = request.args.get('token')
     if not token:
         return jsonify({'error': 'Token manquant'}), 401
     
-    # ⭐ Les modèles sont déjà dans app.py, on peut les utiliser directement
-    # StructureMapping est déjà disponible
+    # Vérifier le mapping
     mapping = StructureMapping.query.filter_by(api_key=token, actif=True).first()
     if not mapping:
         return jsonify({'error': 'Token invalide'}), 401
     
     try:
-        from sheets_helper import sheets_helper
+        data = request.json
+        prescriptions = data.get('prescriptions', [])
         
-        # Vérifier que sheets_helper est bien initialisé
-        if not sheets_helper:
-            return jsonify({'error': 'sheets_helper non initialisé'}), 500
+        if not prescriptions:
+            return jsonify({'success': True, 'message': 'Aucune prescription'})
         
-        # Récupérer les médicaments
-        structure_id = mapping.source_structure_id
-        print(f"📡 Récupération médicaments pour structure {structure_id}")
+        print(f"📥 Réception de {len(prescriptions)} prescriptions")
         
-        medicamentos = sheets_helper.get_medicamentos(structure_id)
+        structure_id = mapping.local_structure_id
+        recu_le = datetime.now().isoformat()
+        inserted_count = 0
         
-        if medicamentos is None:
-            return jsonify({'error': 'Erreur récupération médicaments'}), 500
+        for p in prescriptions:
+            # ⭐ Détecter le type de prescription
+            type_presc = p.get('type_prescription') or 'medicament'
+            
+            # ⭐ Récupérer le nom du patient depuis la prescription
+            patient_nom = p.get('patient_nom') or ''
+            patient_prenom = p.get('patient_prenom') or ''
+            
+            # ⭐ Pour les actes, le nom est dans 'medicament' ou 'acte_nom'
+            medicament = p.get('medicament') or p.get('acte_nom') or ''
+            
+            if type_presc == 'acte' and not medicament:
+                medicament = p.get('acte_nom') or p.get('nom_acte') or 'Acte médical'
+            
+            if type_presc == 'medicament' and not medicament:
+                medicament = p.get('medicament') or 'Médicament'
+            
+            # ⭐⭐ RECHERCHER LE PATIENT PAR NOM ET PRÉNOM ⭐⭐
+            telephone = ''
+            type_assurance = 'Non assuré'
+            taux_prise_charge = 0
+            assurance2_nom = ''
+            taux_assurance2 = 0
+            numero_assure = ''
+            patient_id = None
+            
+            if patient_nom and patient_prenom:
+                patient_info = db.execute_query("""
+                    SELECT id, telephone, type_assurance, taux_prise_charge,
+                           assurance2_nom, taux_assurance2, numero_assure
+                    FROM patients 
+                    WHERE LOWER(nom) = LOWER(%s) 
+                    AND LOWER(prenom) = LOWER(%s)
+                    AND structure_id = %s
+                """, (patient_nom.strip(), patient_prenom.strip(), structure_id))
+                
+                if patient_info and len(patient_info) > 0:
+                    pat = patient_info[0]
+                    patient_id = pat.get('id')
+                    telephone = pat.get('telephone', '')
+                    type_assurance = pat.get('type_assurance', 'Non assuré')
+                    taux_prise_charge = pat.get('taux_prise_charge', 0)
+                    assurance2_nom = pat.get('assurance2_nom', '')
+                    taux_assurance2 = pat.get('taux_assurance2', 0)
+                    numero_assure = pat.get('numero_assure', '')
+                    print(f"   ✅ Patient trouvé: {patient_nom} {patient_prenom} (ID: {patient_id})")
+                else:
+                    print(f"   ⚠️ Patient non trouvé: {patient_nom} {patient_prenom}")
+            else:
+                print(f"   ⚠️ Nom du patient manquant dans la prescription")
+            
+            # ⭐ Insérer la prescription
+            result = db.execute_query("""
+                INSERT INTO prescriptions_recues (
+                    source_id, structure_id, patient_id, patient_nom, patient_prenom,
+                    medicament, dosage, forme, quantite, duree_jours, frequence,
+                    instructions, type_prescription, date_prescription, prescripteur,
+                    statut, recu_le,
+                    telephone, type_assurance, taux_prise_charge,
+                    assurance2_nom, taux_assurance2, numero_assure
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                p.get('id'),
+                structure_id,
+                patient_id,  # ⭐ ID trouvé ou None
+                patient_nom,
+                patient_prenom,
+                medicament,
+                p.get('dosage') or '',
+                p.get('forme') or '',
+                p.get('quantite') or '1',
+                p.get('duree_jours') or 0,
+                p.get('frequence') or '',
+                p.get('instructions') or '',
+                type_presc,
+                p.get('date_prescription') or datetime.now().isoformat(),
+                p.get('prescripteur') or '',
+                'EN_ATTENTE',
+                recu_le,
+                telephone,
+                type_assurance,
+                taux_prise_charge,
+                assurance2_nom,
+                taux_assurance2,
+                numero_assure
+            ))
+            
+            if result and len(result) > 0:
+                inserted_count += 1
+                print(f"   ✅ {type_presc.upper()}: {medicament} - {patient_nom} {patient_prenom}")
         
         return jsonify({
             'success': True,
-            'medicamentos': medicamentos,
-            'total': len(medicamentos),
-            'structure_id': structure_id
+            'message': f'✅ {inserted_count} prescriptions reçues'
         })
         
     except Exception as e:
-        print(f"❌ Erreur récupération médicaments: {e}")
+        print(f"❌ Erreur: {e}")
+        import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+@app.route('/prescriptions-recues')
+@login_required
+def prescriptions_recues():
+    """
+    Affiche les prescriptions reçues avec les prix
+    """
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        flash('Structure non trouvée', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    try:
+        # ⭐ Récupérer les prescriptions (les noms sont déjà dans la table)
+        prescriptions = db.execute_query("""
+            SELECT * FROM prescriptions_recues 
+            WHERE structure_id = %s 
+            ORDER BY recu_le DESC
+        """, (structure_id,))
+        
+        # ⭐ Charger les produits et actes pour les prix
+        produits = sheets_helper.get_medicamentos(structure_id)
+        actes = sheets_helper.get_all_records('actes', use_prefix=True)
+        
+        # ⭐ Construire les dictionnaires de prix
+        produits_dict = {}
+        for p in produits:
+            nom = p.get('nom', '').lower().strip()
+            if nom:
+                produits_dict[nom] = {
+                    'prix': p.get('prix_vente', 0),
+                    'pbr': p.get('pbr', 0),
+                    'unite': p.get('unite', 'unité')
+                }
+        
+        actes_dict = {}
+        for a in actes:
+            nom = a.get('nom', '').lower().strip()
+            if nom:
+                try:
+                    prix = float(a.get('prix', 0)) if a.get('prix') else 0
+                except:
+                    prix = 0
+                try:
+                    pbr = float(a.get('pbr', 0)) if a.get('pbr') else 0
+                except:
+                    pbr = 0
+                actes_dict[nom] = {'prix': prix, 'pbr': pbr}
+        
+        # ⭐ Traiter les prescriptions
+        prescriptions_pharma = []
+        prescriptions_actes = []
+        
+        for p in prescriptions:
+            type_presc = p.get('type_prescription') or 'medicament'
+            nom_recherche = p.get('medicament') or ''
+            nom_clean = nom_recherche.lower().strip()
+            
+            prix_unitaire = 0
+            pbr = 0
+            
+            if type_presc == 'medicament':
+                if nom_clean in produits_dict:
+                    prix_unitaire = produits_dict[nom_clean]['prix']
+                    pbr = produits_dict[nom_clean]['pbr']
+            else:
+                if nom_clean in actes_dict:
+                    prix_unitaire = actes_dict[nom_clean]['prix']
+                    pbr = actes_dict[nom_clean]['pbr']
+            
+            quantite = int(p.get('quantite', 1))
+            p['prix_unitaire'] = prix_unitaire
+            p['pbr'] = pbr
+            p['prix_total'] = prix_unitaire * quantite
+            
+            # ⭐ Utiliser les noms déjà stockés
+            p['patient_nom'] = p.get('patient_nom', 'Patient inconnu')
+            p['patient_prenom'] = p.get('patient_prenom', '')
+            
+            if type_presc == 'medicament':
+                prescriptions_pharma.append(p)
+            else:
+                prescriptions_actes.append(p)
+        
+        return render_template('prescriptions_recues.html',
+                             prescriptions_pharma=prescriptions_pharma,
+                             prescriptions_actes=prescriptions_actes)
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'Erreur: {str(e)}', 'danger')
+        return render_template('prescriptions_recues.html', 
+                             prescriptions_pharma=[], 
+                             prescriptions_actes=[])
+
+@app.route('/api/prescriptions/<int:id>/details', methods=['GET'])
+@login_required
+def prescription_details(id):
+    """
+    Récupère les détails d'une prescription avec son prix
+    """
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
+    
+    try:
+        # ⭐ Récupérer la prescription
+        prescription = db.execute_query("""
+            SELECT * FROM prescriptions_recues 
+            WHERE id = %s AND structure_id = %s
+        """, (id, structure_id))
+        
+        if not prescription or len(prescription) == 0:
+            return jsonify({'success': False, 'message': 'Prescription non trouvée'}), 404
+        
+        p = prescription[0]
+        
+        # ⭐ Gérer le cas où medicament est None
+        nom_recherche = p.get('medicament')
+        if nom_recherche is None:
+            nom_recherche = ''
+        nom_recherche = str(nom_recherche).strip()
+        
+        type_presc = p.get('type_prescription') or 'medicament'
+        
+        if not nom_recherche:
+            return jsonify({
+                'success': False, 
+                'message': 'Nom du médicament/acte manquant'
+            }), 400
+        
+        print(f"🔍 Détails: '{nom_recherche}' (Type: {type_presc})")
+        
+        # ⭐ RÉCUPÉRER LE PRIX DEPUIS SHEETS
+        prix_unitaire = 0
+        unite = 'unité'
+        found = False
+        nom_trouve = ''
+        match_info = ''
+        
+        if type_presc == 'medicament':
+            prix_info = sheets_helper.get_prix_produit(structure_id, nom_recherche)
+            
+            if prix_info.get('trouve'):
+                prix_unitaire = prix_info.get('prix', 0)
+                unite = prix_info.get('unite', 'unité')
+                found = True
+                nom_trouve = nom_recherche
+                match_info = '✅ Trouvé dans Sheets'
+                print(f"✅ Produit trouvé: {nom_trouve} - Prix: {prix_unitaire} FCFA")
+            else:
+                # Recherche flexible
+                produits = sheets_helper.get_medicamentos(structure_id)
+                for prod in produits:
+                    nom_prod = prod.get('nom', '')
+                    if nom_prod and nom_recherche.lower() in nom_prod.lower():
+                        prix_unitaire = prod.get('prix_vente', 0)
+                        unite = prod.get('unite', 'unité')
+                        nom_trouve = nom_prod
+                        found = True
+                        match_info = f'✅ Match partiel: {nom_trouve}'
+                        print(f"✅ Produit trouvé (partiel): {nom_trouve} - Prix: {prix_unitaire} FCFA")
+                        break
+                
+                if not found:
+                    print(f"❌ Produit non trouvé: '{nom_recherche}'")
+                    return jsonify({
+                        'success': False,
+                        'message': f'Produit non trouvé: "{nom_recherche}"',
+                        'type': type_presc
+                    }), 404
+            
+        else:  # acte
+            prix_info = sheets_helper.get_prix_acte(structure_id, nom_recherche)
+            
+            if prix_info.get('trouve'):
+                prix_unitaire = prix_info.get('prix', 0)
+                unite = 'acte'
+                found = True
+                nom_trouve = nom_recherche
+                match_info = '✅ Trouvé dans Sheets'
+                print(f"✅ Acte trouvé: {nom_trouve} - Prix: {prix_unitaire} FCFA")
+            else:
+                actes = sheets_helper.get_all_records('actes', use_prefix=True)
+                for act in actes:
+                    nom_act = act.get('nom', '')
+                    if nom_act and nom_recherche.lower() in nom_act.lower():
+                        prix_unitaire = float(act.get('prix', 0))
+                        nom_trouve = nom_act
+                        found = True
+                        match_info = f'✅ Match partiel: {nom_trouve}'
+                        print(f"✅ Acte trouvé (partiel): {nom_trouve} - Prix: {prix_unitaire} FCFA")
+                        break
+                
+                if not found:
+                    print(f"❌ Acte non trouvé: '{nom_recherche}'")
+                    return jsonify({
+                        'success': False,
+                        'message': f'Acte non trouvé: "{nom_recherche}"',
+                        'type': type_presc
+                    }), 404
+        
+        quantite = int(p.get('quantite', 1))
+        prix_total = prix_unitaire * quantite
+        
+        return jsonify({
+            'success': True,
+            'prescription': {
+                'id': p.get('id'),
+                'patient_nom': p.get('patient_nom') or '',
+                'patient_prenom': p.get('patient_prenom') or '',
+                'medicament': nom_trouve or nom_recherche,
+                'type': type_presc,
+                'quantite': quantite,
+                'prix_unitaire': prix_unitaire,
+                'prix_total': prix_total,
+                'unite': unite,
+                'date_prescription': p.get('date_prescription'),
+                'prescripteur': p.get('prescripteur') or '',
+                'statut': p.get('statut') or 'EN_ATTENTE',
+                'match_info': match_info
+            }
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur details: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/prescriptions/<int:id>/ajouter-panier', methods=['POST'])
+@login_required
+def prescription_ajouter_panier(id):
+    """
+    Ajoute une prescription au panier
+    """
+    from datetime import datetime
+    
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
+    
+    try:
+        # ⭐ Récupérer la prescription
+        prescription = db.execute_query("""
+            SELECT * FROM prescriptions_recues 
+            WHERE id = %s AND structure_id = %s AND statut = 'EN_ATTENTE'
+        """, (id, structure_id))
+        
+        if not prescription:
+            return jsonify({'success': False, 'message': 'Prescription non trouvée ou déjà traitée'}), 404
+        
+        p = prescription[0]
+        
+        # ⭐ Récupérer le prix depuis Sheets
+        nom_recherche = p.get('medicament') or ''
+        type_presc = p.get('type_prescription') or 'medicament'
+        prix_unitaire = 0
+        nom_trouve = nom_recherche
+        
+        if type_presc == 'medicament':
+            prix_info = sheets_helper.get_prix_produit(structure_id, nom_recherche)
+            if prix_info.get('trouve'):
+                prix_unitaire = prix_info.get('prix', 0)
+        else:
+            prix_info = sheets_helper.get_prix_acte(structure_id, nom_recherche)
+            if prix_info.get('trouve'):
+                prix_unitaire = prix_info.get('prix', 0)
+        
+        quantite = int(p.get('quantite', 1))
+        prix_total = prix_unitaire * quantite
+        
+        # ⭐ Mettre à jour le statut
+        db.execute_query("""
+            UPDATE prescriptions_recues 
+            SET statut = 'AU_PANIER'
+            WHERE id = %s AND structure_id = %s
+        """, (id, structure_id))
+        
+        # ⭐ Ajouter au panier (session)
+        panier = session.get('panier_prescriptions', [])
+        panier.append({
+            'prescription_id': id,
+            'type': type_presc,
+            'nom': nom_trouve,
+            'quantite': quantite,
+            'prix_unitaire': prix_unitaire,
+            'prix_total': prix_total,
+            'patient_nom': p.get('patient_nom') or '',
+            'patient_prenom': p.get('patient_prenom') or ''
+        })
+        session['panier_prescriptions'] = panier
+        session.modified = True
+        
+        return jsonify({
+            'success': True,
+            'message': f'✅ {nom_trouve} ajouté au panier',
+            'panier': panier,
+            'total_panier': sum(item['prix_total'] for item in panier)
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/prescriptions/suggestions', methods=['POST'])
+@login_required
+def api_prescriptions_suggestions():
+    """
+    Retourne des suggestions pour un nom de médicament/acte non trouvé
+    """
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
+    
+    try:
+        data = request.json
+        nom = data.get('nom', '').strip()
+        type_presc = data.get('type', 'medicament')
+        
+        if not nom or len(nom) < 2:
+            return jsonify({'suggestions': []})
+        
+        suggestions = []
+        
+        if type_presc == 'medicament':
+            # Rechercher des médicaments similaires
+            produits = db.execute_query("""
+                SELECT nom, prix_vente FROM produits 
+                WHERE structure_id = %s
+                AND (LOWER(nom) LIKE LOWER(%s) OR LOWER(nom) LIKE LOWER(%s))
+                LIMIT 10
+            """, (structure_id, '%' + nom + '%', '%' + ' '.join(nom.split()[:2]) + '%'))
+            
+            suggestions = [p.get('nom') for p in produits]
+            
+        else:  # actes
+            actes = db.execute_query("""
+                SELECT nom, prix FROM actes 
+                WHERE structure_id = %s
+                AND (LOWER(nom) LIKE LOWER(%s) OR LOWER(nom) LIKE LOWER(%s))
+                LIMIT 10
+            """, (structure_id, '%' + nom + '%', '%' + ' '.join(nom.split()[:2]) + '%'))
+            
+            suggestions = [a.get('nom') for a in actes]
+        
+        return jsonify({
+            'success': True,
+            'suggestions': suggestions,
+            'count': len(suggestions)
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur suggestions: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+
+@app.route('/api/prescriptions/verifier-prix', methods=['POST'])
+@login_required
+def api_verifier_prix_prescriptions():
+    """
+    Vérifie les prix de toutes les prescriptions en attente
+    """
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
+    
+    try:
+        # ⭐ Récupérer toutes les prescriptions en attente
+        prescriptions = db.execute_query("""
+            SELECT id, type_prescription, medicament, quantite 
+            FROM prescriptions_recues 
+            WHERE structure_id = %s AND statut = 'EN_ATTENTE'
+        """, (structure_id,))
+        
+        results = []
+        errors = []
+        
+        for p in prescriptions:
+            type_presc = p.get('type_prescription')
+            nom = p.get('medicament')
+            prix = 0
+            
+            if type_presc == 'medicament':
+                produit = db.execute_query("""
+                    SELECT prix_vente FROM produits 
+                    WHERE nom ILIKE %s AND structure_id = %s
+                """, (nom, structure_id))
+                if produit and len(produit) > 0:
+                    prix = float(produit[0].get('prix_vente', 0))
+                else:
+                    errors.append(f"Médicament non trouvé: {nom}")
+            else:  # acte
+                acte = db.execute_query("""
+                    SELECT prix FROM actes 
+                    WHERE nom ILIKE %s AND structure_id = %s
+                """, (nom, structure_id))
+                if acte and len(acte) > 0:
+                    prix = float(acte[0].get('prix', 0))
+                else:
+                    errors.append(f"Acte non trouvé: {nom}")
+            
+            if prix > 0:
+                quantite = int(p.get('quantite', 1))
+                results.append({
+                    'id': p.get('id'),
+                    'nom': nom,
+                    'type': type_presc,
+                    'prix_unitaire': prix,
+                    'prix_total': prix * quantite,
+                    'quantite': quantite,
+                    'status': 'OK'
+                })
+            else:
+                errors.append(f"Prix non défini pour: {nom}")
+        
+        return jsonify({
+            'success': True,
+            'results': results,
+            'errors': errors,
+            'total_ok': len(results),
+            'total_errors': len(errors)
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/prescriptions/<int:id>/retirer-panier', methods=['POST'])
+@login_required
+def prescription_retirer_panier(id):
+    """
+    Retire une prescription du panier
+    """
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
+    
+    try:
+        # ⭐ Marquer comme "EN_ATTENTE"
+        db.execute_query("""
+            UPDATE prescriptions_recues 
+            SET statut = 'EN_ATTENTE'
+            WHERE id = %s AND structure_id = %s
+        """, (id, structure_id), commit=True)
+        
+        # ⭐ Retirer du panier
+        panier = session.get('panier_prescriptions', [])
+        panier = [item for item in panier if item['prescription_id'] != id]
+        session['panier_prescriptions'] = panier
+        session.modified = True
+        
+        return jsonify({
+            'success': True,
+            'message': '✅ Prescription retirée du panier',
+            'panier': panier
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur retrait panier: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/panier-prescriptions', methods=['GET'])
+@login_required
+def api_panier_prescriptions():
+    """
+    Récupère le contenu du panier
+    """
+    try:
+        panier = session.get('panier_prescriptions', [])
+        total = sum(item['prix_total'] for item in panier)
+        
+        return jsonify({
+            'success': True,
+            'panier': panier,
+            'total': total,
+            'count': len(panier)
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/panier-prescriptions/vider', methods=['POST'])
+@login_required
+def api_vider_panier_prescriptions():
+    """
+    Vide le panier
+    """
+    try:
+        panier = session.get('panier_prescriptions', [])
+        
+        # Remettre toutes les prescriptions en "EN_ATTENTE"
+        for item in panier:
+            db.execute_query("""
+                UPDATE prescriptions_recues 
+                SET statut = 'EN_ATTENTE'
+                WHERE id = %s AND structure_id = %s
+            """, (item['prescription_id'], session.get('structure_id')), commit=True)
+        
+        session['panier_prescriptions'] = []
+        session.modified = True
+        
+        return jsonify({
+            'success': True,
+            'message': '🗑️ Panier vidé'
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/panier-prescriptions/finaliser', methods=['POST'])
+@login_required
+def api_finaliser_panier_prescriptions():
+    """
+    Finalise le panier et crée les ventes
+    """
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
+    
+    try:
+        panier = session.get('panier_prescriptions', [])
+        
+        if not panier:
+            return jsonify({'success': False, 'message': 'Panier vide'}), 400
+        
+        # ⭐ Créer une vente pour chaque type (pharma et actes séparément)
+        pharma_items = [item for item in panier if item['type'] == 'medicament']
+        actes_items = [item for item in panier if item['type'] == 'acte']
+        
+        results = []
+        
+        # Ventes pharma
+        if pharma_items:
+            # Grouper par patient
+            patients_pharma = {}
+            for item in pharma_items:
+                key = item.get('patient_nom', '') + item.get('patient_prenom', '')
+                if key not in patients_pharma:
+                    patients_pharma[key] = []
+                patients_pharma[key].append(item)
+            
+            for patient_key, items in patients_pharma.items():
+                # Créer la vente
+                total = sum(item['prix_total'] for item in items)
+                # ... création de la vente dans la table ventes
+                results.append({
+                    'type': 'pharma',
+                    'patient': patient_key,
+                    'total': total,
+                    'items': len(items)
+                })
+        
+        # Ventes actes
+        if actes_items:
+            patients_actes = {}
+            for item in actes_items:
+                key = item.get('patient_nom', '') + item.get('patient_prenom', '')
+                if key not in patients_actes:
+                    patients_actes[key] = []
+                patients_actes[key].append(item)
+            
+            for patient_key, items in patients_actes.items():
+                total = sum(item['prix_total'] for item in items)
+                results.append({
+                    'type': 'actes',
+                    'patient': patient_key,
+                    'total': total,
+                    'items': len(items)
+                })
+        
+        # ⭐ Vider le panier
+        for item in panier:
+            db.execute_query("""
+                UPDATE prescriptions_recues 
+                SET statut = 'FACTURE'
+                WHERE id = %s AND structure_id = %s
+            """, (item['prescription_id'], structure_id), commit=True)
+        
+        session['panier_prescriptions'] = []
+        session.modified = True
+        
+        return jsonify({
+            'success': True,
+            'message': f'✅ {len(panier)} prescriptions facturées',
+            'results': results
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur finalisation: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.template_filter('format_currency')
+def format_currency(value):
+    """Formate un nombre en devise FCFA"""
+    if value is None:
+        return '0 FCFA'
+    try:
+        return f"{int(value):,} FCFA".replace(',', ' ')
+    except:
+        return f"{value} FCFA"
+def generer_numero_ordonnance(structure_id):
+    """
+    Génère un numéro d'ordonnance unique pour une structure
+    Format: ORD-{ANNEE}-{NUMERO_SEQUENTIEL}
+    Exemple: ORD-2026-0042
+    """
+    from datetime import datetime
+    import time
+    
+    annee = datetime.now().strftime('%Y')
+    
+    # ⭐ Clé pour le compteur (stocké en session ou en base)
+    # Option 1: Stocker dans la session (pas persistant)
+    # Option 2: Stocker dans Google Sheets ou base de données
+    
+    # 📌 Utilisation d'un fichier de compteur (simple)
+    compteur_file = f'compteur_ordonnance_{structure_id}_{annee}.txt'
+    
+    try:
+        with open(compteur_file, 'r') as f:
+            compteur = int(f.read().strip())
+    except:
+        compteur = 0
+    
+    compteur += 1
+    
+    # Sauvegarder le nouveau compteur
+    with open(compteur_file, 'w') as f:
+        f.write(str(compteur))
+    
+    return f"ORD-{annee}-{compteur:04d}"
+
+
+@app.route('/ordonnance/patient/<int:patient_id>')
+@login_required
+def imprimer_ordonnances_patient(patient_id):
+    """
+    Imprime toutes les prescriptions d'un patient
+    """
+    structure_id = session.get('structure_id')
+    format_impression = request.args.get('format', '80mm')
+    
+    if not structure_id:
+        flash('Structure non trouvée', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    # Récupérer toutes les prescriptions du patient
+    prescriptions = db.execute_query("""
+        SELECT * FROM prescriptions_recues 
+        WHERE patient_id = %s AND structure_id = %s AND statut = 'EN_ATTENTE'
+    """, (patient_id, structure_id))
+    
+    if not prescriptions:
+        flash('Aucune prescription en attente pour ce patient', 'warning')
+        return redirect(url_for('prescriptions_recues'))
+    
+    # Rediriger vers la première prescription avec le paramètre groupe
+    return redirect(url_for('imprimer_ordonnance', 
+                         prescription_id=prescriptions[0].get('id'),
+                         format=format_impression,
+                         groupe='true'))
+
+@app.route('/ordonnance/patient/<int:patient_id>/medicaments')
+@login_required
+def imprimer_ordonnances_medicaments(patient_id):
+    """
+    Imprime toutes les prescriptions MÉDICAMENTEUSES d'un patient
+    """
+    from datetime import datetime
+    
+    structure_id = session.get('structure_id')
+    format_impression = request.args.get('format', '80mm')
+    
+    if not structure_id:
+        flash('Structure non trouvée', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    try:
+        # ⭐ Récupérer les prescriptions
+        prescriptions = db.execute_query("""
+            SELECT * FROM prescriptions_recues 
+            WHERE patient_id = %s 
+            AND structure_id = %s 
+            AND statut = 'EN_ATTENTE'
+            AND type_prescription = 'medicament'
+            ORDER BY id
+        """, (patient_id, structure_id))
+        
+        if not prescriptions:
+            flash('Aucune prescription médicamenteuse en attente pour ce patient', 'warning')
+            return redirect(url_for('prescriptions_recues'))
+        
+        # ⭐⭐ RÉCUPÉRER LE NOM DU PATIENT DEPUIS LA PRESCRIPTION ⭐⭐
+        p = prescriptions[0]
+        patient_nom = p.get('patient_nom', '')
+        patient_prenom = p.get('patient_prenom', '')
+        
+        if not patient_nom and not patient_prenom:
+            flash('❌ Nom du patient manquant dans la prescription', 'danger')
+            return redirect(url_for('prescriptions_recues'))
+        
+        # ⭐⭐ RECHERCHER LE PATIENT PAR NOM ET PRÉNOM ⭐⭐
+        patient_info = db.execute_query("""
+            SELECT id, nom, prenom, telephone, type_assurance, taux_prise_charge,
+                   assurance2_nom, taux_assurance2, numero_assure
+            FROM patients 
+            WHERE LOWER(nom) = LOWER(%s) 
+            AND LOWER(prenom) = LOWER(%s)
+            AND structure_id = %s
+        """, (patient_nom.strip(), patient_prenom.strip(), structure_id))
+        
+        # ⭐ SI LE PATIENT EST TROUVÉ → Utiliser ses infos
+        if patient_info and len(patient_info) > 0:
+            pat = patient_info[0]
+            telephone = pat.get('telephone', '')
+            type_assurance = pat.get('type_assurance', 'Non assuré')
+            taux_prise_charge = pat.get('taux_prise_charge', 0)
+            assurance2_nom = pat.get('assurance2_nom', '')
+            taux_assurance2 = pat.get('taux_assurance2', 0)
+            numero_assure = pat.get('numero_assure', '')
+            print(f"✅ Patient trouvé: {patient_nom} {patient_prenom}")
+        else:
+            # ⭐ Patient non trouvé → infos vides
+            telephone = ''
+            type_assurance = 'Non assuré'
+            taux_prise_charge = 0
+            assurance2_nom = ''
+            taux_assurance2 = 0
+            numero_assure = ''
+            print(f"⚠️ Patient non trouvé: {patient_nom} {patient_prenom}")
+        
+        # ⭐ Récupérer les informations de la structure
+        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+        structure = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
+        
+        # ⭐ Générer un numéro d'ordonnance unique
+        num_ordonnance = generer_numero_ordonnance(structure_id)
+        
+        # ⭐ Récupérer les prix
+        total = 0
+        for m in prescriptions:
+            prix_info = sheets_helper.get_prix_produit(structure_id, m.get('medicament'))
+            prix = prix_info.get('prix', 0)
+            pbr = prix_info.get('pbr', 0)
+            quantite = int(m.get('quantite', 1))
+            m['prix_unitaire'] = prix
+            m['pbr'] = pbr
+            m['prix_total'] = prix * quantite
+            total += prix * quantite
+        
+        # ⭐ Créer l'objet patient
+        patient_obj = {
+            'nom': patient_nom,
+            'prenom': patient_prenom,
+            'telephone': telephone or 'Non renseigné',
+            'type_assurance': type_assurance,
+            'taux_prise_charge': taux_prise_charge,
+            'assurance2_nom': assurance2_nom,
+            'taux_assurance2': taux_assurance2,
+            'numero_assure': numero_assure or 'Non renseigné',
+            'date_naissance': None
+        }
+        
+        return render_template('ordonnance_medicaments.html',
+                             prescriptions=prescriptions,
+                             patient=patient_obj,
+                             structure=structure,
+                             num_ordonnance=num_ordonnance,
+                             total=total,
+                             format=format_impression,
+                             now=datetime.now())
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'Erreur: {str(e)}', 'danger')
+        return redirect(url_for('prescriptions_recues'))
+
+
+@app.route('/ordonnance/patient/<int:patient_id>/actes')
+@login_required
+def imprimer_ordonnances_actes(patient_id):
+    """
+    Imprime toutes les prescriptions D'ACTES d'un patient
+    """
+    from datetime import datetime
+    
+    structure_id = session.get('structure_id')
+    format_impression = request.args.get('format', '80mm')
+    
+    if not structure_id:
+        flash('Structure non trouvée', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    try:
+        # ⭐ Récupérer les prescriptions d'actes
+        prescriptions = db.execute_query("""
+            SELECT * FROM prescriptions_recues 
+            WHERE patient_id = %s 
+            AND structure_id = %s 
+            AND statut = 'EN_ATTENTE'
+            AND type_prescription = 'acte'
+            ORDER BY id
+        """, (patient_id, structure_id))
+        
+        if not prescriptions:
+            flash('Aucune prescription d\'acte en attente pour ce patient', 'warning')
+            return redirect(url_for('prescriptions_recues'))
+        
+        # ⭐⭐ RÉCUPÉRER LE NOM DU PATIENT DEPUIS LA PRESCRIPTION ⭐⭐
+        p = prescriptions[0]
+        patient_nom = p.get('patient_nom', '')
+        patient_prenom = p.get('patient_prenom', '')
+        
+        if not patient_nom and not patient_prenom:
+            flash('❌ Nom du patient manquant dans la prescription', 'danger')
+            return redirect(url_for('prescriptions_recues'))
+        
+        # ⭐⭐ RECHERCHER LE PATIENT PAR NOM ET PRÉNOM ⭐⭐
+        patient_info = db.execute_query("""
+            SELECT id, nom, prenom, telephone, type_assurance, taux_prise_charge,
+                   assurance2_nom, taux_assurance2, numero_assure
+            FROM patients 
+            WHERE LOWER(nom) = LOWER(%s) 
+            AND LOWER(prenom) = LOWER(%s)
+            AND structure_id = %s
+        """, (patient_nom.strip(), patient_prenom.strip(), structure_id))
+        
+        # ⭐ SI LE PATIENT EST TROUVÉ → Utiliser ses infos
+        if patient_info and len(patient_info) > 0:
+            pat = patient_info[0]
+            telephone = pat.get('telephone', '')
+            type_assurance = pat.get('type_assurance', 'Non assuré')
+            taux_prise_charge = pat.get('taux_prise_charge', 0)
+            assurance2_nom = pat.get('assurance2_nom', '')
+            taux_assurance2 = pat.get('taux_assurance2', 0)
+            numero_assure = pat.get('numero_assure', '')
+            print(f"✅ Patient trouvé: {patient_nom} {patient_prenom}")
+        else:
+            telephone = ''
+            type_assurance = 'Non assuré'
+            taux_prise_charge = 0
+            assurance2_nom = ''
+            taux_assurance2 = 0
+            numero_assure = ''
+            print(f"⚠️ Patient non trouvé: {patient_nom} {patient_prenom}")
+        
+        # ⭐ Récupérer les informations de la structure
+        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+        structure = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
+        
+        # ⭐ Générer un numéro d'ordonnance unique
+        num_ordonnance = generer_numero_ordonnance(structure_id)
+        
+        # ⭐ Récupérer les prix
+        total = 0
+        for a in prescriptions:
+            prix_info = sheets_helper.get_prix_acte(structure_id, a.get('medicament'))
+            prix = prix_info.get('prix', 0)
+            pbr = prix_info.get('pbr', 0)
+            a['prix_unitaire'] = prix
+            a['pbr'] = pbr
+            a['prix_total'] = prix
+            total += prix
+        
+        # ⭐ Créer l'objet patient
+        patient_obj = {
+            'nom': patient_nom,
+            'prenom': patient_prenom,
+            'telephone': telephone or 'Non renseigné',
+            'type_assurance': type_assurance,
+            'taux_prise_charge': taux_prise_charge,
+            'assurance2_nom': assurance2_nom,
+            'taux_assurance2': taux_assurance2,
+            'numero_assure': numero_assure or 'Non renseigné',
+            'date_naissance': None
+        }
+        
+        return render_template('ordonnance_actes.html',
+                             prescriptions=prescriptions,
+                             patient=patient_obj,
+                             structure=structure,
+                             num_ordonnance=num_ordonnance,
+                             total=total,
+                             format=format_impression,
+                             now=datetime.now())
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'Erreur: {str(e)}', 'danger')
+        return redirect(url_for('prescriptions_recues'))
+
+@app.route('/api/prix/produits', methods=['POST'])
+@login_required
+def api_prix_produits():
+    """
+    Récupère les prix de plusieurs produits depuis Google Sheets
+    """
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
+    
+    try:
+        data = request.json
+        noms = data.get('noms', [])
+        
+        if not noms:
+            return jsonify({'success': False, 'message': 'Liste de noms requise'}), 400
+        
+        resultats = {}
+        for nom in noms:
+            prix_info = sheets_helper.get_prix_produit(structure_id, nom)
+            resultats[nom] = {
+                'prix': prix_info.get('prix', 0),
+                'pbr': prix_info.get('pbr', 0),
+                'trouve': prix_info.get('trouve', False)
+            }
+        
+        return jsonify({
+            'success': True,
+            'resultats': resultats
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/prix/actes', methods=['POST'])
+@login_required
+def api_prix_actes():
+    """
+    Récupère les prix de plusieurs actes depuis Google Sheets
+    """
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
+    
+    try:
+        data = request.json
+        noms = data.get('noms', [])
+        
+        if not noms:
+            return jsonify({'success': False, 'message': 'Liste de noms requise'}), 400
+        
+        resultats = {}
+        for nom in noms:
+            prix_info = sheets_helper.get_prix_acte(structure_id, nom)
+            resultats[nom] = {
+                'prix': prix_info.get('prix', 0),
+                'pbr': prix_info.get('pbr', 0),
+                'trouve': prix_info.get('trouve', False)
+            }
+        
+        return jsonify({
+            'success': True,
+            'resultats': resultats
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut

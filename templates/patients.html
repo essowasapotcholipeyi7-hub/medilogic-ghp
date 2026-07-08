@@ -1278,38 +1278,196 @@ function saveEditPatient() {
 }
 
 // ============================================
-// SÉLECTION PATIENT
+// SÉLECTION PATIENT AVEC CHOIX DE DESTINATION
 // ============================================
 function selectPatient(id, nom, assurance, taux, assurance2, taux2) {
     if (!id || id === 'undefined') {
-        alert('Erreur: ID patient invalide');
+        alert('❌ Erreur: ID patient invalide');
         return;
     }
     
-    sessionStorage.removeItem('selectedPatientId');
-    sessionStorage.removeItem('selectedPatientName');
-    sessionStorage.removeItem('selectedPatientAssurance');
-    sessionStorage.removeItem('selectedPatientTaux');
-    sessionStorage.removeItem('selectedPatientAssurance2');
-    sessionStorage.removeItem('selectedPatientTaux2');
-    
-    sessionStorage.setItem('selectedPatientId', id);
+    // ⭐ Sauvegarder les infos du patient dans sessionStorage
+    sessionStorage.setItem('selectedPatientId', String(id));
     sessionStorage.setItem('selectedPatientName', nom);
-    sessionStorage.setItem('selectedPatientAssurance', assurance);
-    sessionStorage.setItem('selectedPatientTaux', taux);
+    sessionStorage.setItem('selectedPatientPrenom', '');
+    sessionStorage.setItem('selectedPatientAssurance', assurance || 'non_assure');
+    sessionStorage.setItem('selectedPatientTaux', String(taux || 0));
+    sessionStorage.setItem('selectedPatientNumero', '');
     sessionStorage.setItem('selectedPatientAssurance2', assurance2 || '');
-    sessionStorage.setItem('selectedPatientTaux2', taux2 || 0);
+    sessionStorage.setItem('selectedPatientTaux2', String(taux2 || 0));
+    sessionStorage.setItem('selectedPatientNumero2', '');
     
-    console.log('Patient sélectionné:', { id, nom, assurance, taux, assurance2, taux2 });
+    console.log('✅ Patient sélectionné:', { id, nom, assurance, taux, assurance2, taux2 });
     
-    alert(`✅ Patient sélectionné : ${nom}\nAssurance principale : ${assurance} (${taux}%)\nAssurance complémentaire : ${assurance2 || 'Aucune'} (${taux2 || 0}%)`);
+    // ⭐ AFFICHER LE MODAL DE CHOIX
+    showPatientDestinationModal(id, nom, assurance, taux, assurance2, taux2);
+}
+
+// ============================================
+// MODAL DE CHOIX DE DESTINATION
+// ============================================
+function showPatientDestinationModal(id, nom, assurance, taux, assurance2, taux2) {
+    // Créer le modal si inexistant
+    let modal = document.getElementById('patientDestinationModal');
+    if (!modal) {
+        const modalHtml = `
+            <div class="modal fade" id="patientDestinationModal" tabindex="-1" data-bs-backdrop="static">
+                <div class="modal-dialog modal-dialog-centered modal-lg">
+                    <div class="modal-content" style="border-radius: 20px; overflow: hidden;">
+                        <div class="modal-header" style="background: linear-gradient(135deg, #0d6efd, #0a58ca); color: white; border: none; padding: 20px 30px;">
+                            <h4 class="modal-title w-100 text-center">
+                                <i class="fas fa-user-check me-2"></i>
+                                Patient sélectionné
+                            </h4>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body" style="padding: 30px;">
+                            <!-- Infos patient -->
+                            <div class="text-center mb-4">
+                                <div class="avatar-circle mx-auto mb-3" style="width: 80px; height: 80px; background: #e9ecef; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 32px; color: #0d6efd;">
+                                    <i class="fas fa-user"></i>
+                                </div>
+                                <h3 class="mb-1" id="destPatientNom">${nom}</h3>
+                                <div class="d-flex justify-content-center gap-3 flex-wrap">
+                                    <span class="badge bg-primary fs-6 px-3 py-2">
+                                        <i class="fas fa-shield-alt me-1"></i> ${assurance || 'Non assuré'} (${taux || 0}%)
+                                    </span>
+                                    ${assurance2 ? `<span class="badge bg-success fs-6 px-3 py-2"><i class="fas fa-plus-circle me-1"></i> ${assurance2} (${taux2 || 0}%)</span>` : ''}
+                                </div>
+                            </div>
+                            
+                            <hr>
+                            
+                            <!-- CHOIX DE DESTINATION -->
+                            <h5 class="text-center text-muted mb-4">
+                                <i class="fas fa-arrow-right me-2"></i>
+                                Où voulez-vous aller ?
+                            </h5>
+                            
+                            <div class="row g-3">
+                                <!-- Option 1: Actes -->
+                                <div class="col-md-4">
+                                    <button class="btn btn-outline-primary w-100 py-4 destination-btn" 
+                                            style="border-radius: 15px; border-width: 2px; transition: all 0.3s;"
+                                            onmouseover="this.style.transform='scale(1.03)'" 
+                                            onmouseout="this.style.transform='scale(1)'"
+                                            onclick="redirigerVers('actes', ${id})">
+                                        <i class="fas fa-stethoscope" style="font-size: 32px; display: block; margin-bottom: 10px;"></i>
+                                        <span style="font-size: 18px; font-weight: 600;">🩺 Actes</span>
+                                        <br>
+                                        <small class="text-muted">Vente d'actes médicaux</small>
+                                    </button>
+                                </div>
+                                
+                                <!-- Option 2: Pharmacie -->
+                                <div class="col-md-4">
+                                    <button class="btn btn-outline-success w-100 py-4 destination-btn" 
+                                            style="border-radius: 15px; border-width: 2px; transition: all 0.3s;"
+                                            onmouseover="this.style.transform='scale(1.03)'" 
+                                            onmouseout="this.style.transform='scale(1)'"
+                                            onclick="redirigerVers('pharma', ${id})">
+                                        <i class="fas fa-pills" style="font-size: 32px; display: block; margin-bottom: 10px;"></i>
+                                        <span style="font-size: 18px; font-weight: 600;">💊 Pharmacie</span>
+                                        <br>
+                                        <small class="text-muted">Vente de médicaments</small>
+                                    </button>
+                                </div>
+                                
+                                <!-- Option 3: Prescriptions reçues -->
+                                <div class="col-md-4">
+                                    <button class="btn btn-outline-warning w-100 py-4 destination-btn" 
+                                            style="border-radius: 15px; border-width: 2px; transition: all 0.3s;"
+                                            onmouseover="this.style.transform='scale(1.03)'" 
+                                            onmouseout="this.style.transform='scale(1)'"
+                                            onclick="redirigerVers('prescriptions', ${id})">
+                                        <i class="fas fa-prescription-bottle" style="font-size: 32px; display: block; margin-bottom: 10px;"></i>
+                                        <span style="font-size: 18px; font-weight: 600;">📋 Prescriptions</span>
+                                        <br>
+                                        <small class="text-muted">Voir les prescriptions reçues</small>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <hr>
+                            
+                            <div class="text-center">
+                                <button class="btn btn-outline-secondary btn-sm" onclick="fermerModalDestination()">
+                                    <i class="fas fa-times me-1"></i> Annuler
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        modal = document.getElementById('patientDestinationModal');
+    }
     
-    if (confirm('Aller à la vente d\'actes ?')) {
-        window.location.href = '/actes_vente';
-    } else if (confirm('Aller à la pharmacie ?')) {
-        window.location.href = '/pharma_vente';
+    // ⭐ Mettre à jour les infos du patient dans le modal
+    document.getElementById('destPatientNom').textContent = nom;
+    
+    // Afficher le modal
+    const modalInstance = new bootstrap.Modal(modal);
+    modalInstance.show();
+}
+
+// ============================================
+// REDIRECTION VERS LA DESTINATION CHOISIE
+// ============================================
+function redirigerVers(destination, patientId) {
+    // Fermer le modal
+    const modal = document.getElementById('patientDestinationModal');
+    const modalInstance = bootstrap.Modal.getInstance(modal);
+    if (modalInstance) modalInstance.hide();
+    
+    // Rediriger
+    switch(destination) {
+        case 'actes':
+            console.log('🔬 Redirection vers Actes...');
+            window.location.href = '/actes_vente';
+            break;
+        case 'pharma':
+            console.log('💊 Redirection vers Pharmacie...');
+            window.location.href = '/pharma_vente';
+            break;
+        case 'prescriptions':
+            console.log('📋 Redirection vers Prescriptions reçues...');
+            window.location.href = '/prescriptions-recues';
+            break;
+        default:
+            window.location.href = '/dashboard';
     }
 }
+
+// ============================================
+// FERMER LE MODAL
+// ============================================
+function fermerModalDestination() {
+    const modal = document.getElementById('patientDestinationModal');
+    const modalInstance = bootstrap.Modal.getInstance(modal);
+    if (modalInstance) modalInstance.hide();
+}
+
+// ============================================
+// FERMER LE MODAL EN CLIQUANT AILLEURS
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    // Fermer le modal avec la touche Echap
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            fermerModalDestination();
+        }
+    });
+    
+    // Permettre de fermer en cliquant sur le backdrop
+    document.addEventListener('click', function(e) {
+        const modal = document.getElementById('patientDestinationModal');
+        if (modal && e.target === modal) {
+            fermerModalDestination();
+        }
+    });
+});
 
 // ============================================
 // ENVOI LIEN WHATSAPP
@@ -1378,3 +1536,41 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+
+<style>
+/* Animation des boutons de destination */
+.destination-btn {
+    transition: all 0.3s ease !important;
+}
+
+.destination-btn:hover {
+    transform: scale(1.05) !important;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15) !important;
+}
+
+.destination-btn:active {
+    transform: scale(0.95) !important;
+}
+
+/* Animation d'apparition du modal */
+#patientDestinationModal .modal-content {
+    animation: slideUp 0.4s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Badge patient dans le modal */
+#patientDestinationModal .badge {
+    font-size: 14px;
+    padding: 8px 16px;
+}
+<style>
