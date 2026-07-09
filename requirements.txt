@@ -1,11 +1,23 @@
-Flask
-Flask-SQLAlchemy
-Flask-Login
-Flask-Mail
-python-dotenv
-requests
-gspread
-oauth2client
-pandas
-openpyxl
-psycopg2-binary
+# Framework et extensions Flask
+Flask==2.3.3
+Flask-SQLAlchemy==3.1.1
+Flask-Login==0.6.2
+Flask-Mail==0.9.1
+
+# Utilitaires
+python-dotenv==1.0.0
+requests==2.31.0
+
+# Google Sheets
+gspread==5.12.0
+oauth2client==4.1.3
+
+# Data processing
+pandas==2.1.4
+openpyxl==3.1.2
+
+# Base de données
+psycopg2-binary==2.9.9
+
+# Serveur WSGI (OBLIGATOIRE pour Render)
+gunicorn==21.2.0
