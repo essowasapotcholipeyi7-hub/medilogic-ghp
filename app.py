@@ -4068,7 +4068,7 @@ def api_vente_pharma():
             float(data.get('net_a_payer', 0)),
             data.get('mode_paiement', 'especes'),
             taux_assurance,
-            json.dumps(produits_data, ensure_ascii=False),  # 🔥 Produits avec prise en charge
+            json.dumps(produits_data, ensure_ascii=False),
             vendeur,
             json.dumps(assurances_data, ensure_ascii=False),
             assurance2_nom,
@@ -4089,9 +4089,9 @@ def api_vente_pharma():
         vente_id = result[0]['id']
         print(f"✅ Vente pharmacie enregistrée dans Neon avec ID: {vente_id}")
         
-        # ========== 2. AJOUTER LA RECETTE PATIENT ==========
-        net_a_payer = float(data.get('net_a_payer', 0))
-        if net_a_payer > 0:
+        # ========== 2. AJOUTER LA RECETTE PATIENT (MONTANT DONNÉ) ==========
+        # ✅ CORRECTION : Utiliser montant_donne au lieu de net_a_payer
+        if montant_donne > 0:
             recette_result = db.execute_query("""
                 INSERT INTO recettes (
                     structure_id, 
@@ -4107,18 +4107,20 @@ def api_vente_pharma():
                 RETURNING id
             """, (
                 structure_id,
-                net_a_payer,
+                montant_donne,  # ✅ ICI c'est le montant donné (pas le total)
                 'patients',
                 vente_id,
                 'vente_pharma',
-                'Vente pharmacie #' + str(vente_id) + ' - ' + data.get('patient_nom', 'Patient') + f' - Donné: {montant_donne} FCFA, Rendu: {rendu} FCFA',
+                f'Vente pharmacie #{vente_id} - {data.get("patient_nom", "Patient")} - Donné: {montant_donne} FCFA, Rendu: {rendu} FCFA, Reste: {reste_a_payer} FCFA',
                 vendeur
             ))
             
             if recette_result and len(recette_result) > 0:
-                print(f"✅ Recette patient ajoutée: {net_a_payer} FCFA")
+                print(f"✅ Recette patient ajoutée: {montant_donne} FCFA")
             else:
                 print("⚠️ Erreur lors de l'insertion de la recette patient")
+        else:
+            print(f"ℹ️ Montant donné = 0, pas de recette patient")
         
         # ========== 3. AJOUTER LA RECETTE ASSURANCE COMPLÉMENTAIRE ==========
         if assurance2_nom and taux_assurance2 > 0 and prise_en_charge2 > 0:
@@ -4147,6 +4149,8 @@ def api_vente_pharma():
             
             if recette_assurance2 and len(recette_assurance2) > 0:
                 print(f"✅ Recette assurance {assurance2_nom} ajoutée: {prise_en_charge2} FCFA")
+            else:
+                print("⚠️ Erreur lors de l'insertion de la recette assurance")
         
         # ========== 4. METTRE À JOUR LE STOCK DANS GOOGLE SHEETS ==========
         try:
@@ -4218,8 +4222,16 @@ def api_vente_pharma():
         except Exception as e:
             print(f"⚠️ Erreur mise à jour solde: {e}")
         
+        # ========== 6. RETOUR API AVEC TOUTES LES INFOS ==========
         print(f"✅ Vente pharmacie #{vente_id} terminée avec succès!")
-        return jsonify({'success': True, 'vente_id': vente_id})
+        return jsonify({
+            'success': True, 
+            'vente_id': vente_id,
+            'montant_donne': montant_donne,
+            'reste_a_payer': reste_a_payer,
+            'net_a_payer': float(data.get('net_a_payer', 0)),
+            'rendu': rendu
+        })
         
     except Exception as e:
         print(f"❌ ERREUR GENERALE: {e}")
@@ -4468,7 +4480,6 @@ def api_add_acte_vente():
         # 🔥 Récupérer les actes avec leurs infos de prise en charge
         actes_data = data.get('actes', [])
         for acte in actes_data:
-            # S'assurer que les infos de prise en charge sont présentes
             if 'prise_en_charge_amu' not in acte:
                 acte['prise_en_charge_amu'] = True
             if 'prise_en_charge_cac' not in acte:
@@ -4539,8 +4550,8 @@ def api_add_acte_vente():
             assurance2_nom,
             taux_assurance2,
             prise_en_charge2,
-            montant_donne,
-            rendu,
+            montant_donne,      # ✅ Stocké pour traçabilité
+            rendu,              # ✅ Stocké pour traçabilité
             base_remboursement,
             reste_a_payer,
             taux_temp_modifie,
@@ -4554,9 +4565,9 @@ def api_add_acte_vente():
         vente_id = result[0]['id']
         print(f"✅ Vente actes enregistrée dans Neon avec ID: {vente_id}")
         
-        # ========== 2. AJOUTER LA RECETTE PATIENT ==========
-        net_a_payer = float(data.get('net_a_payer', 0))
-        if net_a_payer > 0:
+        # ========== 2. AJOUTER LA RECETTE PATIENT (MONTANT DONNÉ) ==========
+        # ✅ CORRECTION ICI : Utiliser montant_donne au lieu de net_a_payer
+        if montant_donne > 0:
             recette_result = db.execute_query("""
                 INSERT INTO recettes (
                     structure_id, 
@@ -4572,18 +4583,20 @@ def api_add_acte_vente():
                 RETURNING id
             """, (
                 structure_id,
-                net_a_payer,
+                montant_donne,  # ✅ CORRECTION : C'est bien ce que le patient a donné
                 'patients',
                 vente_id,
                 'vente_acte',
-                'Vente actes #' + str(vente_id) + ' - ' + data.get('patient_nom', 'Patient') + f' - Donné: {montant_donne} FCFA, Rendu: {rendu} FCFA',
+                f'Vente actes #{vente_id} - {data.get("patient_nom", "Patient")} - Montant donné: {montant_donne} FCFA, Rendu: {rendu} FCFA, Reste: {reste_a_payer} FCFA',
                 user_name
             ))
             
             if recette_result and len(recette_result) > 0:
-                print(f"✅ Recette patient ajoutée: {net_a_payer} FCFA")
+                print(f"✅ Recette patient ajoutée: {montant_donne} FCFA")
             else:
                 print("⚠️ Erreur lors de l'insertion de la recette patient")
+        else:
+            print(f"ℹ️ Montant donné = 0, pas de recette patient")
         
         # ========== 3. AJOUTER LA RECETTE ASSURANCE COMPLÉMENTAIRE ==========
         if assurance2_nom and taux_assurance2 > 0 and prise_en_charge2 > 0:
@@ -4617,6 +4630,9 @@ def api_add_acte_vente():
         
         # ========== 4. METTRE À JOUR LE SOLDE DE CAISSE ==========
         try:
+            # ⚠️ ATTENTION : Le solde total inclut TOUTES les recettes
+            # Pour avoir le solde réel, il faut prendre le montant_donne uniquement
+            # (Les assurances seront payées plus tard par la structure)
             recettes_total = db.execute_query("""
                 SELECT COALESCE(SUM(montant), 0) as total 
                 FROM recettes 
@@ -4648,7 +4664,15 @@ def api_add_acte_vente():
             print(f"⚠️ Erreur mise à jour solde: {e}")
         
         print(f"✅ Vente actes #{vente_id} terminée avec succès!")
-        return jsonify({'success': True, 'vente_id': vente_id})
+        
+        # 🔥 Retourner les infos pour le frontend
+        return jsonify({
+            'success': True, 
+            'vente_id': vente_id,
+            'montant_donne': montant_donne,
+            'reste_a_payer': reste_a_payer,
+            'net_a_payer': float(data.get('net_a_payer', 0))
+        })
         
     except Exception as e:
         print(f"❌ ERREUR GENERALE: {e}")
