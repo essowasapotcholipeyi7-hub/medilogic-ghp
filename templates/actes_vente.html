@@ -782,15 +782,24 @@ function calculerTotal() {
         }
         console.log('📊 Patient assuré - Base PBR:', baseRemboursement);
     } else {
-        // 🔥 Patient NON assuré → Utiliser le prix clinique (sous-total)
-        if (tauxPrincipal > 0) {
-            // L'aide s'applique sur le total clinique
-            baseRemboursement = sousTotal;
-            priseEnChargeAMU = (sousTotal * tauxPrincipal) / 100;
-            console.log('🏥 Aide hospitalière:', tauxPrincipal, '% sur', sousTotal);
+        // 🔥 PATIENT NON ASSURÉ → Utiliser le prix clinique (sous-total)
+        // ⭐ L'aide hospitalière s'applique sur le total clinique des articles 
+        // qui ont prise_en_charge_amu = TRUE (aide hospitalière)
+        let baseNonAssure = 0;
+        for (const item of panier) {
+            if (item.prise_en_charge_amu) {
+                baseNonAssure += item.prix * item.quantite;
+            }
+        }
+        
+        if (baseNonAssure > 0 && tauxPrincipal > 0) {
+            baseRemboursement = baseNonAssure;
+            priseEnChargeAMU = (baseNonAssure * tauxPrincipal) / 100;
+            console.log('🏥 Patient non assuré - Aide hospitalière sur:', baseNonAssure);
         } else {
             baseRemboursement = 0;
             priseEnChargeAMU = 0;
+            console.log('🏥 Patient non assuré - Pas d\'aide');
         }
     }
     
@@ -867,78 +876,41 @@ function calculerTotal() {
         netAPayer: netAPayer
     });
 }
+
 // ============================================
 // CALCUL DU RENDU DE MONNAIE
 // ============================================
 function calculerRendu() {
-    // 🔥 Recalculer le net à payer
-    let sousTotal = 0;
-    let sousTotalAMU = 0;
-    let pbrTotalAMU = 0;
-    let montantNonPriseEnChargeCACSurAMU = 0;
-    
-    for (const item of panier) {
-        const prix = item.prix;
-        const pbr = item.pbr || item.prix;
-        const total = prix * item.quantite;
-        sousTotal += total;
-        
-        if (item.prise_en_charge_amu) {
-            sousTotalAMU += total;
-            let basePBR = pbr;
-            if (prix < pbr) {
-                basePBR = prix;
-            }
-            pbrTotalAMU += basePBR * item.quantite;
+    // ⭐ Utiliser la valeur déjà calculée par calculerTotal()
+    let netAPayer = 0;
+    if (window._calculs) {
+        netAPayer = window._calculs.netAPayer;
+    } else {
+        // Fallback si _calculs n'existe pas (après un refresh par exemple)
+        // Recalculer rapidement avec la même logique que calculerTotal
+        let sousTotal = 0;
+        for (const item of panier) {
+            sousTotal += item.prix * item.quantite;
         }
         
-        if (item.prise_en_charge_amu && !item.prise_en_charge_cac) {
-            montantNonPriseEnChargeCACSurAMU += total;
-        }
-    }
-    
-    let tauxPrincipal = parseFloat(document.getElementById('tauxVente').value);
-    if (isNaN(tauxPrincipal)) {
-        tauxPrincipal = patientTaux || 0;
-    }
-    
-    let baseRemboursement = pbrTotalAMU;
-    if (sousTotalAMU < pbrTotalAMU) {
-        baseRemboursement = sousTotalAMU;
-    }
-    
-    let priseEnChargeAMU = 0;
-    if (baseRemboursement > 0 && tauxPrincipal > 0) {
-        priseEnChargeAMU = (baseRemboursement * tauxPrincipal) / 100;
-    }
-    
-    let resteApresAMU = sousTotalAMU - priseEnChargeAMU;
-    
-    let priseEnChargeCAC = 0;
-    let tauxComplementaire = 0;
-    
-    if (assurance2Active && patientAssurance2 && patientAssurance2 !== 'Aucune') {
-        tauxComplementaire = tauxTempModifie ? tauxTempValeur : (patientTaux2Original || 0);
+        const typeAssurance = sessionStorage.getItem('selectedPatientAssurance') || '';
+        const estAssure = typeAssurance === 'amu_cnss' || typeAssurance === 'amu_inam';
         
-        if (tauxComplementaire > 0) {
-            let baseCAC = resteApresAMU - montantNonPriseEnChargeCACSurAMU;
-            
-            for (const item of panier) {
-                if (!item.prise_en_charge_amu && item.prise_en_charge_cac) {
-                    baseCAC += item.prix * item.quantite;
-                }
-            }
-            
-            if (baseCAC > 0) {
-                priseEnChargeCAC = (baseCAC * tauxComplementaire) / 100;
-            }
+        if (estAssure) {
+            // Patient assuré → calcul avec PBR (à simplifier ici)
+            netAPayer = sousTotal;  // Valeur par défaut, sera corrigée par calculerTotal
+        } else {
+            // Patient non assuré → prix clinique
+            let tauxPrincipal = parseFloat(document.getElementById('tauxVente').value) || 0;
+            let aide = (sousTotal * tauxPrincipal) / 100;
+            netAPayer = sousTotal - aide;
         }
+        
+        if (netAPayer < 0) netAPayer = 0;
     }
     
-    let netAPayer = sousTotal - priseEnChargeAMU - priseEnChargeCAC;
-    if (netAPayer < 0) netAPayer = 0;
-    
-    document.getElementById('netAPayer').innerHTML = netAPayer.toLocaleString() + ' FCFA';
+    // ⭐ NE PAS réafficher netAPayer ici (déjà fait par calculerTotal)
+    // document.getElementById('netAPayer').innerHTML = netAPayer.toLocaleString() + ' FCFA';
     
     const montantDonne = parseFloat(document.getElementById('montantDonne').value) || 0;
     
@@ -971,7 +943,6 @@ function calculerRendu() {
     
     return rendu;
 }
-
 // ============================================
 // ASSURANCE COMPLÉMENTAIRE
 // ============================================

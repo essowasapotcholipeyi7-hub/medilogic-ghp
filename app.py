@@ -1684,7 +1684,6 @@ def recu(vente_id, type):
     reste_a_payer = 0
     numero_facture = None
     
-    # CORRECTION : Accepter 'pharma' et 'pharmacie'
     type_bd = 'pharmacie' if type == 'pharma' else type
     
     print(f"🔍 Recherche vente {vente_id} (type reçu: {type}, type BD: {type_bd})")
@@ -1715,8 +1714,8 @@ def recu(vente_id, type):
         
         mode_paiement = v.get('mode_paiement', 'Espèces')
         taux_assurance = float(v.get('taux_assurance', 0))
-        prise_en_charge = float(v.get('prise_en_charge', 0))
-        net_a_payer = float(v.get('net_a_payer', 0))
+        
+        # ⭐ Récupérer les valeurs brutes
         sous_total = float(v.get('sous_total', 0))
         type_assurance = v.get('type_assurance', 'non_assure')
         numero_assure = v.get('numero_assure', '')
@@ -1749,47 +1748,102 @@ def recu(vente_id, type):
                 taux_modifie = True
                 print(f"🔴 TAUX MODIFIÉ DÉTECTÉ: {taux_assurance2}% (original: {patient_taux_original}%)")
         
-        # Récupérer les articles avec leurs infos de prise en charge
+        # ⭐⭐ RECALCULER LA PRISE EN CHARGE ICI ⭐⭐
+        # ⭐ Patient non assuré → l'aide s'applique sur le sous-total
+        # ⭐ Patient assuré → la prise en charge s'applique sur le PBR
+        
+        est_assure = type_assurance in ['amu_cnss', 'amu_inam']
+        
+        # 🔥 Récupérer les articles avec leurs infos de prise en charge
         if type_bd == 'pharmacie' or type_bd == 'pharma':
             produits_data = v.get('produits', [])
             if isinstance(produits_data, str):
                 produits_data = json.loads(produits_data)
+            
+            # ⭐ Calculer le sous-total des articles avec prise_en_charge_amu = True
+            sous_total_amu = 0
+            pbr_total_amu = 0
+            
             for p in produits_data:
                 prix_unitaire = float(p.get('prix_reel', p.get('prix', p.get('prix_vente', 0))))
-                # 🔥 Récupérer les infos de prise en charge
+                quantite = int(p.get('quantite', 1))
+                total_article = prix_unitaire * quantite
+                pbr_article = float(p.get('pbr', prix_unitaire))
+                
                 prise_amu = p.get('prise_en_charge_amu', True)
                 prise_cac = p.get('prise_en_charge_cac', True)
+                
+                if prise_amu:
+                    sous_total_amu += total_article
+                    pbr_total_amu += min(prix_unitaire, pbr_article) * quantite
+                
                 articles.append({
                     'nom': p.get('nom', 'Produit'),
-                    'quantite': int(p.get('quantite', 1)),
+                    'quantite': quantite,
                     'prix_unitaire': prix_unitaire,
-                    'pbr': float(p.get('pbr', prix_unitaire)),
-                    'total': float(p.get('total', prix_unitaire * int(p.get('quantite', 1)))),
-                    'prise_en_charge_amu': prise_amu,  # 🔥 NOUVEAU
-                    'prise_en_charge_cac': prise_cac    # 🔥 NOUVEAU
+                    'pbr': pbr_article,
+                    'total': total_article,
+                    'prise_en_charge_amu': prise_amu,
+                    'prise_en_charge_cac': prise_cac
                 })
         else:  # actes
             actes_data = v.get('actes', [])
             if isinstance(actes_data, str):
                 actes_data = json.loads(actes_data)
+            
+            # ⭐ Calculer le sous-total des articles avec prise_en_charge_amu = True
+            sous_total_amu = 0
+            pbr_total_amu = 0
+            
             for a in actes_data:
                 prix_unitaire = float(a.get('prix', 0))
-                # 🔥 Récupérer les infos de prise en charge
+                quantite = int(a.get('quantite', 1))
+                total_article = prix_unitaire * quantite
+                pbr_article = float(a.get('pbr', prix_unitaire))
+                
                 prise_amu = a.get('prise_en_charge_amu', True)
                 prise_cac = a.get('prise_en_charge_cac', True)
+                
+                if prise_amu:
+                    sous_total_amu += total_article
+                    pbr_total_amu += min(prix_unitaire, pbr_article) * quantite
+                
                 articles.append({
                     'nom': a.get('nom', 'Acte'),
-                    'quantite': int(a.get('quantite', 1)),
+                    'quantite': quantite,
                     'prix_unitaire': prix_unitaire,
-                    'pbr': float(a.get('pbr', prix_unitaire)),
-                    'total': float(a.get('total', prix_unitaire * int(a.get('quantite', 1)))),
-                    'prise_en_charge_amu': prise_amu,  # 🔥 NOUVEAU
-                    'prise_en_charge_cac': prise_cac    # 🔥 NOUVEAU
+                    'pbr': pbr_article,
+                    'total': total_article,
+                    'prise_en_charge_amu': prise_amu,
+                    'prise_en_charge_cac': prise_cac
                 })
-    
-    # 🔥 Recalculer la prise en charge pour l'affichage (si besoin)
-    # Pour le reçu, on utilise déjà les valeurs stockées dans la vente
-    # On s'assure juste que l'assurance complémentaire est bien affichée
+        
+        # ⭐⭐⭐ RECALCUL DE LA PRISE EN CHARGE ⭐⭐⭐
+        if est_assure:
+            # Patient assuré → Utiliser le PBR
+            base = pbr_total_amu
+            if sous_total_amu < pbr_total_amu:
+                base = sous_total_amu
+            if base > 0 and taux_assurance > 0:
+                prise_en_charge = (base * taux_assurance) / 100
+            else:
+                prise_en_charge = 0
+            print(f"📊 Patient assuré - Base PBR: {base}, Prise en charge: {prise_en_charge}")
+        else:
+            # ⭐ Patient NON assuré → Utiliser le prix clinique (sous-total)
+            # L'aide hospitalière s'applique sur le sous-total des articles avec prise_en_charge_amu = True
+            if sous_total_amu > 0 and taux_assurance > 0:
+                prise_en_charge = (sous_total_amu * taux_assurance) / 100
+            else:
+                prise_en_charge = 0
+            print(f"📊 Patient non assuré - Base clinique: {sous_total_amu}, Aide: {prise_en_charge}")
+        
+        # ⭐ Calcul du net à payer
+        net_a_payer = sous_total - prise_en_charge - prise_en_charge2
+        if net_a_payer < 0:
+            net_a_payer = 0
+        
+        print(f"📊 Sous-total: {sous_total}, Prise en charge: {prise_en_charge}, Net: {net_a_payer}")
     
     # Gestion des assurances
     assurance_text = type_assurance
@@ -1809,6 +1863,8 @@ def recu(vente_id, type):
     print(f"Patient: {patient_nom}")
     print(f"💰 montant_donne={montant_donne}, rendu={rendu}, reste_a_payer={reste_a_payer}")
     print(f"📊 Base remboursement (PBR)={base_remboursement}")
+    print(f"📊 Prise en charge recalculée={prise_en_charge}")
+    print(f"📊 Net à payer recalculé={net_a_payer}")
     
     return render_template('recu_client.html',
                          vente_id=vente_id,
@@ -1816,8 +1872,8 @@ def recu(vente_id, type):
                          sous_total=sous_total,
                          base_remboursement=base_remboursement,
                          taux_assurance=taux_assurance,
-                         prise_en_charge=prise_en_charge,
-                         net_a_payer=net_a_payer,
+                         prise_en_charge=prise_en_charge,  # ⭐ Recalculée
+                         net_a_payer=net_a_payer,          # ⭐ Recalculée
                          patient_nom=patient_nom,
                          type_assurance=assurance_text,
                          numero_assure=numero_assure,
