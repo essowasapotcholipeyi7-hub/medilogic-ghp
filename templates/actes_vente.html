@@ -241,10 +241,27 @@
                             <option value="A4">📄 Format A4</option>
                         </select>
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Taux prise en charge (%)</label>
-                        <input type="number" class="form-control" id="tauxVente" value="{{ patientTaux }}" step="5" min="0" max="100" onchange="calculerTotal(); calculerRendu();">
-                    </div>
+<div class="col-md-2">
+    <label class="form-label" id="tauxLabel">
+        {% if patientAssurance in ['amu_cnss', 'amu_inam'] %}
+            Taux AMU (%)
+        {% else %}
+            Aide hospitalière (%)
+        {% endif %}
+    </label>
+    <input type="number" class="form-control" id="tauxVente" 
+           value="{% if patientAssurance in ['amu_cnss', 'amu_inam'] %}80{% else %}{% endif %}" 
+           step="5" min="0" max="100" 
+           onchange="calculerTotal(); calculerRendu();">
+    <small style="color: #6c757d; display: block; margin-top: 3px;">
+        {% if patientAssurance in ['amu_cnss', 'amu_inam'] %}
+            AMU par défaut: 80%
+        {% else %}
+            Modifiable si aide (laisser vide pour 0%)
+        {% endif %}
+    </small>
+</div>
+
                     <div class="col-md-12 mt-2">
                         <button class="btn btn-primary w-100" onclick="finaliserVente()" id="finaliserBtn" disabled>
                             <i class="fas fa-receipt"></i> Finaliser la vente
@@ -729,31 +746,62 @@ function calculerTotal() {
         }
     }
     
+    // 🔥 Récupérer le type d'assurance du patient
+    const typeAssurance = sessionStorage.getItem('selectedPatientAssurance') || '';
+    const estAssure = typeAssurance === 'amu_cnss' || typeAssurance === 'amu_inam';
+    
+    // 🔥 Récupérer le taux depuis l'input
     let tauxPrincipal = parseFloat(document.getElementById('tauxVente').value);
-    if (isNaN(tauxPrincipal)) {
-        tauxPrincipal = patientTaux || 0;
+    
+    // 🔥 Définir le taux par défaut selon le type d'assurance
+    if (isNaN(tauxPrincipal) || tauxPrincipal === 0) {
+        if (estAssure) {
+            tauxPrincipal = 80;
+        } else {
+            tauxPrincipal = 0;
+        }
+        document.getElementById('tauxVente').value = tauxPrincipal;
     }
     
-    // 🔥 2. Base de remboursement pour AMU
-    let baseRemboursement = pbrTotalAMU;
-    if (sousTotalAMU < pbrTotalAMU) {
-        baseRemboursement = sousTotalAMU;
-    }
+    console.log('📊 Type assurance:', typeAssurance);
+    console.log('📊 Est assuré:', estAssure);
+    console.log('📊 Taux utilisé:', tauxPrincipal);
     
-    // 🔥 3. Prise en charge AMU
+    // 🔥🔥🔥 CORRECTION : BASE DE CALCUL SELON LE TYPE D'ASSURANCE 🔥🔥🔥
+    let baseRemboursement = 0;
     let priseEnChargeAMU = 0;
-    if (baseRemboursement > 0 && tauxPrincipal > 0) {
-        priseEnChargeAMU = (baseRemboursement * tauxPrincipal) / 100;
+    
+    if (estAssure) {
+        // 🔥 Patient assuré → Utiliser le PBR (base de remboursement AMU)
+        baseRemboursement = pbrTotalAMU;
+        if (sousTotalAMU < pbrTotalAMU) {
+            baseRemboursement = sousTotalAMU;
+        }
+        if (baseRemboursement > 0 && tauxPrincipal > 0) {
+            priseEnChargeAMU = (baseRemboursement * tauxPrincipal) / 100;
+        }
+        console.log('📊 Patient assuré - Base PBR:', baseRemboursement);
+    } else {
+        // 🔥 Patient NON assuré → Utiliser le prix clinique (sous-total)
+        if (tauxPrincipal > 0) {
+            // L'aide s'applique sur le total clinique
+            baseRemboursement = sousTotal;
+            priseEnChargeAMU = (sousTotal * tauxPrincipal) / 100;
+            console.log('🏥 Aide hospitalière:', tauxPrincipal, '% sur', sousTotal);
+        } else {
+            baseRemboursement = 0;
+            priseEnChargeAMU = 0;
+        }
     }
     
     // 🔥 4. Reste après AMU (pour les articles pris en charge par AMU)
     let resteApresAMU = sousTotalAMU - priseEnChargeAMU;
     
-    // 🔥 5. Prise en charge CAC
+    // 🔥 5. Prise en charge CAC (complémentaire) - UNIQUEMENT SI PATIENT ASSURÉ
     let priseEnChargeCAC = 0;
     let tauxComplementaire = 0;
     
-    if (assurance2Active && patientAssurance2 && patientAssurance2 !== 'Aucune') {
+    if (estAssure && assurance2Active && patientAssurance2 && patientAssurance2 !== 'Aucune') {
         tauxComplementaire = tauxTempModifie ? tauxTempValeur : (patientTaux2Original || 0);
         
         if (tauxComplementaire > 0) {
@@ -783,10 +831,10 @@ function calculerTotal() {
     document.getElementById('priseEnCharge').innerHTML = priseEnChargeAMU.toLocaleString() + ' FCFA';
     document.getElementById('netAPayer').innerHTML = netAPayer.toLocaleString() + ' FCFA';
     
-    // Afficher la prise en charge complémentaire
+    // Afficher la prise en charge complémentaire (uniquement si patient assuré)
     const priseEnCharge2El = document.getElementById('priseEnCharge2');
     const priseEnCharge2Row = document.getElementById('priseEnCharge2Row');
-    if (priseEnCharge2El && priseEnChargeCAC > 0 && assurance2Active) {
+    if (estAssure && priseEnCharge2El && priseEnChargeCAC > 0 && assurance2Active) {
         const tauxAffiche = tauxTempModifie ? `${tauxComplementaire}%` : `${tauxComplementaire}%`;
         const modifText = tauxTempModifie ? ' 🔄' : '';
         priseEnCharge2El.innerHTML = `${patientAssurance2} (${tauxAffiche}) : - ${priseEnChargeCAC.toLocaleString()} FCFA${modifText}`;
@@ -798,8 +846,27 @@ function calculerTotal() {
     // Activer/désactiver les boutons
     document.getElementById('finaliserBtn').disabled = (panier.length === 0);
     document.getElementById('proformaBtn').disabled = (panier.length === 0);
+    
+    // Sauvegarder les valeurs pour finaliserVente
+    window._calculs = {
+        sousTotal: sousTotal,
+        baseRemboursement: baseRemboursement,
+        priseEnCharge: priseEnChargeAMU,
+        priseEnCharge2: priseEnChargeCAC,
+        netAPayer: netAPayer,
+        estAssure: estAssure,
+        typeAssurance: typeAssurance,
+        tauxPrincipal: tauxPrincipal
+    };
+    
+    console.log('📊 RÉSULTAT:', {
+        sousTotal: sousTotal,
+        baseRemboursement: baseRemboursement,
+        priseEnCharge: priseEnChargeAMU,
+        priseEnCharge2: priseEnChargeCAC,
+        netAPayer: netAPayer
+    });
 }
-
 // ============================================
 // CALCUL DU RENDU DE MONNAIE
 // ============================================

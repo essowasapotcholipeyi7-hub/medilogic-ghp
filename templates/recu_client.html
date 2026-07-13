@@ -182,38 +182,44 @@
                 </div>
                 <hr>
 
-                <!-- ===== INFOS PATIENT AVEC DOUBLE ASSURANCE ===== -->
+                <!-- ===== INFOS PATIENT ===== -->
                 <div class="mb-3">
                     <strong>Patient :</strong> {{ patient_nom }}<br>
                     
-                    <!-- 🔥 Assurance principale -->
-                    <strong>Assurance principale :</strong> {{ type_assurance }} ({{ taux_assurance }}%)<br>
-                    {% if numero_assure and numero_assure != '' %}
-                    <strong>N° Assuré :</strong> {{ numero_assure }}<br>
-                    {% endif %}
-                    
-                    <!-- 🔥 Assurance complémentaire (uniquement si appliquée) -->
-                    {% if assurance2_appliquee and assurance2_appliquee == true %}
-                        {% if assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' %}
-                        <strong>Assurance complémentaire :</strong> {{ assurance2_nom }} 
-                        ({{ taux_assurance2 }}%)
-                        {# 🔥 AFFICHER L'INDICATION DE MODIFICATION #}
-                        {% if taux_modifie and taux_modifie == true %}
-                        <span style="color: #856404; background: #fff3cd; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: bold;">
-                            ⚠️ Taux exceptionnel
-                        </span>
+                    <!-- 🔥 Utiliser type_assurance (déjà disponible dans la route) -->
+                    {% if type_assurance in ['AMU-CNSS', 'AMU-INAM'] %}
+                        <strong>Assurance principale :</strong> {{ type_assurance }} ({{ taux_assurance }}%)<br>
+                        {% if numero_assure and numero_assure != '' %}
+                        <strong>N° Assuré :</strong> {{ numero_assure }}<br>
                         {% endif %}
-                        <br>
-                        {% if numero_assure2 and numero_assure2 != '' %}
-                        <strong>N° Assuré 2 :</strong> {{ numero_assure2 }}<br>
+                        
+                        <!-- Assurance complémentaire -->
+                        {% if assurance2_appliquee and assurance2_appliquee == true %}
+                            {% if assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' %}
+                            <strong>Assurance complémentaire :</strong> {{ assurance2_nom }} 
+                            ({{ taux_assurance2 }}%)
+                            {% if taux_modifie and taux_modifie == true %}
+                            <span style="color: #856404; background: #fff3cd; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: bold;">
+                                ⚠️ Taux exceptionnel
+                            </span>
+                            {% endif %}
+                            <br>
+                            {% if numero_assure2 and numero_assure2 != '' %}
+                            <strong>N° Assuré 2 :</strong> {{ numero_assure2 }}<br>
+                            {% endif %}
+                            {% if taux_modifie and taux_modifie == true and taux_original and taux_original > 0 %}
+                            <span style="color: #6c757d; font-size: 10px;">
+                                <i class="fas fa-info-circle"></i> Taux habituel: {{ taux_original }}%
+                            </span>
+                            <br>
+                            {% endif %}
+                            {% endif %}
                         {% endif %}
-                        {# 🔥 AFFICHER LE TAUX ORIGINAL EN RÉFÉRENCE #}
-                        {% if taux_modifie and taux_modifie == true and taux_original and taux_original > 0 %}
-                        <span style="color: #6c757d; font-size: 10px;">
-                            <i class="fas fa-info-circle"></i> Taux habituel: {{ taux_original }}%
-                        </span>
-                        <br>
-                        {% endif %}
+                    {% else %}
+                        <!-- 🔥 Patient NON assuré -->
+                        <strong>Assurance :</strong> Non assuré<br>
+                        {% if taux_assurance > 0 %}
+                        <strong>Aide hospitalière :</strong> {{ taux_assurance }}%<br>
                         {% endif %}
                     {% endif %}
                     
@@ -271,7 +277,7 @@
                     <span><span class="icone-ko">❌</span> Non pris en charge</span>
                 </div>
                 
-                <!-- ===== TOTAUX AVEC DOUBLE ASSURANCE ET PBR ===== -->
+                <!-- ===== TOTAUX ===== -->
                 <div style="margin-top:10px;">
                     <div style="display:flex; justify-content:space-between;">
                         <span>Sous-total clinique :</span>
@@ -279,7 +285,7 @@
                     </div>
                     
                     <!-- 🔥 BASE REMBOURSEMENT (PBR) - UNIQUEMENT SI PATIENT ASSURÉ -->
-                    {% if base_remboursement and base_remboursement > 0 and taux_assurance > 0 %}
+                    {% if type_assurance in ['AMU-CNSS', 'AMU-INAM'] and base_remboursement and base_remboursement > 0 %}
                     <div style="display:flex; justify-content:space-between; color:#6c757d; font-size: 0.95em; border-top:1px dashed #ddd; padding-top:3px; margin-top:3px;">
                         <span>Base remboursement (PBR AMU) :</span>
                         <span><strong>{{ base_remboursement|default(0)|round(0)|int }} FCFA</strong></span>
@@ -289,13 +295,19 @@
                     <!-- 🔥 Prise en charge principale -->
                     {% if prise_en_charge > 0 %}
                     <div style="display:flex; justify-content:space-between; color:#28a745;">
-                        <span>Prise en charge ({{ taux_assurance }}%) :</span>
+                        <span>
+                            {% if type_assurance in ['AMU-CNSS', 'AMU-INAM'] %}
+                                Prise en charge AMU ({{ taux_assurance }}%) :
+                            {% else %}
+                                Prise en charge par l'hôpital ({{ taux_assurance }}%) :
+                            {% endif %}
+                        </span>
                         <span>- {{ prise_en_charge|default(0)|round(0)|int }} FCFA</span>
                     </div>
                     {% endif %}
                     
-                    <!-- 🔥 Prise en charge complémentaire (uniquement si appliquée) -->
-                    {% if assurance2_appliquee and assurance2_appliquee == true and prise_en_charge2 and prise_en_charge2 > 0 %}
+                    <!-- 🔥 Prise en charge complémentaire (uniquement si patient assuré) -->
+                    {% if type_assurance in ['AMU-CNSS', 'AMU-INAM'] and assurance2_appliquee and assurance2_appliquee == true and prise_en_charge2 and prise_en_charge2 > 0 %}
                     <div style="display:flex; justify-content:space-between; {% if taux_modifie and taux_modifie == true %}color:#856404;{% else %}color:#17a2b8;{% endif %}">
                         <span>
                             Prise en charge {{ assurance2_nom }} ({{ taux_assurance2 }}%)

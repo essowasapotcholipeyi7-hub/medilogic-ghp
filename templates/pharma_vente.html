@@ -259,10 +259,27 @@
                             <option value="A4">📄 Format A4</option>
                         </select>
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Taux prise en charge (%)</label>
-                        <input type="number" class="form-control" id="tauxVente" value="{{ patientTaux }}" step="5" min="0" max="100" onchange="calculerTotal(); calculerRendu();">
-                    </div>
+<div class="col-md-2">
+    <label class="form-label" id="tauxLabel">
+        {% if patientAssurance in ['amu_cnss', 'amu_inam'] %}
+            Taux AMU (%)
+        {% else %}
+            Aide hospitalière (%)
+        {% endif %}
+    </label>
+    <input type="number" class="form-control" id="tauxVente" 
+           value="{% if patientAssurance in ['amu_cnss', 'amu_inam'] %}80{% else %}{% endif %}" 
+           step="5" min="0" max="100" 
+           onchange="calculerTotal(); calculerRendu();">
+    <small style="color: #6c757d; display: block; margin-top: 3px;">
+        {% if patientAssurance in ['amu_cnss', 'amu_inam'] %}
+            AMU par défaut: 80%
+        {% else %}
+            Modifiable si aide (laisser vide pour 0%)
+        {% endif %}
+    </small>
+</div>
+
                     <div class="col-md-12 mt-2">
                         <button class="btn btn-primary w-100" onclick="finaliserVente()" id="finaliserBtn" disabled>
                             <i class="fas fa-receipt"></i> Finaliser
@@ -968,38 +985,62 @@ function calculerTotal() {
         }
     }
     
-    // Assurance principale
+    // 🔥 Récupérer le type d'assurance du patient
+    const typeAssurance = sessionStorage.getItem('selectedPatientAssurance') || '';
+    const estAssure = typeAssurance === 'amu_cnss' || typeAssurance === 'amu_inam';
+    
+    // 🔥 Récupérer le taux depuis l'input
     let tauxPrincipal = parseFloat(document.getElementById('tauxVente').value);
-    if (isNaN(tauxPrincipal)) {
-        tauxPrincipal = patientTaux || 0;
+    
+    // 🔥 Définir le taux par défaut selon le type d'assurance
+    if (isNaN(tauxPrincipal) || tauxPrincipal === 0) {
+        if (estAssure) {
+            tauxPrincipal = 80;
+        } else {
+            tauxPrincipal = 0;
+        }
+        document.getElementById('tauxVente').value = tauxPrincipal;
     }
     
-    let baseRemboursement = Math.min(sousTotalAMU, pbrTotalAMU);
+    // 🔥🔥🔥 CORRECTION : BASE DE CALCUL SELON LE TYPE D'ASSURANCE 🔥🔥🔥
+    let baseRemboursement = 0;
     let priseEnCharge = 0;
-    if (baseRemboursement > 0 && tauxPrincipal > 0) {
-        priseEnCharge = (baseRemboursement * tauxPrincipal) / 100;
+    
+    if (estAssure) {
+        // 🔥 Patient assuré → Utiliser le PBR
+        baseRemboursement = Math.min(sousTotalAMU, pbrTotalAMU);
+        if (baseRemboursement > 0 && tauxPrincipal > 0) {
+            priseEnCharge = (baseRemboursement * tauxPrincipal) / 100;
+        }
+    } else {
+        // 🔥 Patient NON assuré → Utiliser le prix clinique (sous-total)
+        if (tauxPrincipal > 0) {
+            baseRemboursement = sousTotal;
+            priseEnCharge = (sousTotal * tauxPrincipal) / 100;
+        } else {
+            baseRemboursement = 0;
+            priseEnCharge = 0;
+        }
     }
     
     // Reste après AMU
     let resteApresAMU = sousTotal - priseEnCharge;
     if (resteApresAMU < 0) resteApresAMU = 0;
     
-    // Assurance complémentaire (CAC)
+    // Assurance complémentaire (CAC) - UNIQUEMENT SI PATIENT ASSURÉ
     let priseEnCharge2 = 0;
     let baseCAC = 0;
     
-    if (assurance2Active && patientAssurance2 && patientAssurance2 !== 'Aucune') {
+    if (estAssure && assurance2Active && patientAssurance2 && patientAssurance2 !== 'Aucune') {
         let tauxComplementaire = tauxTempModifie ? tauxTempValeur : (patientTaux2Original || 0);
         
         if (tauxComplementaire > 0) {
-            // Calcul de la base CAC (reste après AMU pour les produits pris en charge par CAC)
             for (const item of panier) {
                 if (item.prise_en_charge_cac) {
                     const prix = item.prix;
                     const total = prix * item.quantite;
                     
                     if (item.prise_en_charge_amu) {
-                        // Produit pris en charge par AMU : la base CAC est le reste après AMU
                         const pbr = item.pbr || item.prix;
                         let basePBR = Math.min(prix, pbr);
                         let baseAMU = basePBR * item.quantite;
@@ -1009,7 +1050,6 @@ function calculerTotal() {
                             baseCAC += reste;
                         }
                     } else {
-                        // Produit non pris en charge par AMU : la base CAC est le total
                         baseCAC += total;
                     }
                 }
@@ -1037,7 +1077,7 @@ function calculerTotal() {
     // Prise en charge complémentaire
     const priseEnCharge2El = document.getElementById('priseEnCharge2');
     const priseEnCharge2Row = document.getElementById('priseEnCharge2Row');
-    if (priseEnCharge2El && priseEnCharge2 > 0 && assurance2Active) {
+    if (priseEnCharge2El && priseEnCharge2 > 0 && estAssure && assurance2Active) {
         const tauxAffiche = tauxTempModifie ? `${tauxTempValeur}%` : `${patientTaux2Original}%`;
         const modifText = tauxTempModifie ? ' 🔄' : '';
         priseEnCharge2El.innerHTML = `${patientAssurance2} (${tauxAffiche}) : - ${priseEnCharge2.toLocaleString()} FCFA${modifText}`;
@@ -1054,10 +1094,10 @@ function calculerTotal() {
         priseEnCharge2,
         netAPayer,
         baseCAC,
-        resteApresAMU
+        resteApresAMU,
+        estAssure: estAssure
     };
 }
-
 // ============================================
 // CALCUL DU RENDU
 // ============================================
@@ -1321,6 +1361,8 @@ function finaliserVente() {
         return;
     }
     
+    const tauxUtilise = parseFloat(document.getElementById('tauxVente').value) || 0;
+
     // Récupérer les calculs
     const { sousTotal, baseRemboursement, priseEnCharge, priseEnCharge2, netAPayer } = window._calculs || { sousTotal: 0, baseRemboursement: 0, priseEnCharge: 0, priseEnCharge2: 0, netAPayer: 0 };
     const { montantDonne, rendu, resteAPayer } = window._paiement || { montantDonne: 0, rendu: 0, resteAPayer: 0 };
@@ -1411,7 +1453,7 @@ function finaliserVente() {
         net_a_payer: netAPayer,
         mode_paiement: document.getElementById('modePaiement').value,
         avec_ordonnance: document.getElementById('avecOrdonnance').checked,
-        taux_assurance: patientTaux,
+        taux_assurance: tauxUtilise,
         assurance2_nom: assurance2Active ? (patientAssurance2 || '') : '',
         taux_assurance2: assurance2Active ? (tauxTempModifie ? tauxTempValeur : patientTaux2) : 0,
         assurance2_active: assurance2Active,
