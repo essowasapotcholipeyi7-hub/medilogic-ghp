@@ -1521,7 +1521,8 @@ function redirigerVersReçuActes(venteId, typeDocument, formatImpression, urlPar
     
     const url = baseUrl + urlParams;
     console.log('🔗 Redirection vers:', url);
-    window.location.href = url;
+    window.open(url, '_blank');
+    window.location.href = "/dashboard";
 }
 
 // ============================================
