@@ -6796,6 +6796,145 @@ def api_proformas_count():
         print(f"❌ Erreur: {e}")
         return jsonify({'total': 0, 'en_attente': 0})
 
+@app.route('/api/proformas/<int:proforma_id>', methods=['GET'])
+@login_required
+def api_get_proforma(proforma_id):
+    """Récupère une proforma par son ID"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        if not structure_id:
+            return jsonify({'error': 'Structure non trouvée'}), 400
+        
+        # Récupérer la proforma
+        result = db.execute_query("""
+            SELECT * FROM proformas 
+            WHERE id = %s AND structure_id = %s
+        """, (proforma_id, structure_id))
+        
+        if not result or len(result) == 0:
+            return jsonify({'error': 'Proforma non trouvée'}), 404
+        
+        proforma = result[0]
+        
+        # Convertir les champs JSON
+        if proforma.get('articles') and isinstance(proforma.get('articles'), str):
+            import json
+            proforma['articles'] = json.loads(proforma['articles'])
+        
+        if proforma.get('assurances_data') and isinstance(proforma.get('assurances_data'), str):
+            import json
+            proforma['assurances_data'] = json.loads(proforma['assurances_data'])
+        
+        return jsonify(proforma)
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/proformas/<int:proforma_id>', methods=['PUT'])
+@login_required
+def api_update_proforma(proforma_id):
+    """Met à jour une proforma"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        user_name = session.get('user_name', 'System')
+        
+        if not structure_id:
+            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
+        
+        # Vérifier que la proforma existe
+        check = db.execute_query("""
+            SELECT id, statut FROM proformas 
+            WHERE id = %s AND structure_id = %s
+        """, (proforma_id, structure_id))
+        
+        if not check or len(check) == 0:
+            return jsonify({'success': False, 'error': 'Proforma non trouvée'}), 404
+        
+        # 🔥 Vérifier si la proforma est modifiable (en attente)
+        if check[0]['statut'] != 'en_attente':
+            return jsonify({'success': False, 'error': 'Seules les proformas en attente peuvent être modifiées'}), 400
+        
+        # Récupérer les données
+        articles = data.get('articles', [])
+        sous_total = 0
+        for item in articles:
+            sous_total += item.get('prix_unitaire', 0) * item.get('quantite', 0)
+        
+        assurance_nom = data.get('assurance_nom', 'Non assuré')
+        taux_assurance = float(data.get('taux_assurance', 0))
+        numero_assure = data.get('numero_assure', '')
+        
+        assurance2_active = data.get('assurance2_active', False)
+        assurance2_nom = data.get('assurance2_nom', '')
+        taux_assurance2 = float(data.get('taux_assurance2', 0))
+        
+        # Recalculer les prises en charge
+        prise_en_charge = (sous_total * taux_assurance) / 100 if taux_assurance > 0 else 0
+        reste_apres_principal = sous_total - prise_en_charge
+        
+        prise_en_charge2 = 0
+        if assurance2_active and taux_assurance2 > 0 and reste_apres_principal > 0:
+            prise_en_charge2 = (reste_apres_principal * taux_assurance2) / 100
+        
+        net_a_payer = sous_total - prise_en_charge - prise_en_charge2
+        if net_a_payer < 0:
+            net_a_payer = 0
+        
+        # 🔥 Mise à jour
+        db.execute_query("""
+            UPDATE proformas 
+            SET 
+                assurance_nom = %s,
+                taux_assurance = %s,
+                numero_assure = %s,
+                assurance2_nom = %s,
+                taux_assurance2 = %s,
+                assurance2_active = %s,
+                articles = %s::jsonb,
+                sous_total = %s,
+                prise_en_charge = %s,
+                prise_en_charge2 = %s,
+                net_a_payer = %s,
+                notes = %s,
+                updated_at = NOW()
+            WHERE id = %s AND structure_id = %s
+        """, (
+            assurance_nom,
+            taux_assurance,
+            numero_assure,
+            assurance2_nom,
+            taux_assurance2,
+            assurance2_active,
+            json.dumps(articles, ensure_ascii=False),
+            sous_total,
+            prise_en_charge,
+            prise_en_charge2,
+            net_a_payer,
+            data.get('notes', ''),
+            proforma_id,
+            structure_id
+        ))
+        
+        print(f"✅ Proforma #{proforma_id} mise à jour par {user_name}")
+        
+        return jsonify({
+            'success': True,
+            'id': proforma_id,
+            'net_a_payer': net_a_payer
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/consultation')
 @login_required
 def consultation():
