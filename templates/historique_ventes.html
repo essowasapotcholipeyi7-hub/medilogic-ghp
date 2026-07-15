@@ -904,26 +904,134 @@ function annulerVente(venteId, type) {
 // IMPRESSION
 // ============================================
 function imprimerHistorique() {
-    var rows = document.querySelectorAll('#ventesList tr');
-    var printWindow = window.open('', '_blank');
-    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Historique des ventes</title>';
-    html += '<style>body{font-family:Arial;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:6px;}th{background:#667eea;color:white;}</style>';
-    html += '</head><body><h2>📋 HISTORIQUE DES VENTES</h2>';
-    html += '<div>' + new Date().toLocaleString() + '</div>';
-    html += '<table><thead><tr><th>N°</th><th>Date</th><th>Patient</th><th>Type</th><th>Montant</th><th>Payé</th><th>Reste</th><th>Statut</th></tr></thead><tbody>';
-    
-    for (var i = 0; i < rows.length; i++) {
-        var cells = rows[i].cells;
-        if (cells.length > 1 && rows[i].style.display !== 'none') {
-            html += '<tr>';
-            for (var j = 0; j < Math.min(cells.length - 1, 8); j++) {
-                html += '<td>' + (cells[j]?.innerText || '') + '</td>';
-            }
-            html += '</tr>';
-        }
+    // ⭐ Récupérer les données filtrées
+    if (!ventesFiltrees || ventesFiltrees.length === 0) {
+        alert('Aucune vente à imprimer');
+        return;
     }
     
-    html += '</tbody></table></body></html>';
+    var printWindow = window.open('', '_blank');
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Historique des ventes</title>';
+    html += '<style>';
+    html += 'body{font-family:Arial;padding:20px;font-size:12px;}';
+    html += 'h2{text-align:center;color:#333;margin-top:0;}';
+    html += '.header{text-align:center;margin-bottom:15px;color:#666;}';
+    html += 'table{width:100%;border-collapse:collapse;font-size:11px;}';
+    html += 'th{background:#667eea;color:white;padding:8px;text-align:left;border:1px solid #ddd;}';
+    html += 'td{padding:6px;border:1px solid #ddd;}';
+    html += '.text-end{text-align:right;}';
+    html += '.badge-actes{background:#007bff;color:white;padding:2px 6px;border-radius:3px;}';
+    html += '.badge-pharma{background:#28a745;color:white;padding:2px 6px;border-radius:3px;}';
+    html += '.text-success{color:#28a745;}';
+    html += '.text-danger{color:#dc3545;}';
+    html += '.detail-cell{font-size:10px;color:#555;max-width:200px;}';
+    html += '.summary{display:flex;justify-content:center;gap:30px;margin:15px 0;padding:10px;background:#f8f9fa;border-radius:5px;}';
+    html += '.summary-item{text-align:center;}';
+    html += '.footer{text-align:center;margin-top:15px;color:#666;font-size:10px;border-top:1px solid #ddd;padding-top:10px;}';
+    // ⭐ Style pour le bouton en haut
+    html += '.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;padding:10px;background:#f8f9fa;border-radius:5px;border:1px solid #ddd;}';
+    html += '.toolbar .title{font-size:16px;font-weight:bold;color:#333;}';
+    html += '.btn-close{background:#dc3545;color:white;border:none;padding:8px 25px;border-radius:5px;cursor:pointer;font-size:14px;}';
+    html += '.btn-close:hover{background:#c82333;}';
+    html += '@media print{.toolbar{display:none;}}';  // ⭐ Cache le bouton à l'impression
+    html += '</style>';
+    html += '</head><body>';
+    
+    // ⭐ BARRE D'OUTILS EN HAUT AVEC BOUTON FERMER
+    html += '<div class="toolbar">';
+    html += '<span class="title">📋 Historique des ventes</span>';
+    html += '<button class="btn-close" onclick="window.close()">✖ Fermer</button>';
+    html += '</div>';
+    
+    // En-tête
+    html += '<div class="header">Généré le ' + new Date().toLocaleString('fr-FR') + '</div>';
+    
+    // Statistiques
+    var totalCA = ventesFiltrees.reduce(function(sum, v) { return sum + (v.montant_donne || 0); }, 0);
+    var actesCount = ventesFiltrees.filter(function(v) { return v.type === 'actes'; }).length;
+    var pharmaCount = ventesFiltrees.filter(function(v) { return v.type === 'pharmacie' || v.type === 'pharma'; }).length;
+    
+    html += '<div class="summary">';
+    html += '<div class="summary-item"><strong>Total ventes</strong><br>' + ventesFiltrees.length + '</div>';
+    html += '<div class="summary-item"><strong>CA</strong><br>' + Math.round(totalCA).toLocaleString() + ' F</div>';
+    html += '<div class="summary-item"><strong>Actes</strong><br>' + actesCount + '</div>';
+    html += '<div class="summary-item"><strong>Pharmacie</strong><br>' + pharmaCount + '</div>';
+    html += '</div>';
+    
+    // Tableau
+    html += '<table>';
+    html += '<thead><tr>';
+    html += '<th>N°</th>';
+    html += '<th>Date</th>';
+    html += '<th>Patient</th>';
+    html += '<th>Type</th>';
+    html += '<th>Détails des articles</th>';
+    html += '<th class="text-end">Montant</th>';
+    html += '<th class="text-end">Payé</th>';
+    html += '<th class="text-end">Reste</th>';
+    html += '<th>Statut</th>';
+    html += '</tr></thead><tbody>';
+    
+    for (var i = 0; i < ventesFiltrees.length; i++) {
+        var v = ventesFiltrees[i];
+        var dateObj = v.date_vente ? new Date(v.date_vente) : null;
+        var dateStr = dateObj ? dateObj.toLocaleString('fr-FR') : '-';
+        
+        var typeLabel = v.type === 'actes' ? 'Acte' : 'Pharmacie';
+        var badgeClass = v.type === 'actes' ? 'badge-actes' : 'badge-pharma';
+        
+        var details = v.detail || 'Aucun détail';
+        
+        if (v.detail_complet && v.detail_complet.length > 0) {
+            details = v.detail_complet.join(', ');
+        }
+        if (v.articles && v.articles.length > 0) {
+            var articlesListe = [];
+            for (var a = 0; a < v.articles.length; a++) {
+                var article = v.articles[a];
+                var nom = article.nom || 'Article';
+                var qte = article.quantite || 1;
+                articlesListe.push(nom + ' x' + qte);
+            }
+            if (articlesListe.length > 0) {
+                details = articlesListe.join(', ');
+            }
+        }
+        
+        var netAPayer = v.net_a_payer || 0;
+        var montantDonne = v.montant_donne || 0;
+        var resteAPayer = v.reste_a_payer || 0;
+        
+        var statutPaiement = '';
+        if (resteAPayer > 0 && montantDonne === 0) {
+            statutPaiement = 'Impayé';
+        } else if (resteAPayer > 0 && montantDonne > 0) {
+            statutPaiement = 'Partiel';
+        } else {
+            statutPaiement = 'Total';
+        }
+        
+        html += '<tr>';
+        html += '<td>#' + (v.ID || (i + 1)) + '</td>';
+        html += '<td>' + dateStr + '</td>';
+        html += '<td>' + (v.patient_nom || 'Patient') + '</td>';
+        html += '<td><span class="' + badgeClass + '">' + typeLabel + '</span></td>';
+        html += '<td class="detail-cell">' + details + '</td>';
+        html += '<td class="text-end">' + Math.round(netAPayer).toLocaleString() + ' F</td>';
+        html += '<td class="text-end text-success">' + Math.round(montantDonne).toLocaleString() + ' F</td>';
+        html += '<td class="text-end text-danger">' + Math.round(resteAPayer).toLocaleString() + ' F</td>';
+        html += '<td>' + statutPaiement + '</td>';
+        html += '</tr>';
+    }
+    
+    html += '</tbody></table>';
+    html += '<div class="footer">';
+    html += 'Total: ' + ventesFiltrees.length + ' ventes - CA: ' + Math.round(totalCA).toLocaleString() + ' FCFA<br>';
+    html += 'Document généré par Medilogic-GHP';
+    html += '</div>';
+    
+    html += '</body></html>';
+    
     printWindow.document.write(html);
     printWindow.document.close();
     setTimeout(function() { printWindow.print(); }, 500);
