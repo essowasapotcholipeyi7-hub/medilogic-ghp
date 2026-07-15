@@ -131,14 +131,12 @@
                                         <button onclick="modifierProforma({{ p.id }})" class="btn btn-warning" title="Modifier">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        {% if session.is_admin and p.statut == 'en_attente' %}
                                         <button onclick="changerStatut({{ p.id }}, 'accepte')" class="btn btn-success" title="Accepter">
                                             <i class="fas fa-check"></i>
                                         </button>
                                         <button onclick="changerStatut({{ p.id }}, 'refuse')" class="btn btn-danger" title="Refuser">
                                             <i class="fas fa-times"></i>
                                         </button>
-                                        {% endif %}
                                     </div>
                                 </td>
                             </tr>
