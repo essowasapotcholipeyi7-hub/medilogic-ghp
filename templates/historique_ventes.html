@@ -746,7 +746,8 @@ function calculerStats(debut, fin) {
         }
         
         totalVentes++;
-        totalCA += v.montant_donne || 0;
+        var caEffectif = (v.montant_donne || 0) - (v.rendu || 0);
+        totalCA += caEffectif > 0 ? caEffectif : 0;
         
         var typeVente = (v.type || '').toLowerCase();
         if (typeVente === 'actes' || typeVente === 'acte') {
@@ -947,7 +948,11 @@ function imprimerHistorique() {
     html += '<div class="header">Généré le ' + new Date().toLocaleString('fr-FR') + '</div>';
     
     // Statistiques
-    var totalCA = ventesFiltrees.reduce(function(sum, v) { return sum + (v.montant_donne || 0); }, 0);
+    var totalCA = ventesFiltrees.reduce(function(sum, v) {
+        var caEffectif = (v.montant_donne || 0) - (v.rendu || 0);
+        return sum + (caEffectif > 0 ? caEffectif : 0);
+    }, 0);
+
     var actesCount = ventesFiltrees.filter(function(v) { return v.type === 'actes'; }).length;
     var pharmaCount = ventesFiltrees.filter(function(v) { return v.type === 'pharmacie' || v.type === 'pharma'; }).length;
     

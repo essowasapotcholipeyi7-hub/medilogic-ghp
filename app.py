@@ -2059,22 +2059,62 @@ def historique_ventes():
     """Affiche l'historique des ventes avec stats"""
     structure_id = session.get('structure_id')
     
-    # ========== 1. VENTES D'ACTES (Google Sheets) ==========
-    ventes_actes = sheets_helper.get_all_records('ventes_actes')
-    ventes_actes_filtrees = []
-    for v in ventes_actes:
-        if str(v.get('structure_id')) == str(structure_id):
-            v['type'] = 'actes'
-            v['acte_nom'] = v.get('acte_nom', 'Acte')
-            date_val = v.get('date', '')
-            v['date'] = str(date_val) if date_val else ''
-            ventes_actes_filtrees.append(v)
+    # ========== 1. VENTES ACTES (Neon) ==========
+    ventes_actes_db = db.execute_query("""
+        SELECT 
+            id, patient_nom, net_a_payer, taux_assurance, 
+            date_vente, actes, created_by_nom,
+            montant_donne, rendu,
+            sous_total, prise_en_charge, prise_en_charge2
+        FROM ventes 
+        WHERE structure_id = %s 
+        AND type = 'actes'
+        AND (statut IS NULL OR statut != 'annulee')
+        ORDER BY date_vente DESC
+    """, (structure_id,))
     
-    # ========== 2. VENTES PHARMACIE (Neon - exclure annulées) ==========
+    ventes_actes = []
+    ca_actes = 0
+    
+    for v in ventes_actes_db:
+        if isinstance(v, dict):
+            import json
+            actes_data = v.get('actes')
+            if isinstance(actes_data, str):
+                try:
+                    actes_data = json.loads(actes_data)
+                except:
+                    actes_data = []
+            
+            nom_acte = 'Acte'
+            if actes_data and len(actes_data) > 0:
+                nom_acte = actes_data[0].get('nom', 'Acte')
+            
+            montant_donne = float(v.get('montant_donne', 0))
+            rendu = float(v.get('rendu', 0))
+            ca_effectif = montant_donne - rendu
+            ca_actes += ca_effectif
+            
+            ventes_actes.append({
+                'ID': v.get('id'),
+                'patient_nom': v.get('patient_nom', 'Patient'),
+                'type': 'actes',
+                'acte_nom': nom_acte,
+                'net_a_payer': float(v.get('net_a_payer', 0)),
+                'taux_assurance': v.get('taux_assurance', 0),
+                'date': str(v.get('date_vente', '')),
+                'created_by_nom': v.get('created_by_nom', 'System'),
+                'montant_donne': montant_donne,
+                'rendu': rendu,
+                'ca_effectif': ca_effectif
+            })
+    
+    # ========== 2. VENTES PHARMACIE (Neon) ==========
     ventes_pharma_db = db.execute_query("""
         SELECT 
             id, patient_nom, net_a_payer, taux_assurance, 
-            date_vente, produits, created_by_nom
+            date_vente, produits, created_by_nom,
+            montant_donne, rendu
         FROM ventes 
         WHERE structure_id = %s 
         AND type IN ('pharma', 'pharmacie')
@@ -2083,6 +2123,8 @@ def historique_ventes():
     """, (structure_id,))
     
     ventes_pharma = []
+    ca_pharma = 0
+    
     for v in ventes_pharma_db:
         if isinstance(v, dict):
             import json
@@ -2097,6 +2139,11 @@ def historique_ventes():
             if produits_data and len(produits_data) > 0:
                 nom_produit = produits_data[0].get('nom', 'Produit')
             
+            montant_donne = float(v.get('montant_donne', 0))
+            rendu = float(v.get('rendu', 0))
+            ca_effectif = montant_donne - rendu
+            ca_pharma += ca_effectif
+            
             ventes_pharma.append({
                 'ID': v.get('id'),
                 'patient_nom': v.get('patient_nom', 'Patient'),
@@ -2106,11 +2153,14 @@ def historique_ventes():
                 'net_a_payer': float(v.get('net_a_payer', 0)),
                 'taux_assurance': v.get('taux_assurance', 0),
                 'date': str(v.get('date_vente', '')),
-                'created_by_nom': v.get('created_by_nom', 'System')
+                'created_by_nom': v.get('created_by_nom', 'System'),
+                'montant_donne': montant_donne,
+                'rendu': rendu,
+                'ca_effectif': ca_effectif
             })
     
     # ========== 3. FUSIONNER ET TRIER ==========
-    toutes_ventes = ventes_actes_filtrees + ventes_pharma
+    toutes_ventes = ventes_actes + ventes_pharma
     
     def get_date_key(x):
         date_val = x.get('date', '')
@@ -2119,22 +2169,21 @@ def historique_ventes():
     toutes_ventes.sort(key=get_date_key, reverse=True)
     
     # ========== 4. STATISTIQUES ==========
-    total_actes = len([v for v in ventes_actes_filtrees if str(v.get('structure_id')) == str(structure_id)])
-    total_pharma = len([v for v in ventes_pharma if str(v.get('structure_id')) == str(structure_id)])
+    total_actes = len(ventes_actes)
+    total_pharma = len(ventes_pharma)
     
-    # CA total = somme des net_a_payer (exclut annulées car filtrées)
-    ca_total = sum([float(v.get('net_a_payer', 0)) for v in toutes_ventes])
+    # 🔥 CA total = somme des CA effectifs
+    ca_total = ca_actes + ca_pharma
     
     # Top actes
     actes_count = {}
-    for v in ventes_actes_filtrees:
+    for v in ventes_actes:
         nom = v.get('acte_nom', 'Acte')
-        quantite = int(v.get('quantite', 1))
-        total = float(v.get('total', 0))
+        # Compter les ventes, pas les quantités (car on a pas la quantité dans la vente)
         if nom not in actes_count:
             actes_count[nom] = {'quantite': 0, 'total': 0}
-        actes_count[nom]['quantite'] += quantite
-        actes_count[nom]['total'] += total
+        actes_count[nom]['quantite'] += 1
+        actes_count[nom]['total'] += v.get('net_a_payer', 0)
     
     top_actes = sorted(actes_count.items(), key=lambda x: x[1]['quantite'], reverse=True)[:5]
     top_actes_list = [{'nom': k, 'quantite': v['quantite'], 'total': v['total']} for k, v in top_actes]
@@ -2143,12 +2192,10 @@ def historique_ventes():
     produits_count = {}
     for v in ventes_pharma:
         nom = v.get('produit_nom', 'Produit')
-        quantite = 1
-        total = v.get('net_a_payer', 0)
         if nom not in produits_count:
             produits_count[nom] = {'quantite': 0, 'total': 0}
-        produits_count[nom]['quantite'] += quantite
-        produits_count[nom]['total'] += total
+        produits_count[nom]['quantite'] += 1
+        produits_count[nom]['total'] += v.get('net_a_payer', 0)
     
     top_produits = sorted(produits_count.items(), key=lambda x: x[1]['quantite'], reverse=True)[:5]
     top_produits_list = [{'nom': k, 'quantite': v['quantite'], 'total': v['total']} for k, v in top_produits]
@@ -2157,7 +2204,7 @@ def historique_ventes():
         'total_ventes': len(toutes_ventes),
         'total_actes': total_actes,
         'total_pharma': total_pharma,
-        'ca_total': ca_total,
+        'ca_total': ca_total,  # ✅ CA corrigé
         'top_actes': top_actes_list,
         'top_produits': top_produits_list
     }
@@ -4146,8 +4193,8 @@ def api_vente_pharma():
         print(f"✅ Vente pharmacie enregistrée dans Neon avec ID: {vente_id}")
         
         # ========== 2. AJOUTER LA RECETTE PATIENT (MONTANT DONNÉ) ==========
-        # ✅ CORRECTION : Utiliser montant_donne au lieu de net_a_payer
-        if montant_donne > 0:
+        montant_effectif = montant_donne - rendu
+        if montant_effectif > 0:
             recette_result = db.execute_query("""
                 INSERT INTO recettes (
                     structure_id, 
@@ -4163,20 +4210,20 @@ def api_vente_pharma():
                 RETURNING id
             """, (
                 structure_id,
-                montant_donne,  # ✅ ICI c'est le montant donné (pas le total)
+                montant_effectif,
                 'patients',
                 vente_id,
                 'vente_pharma',
-                f'Vente pharmacie #{vente_id} - {data.get("patient_nom", "Patient")} - Donné: {montant_donne} FCFA, Rendu: {rendu} FCFA, Reste: {reste_a_payer} FCFA',
-                vendeur
+                f'Vente pharmacie #{vente_id} - {data.get("patient_nom", "Patient")} - Encaissé: {montant_effectif} FCFA (Donné: {montant_donne}, Rendu: {rendu})',
+        vendeur
             ))
             
             if recette_result and len(recette_result) > 0:
-                print(f"✅ Recette patient ajoutée: {montant_donne} FCFA")
+                print(f"✅ Recette patient ajoutée: {montant_effectif} FCFA")
             else:
                 print("⚠️ Erreur lors de l'insertion de la recette patient")
         else:
-            print(f"ℹ️ Montant donné = 0, pas de recette patient")
+            print(f"ℹ️ montant_effectif = 0, pas de recette patient")
         
         # ========== 3. AJOUTER LA RECETTE ASSURANCE COMPLÉMENTAIRE ==========
         if assurance2_nom and taux_assurance2 > 0 and prise_en_charge2 > 0:
@@ -4622,8 +4669,10 @@ def api_add_acte_vente():
         print(f"✅ Vente actes enregistrée dans Neon avec ID: {vente_id}")
         
         # ========== 2. AJOUTER LA RECETTE PATIENT (MONTANT DONNÉ) ==========
-        # ✅ CORRECTION ICI : Utiliser montant_donne au lieu de net_a_payer
-        if montant_donne > 0:
+        # 🔥 CORRECTION : Utiliser montant_effectif = montant_donne - rendu
+        montant_effectif = montant_donne - rendu
+
+        if montant_effectif > 0:
             recette_result = db.execute_query("""
                 INSERT INTO recettes (
                     structure_id, 
@@ -4639,20 +4688,20 @@ def api_add_acte_vente():
                 RETURNING id
             """, (
                 structure_id,
-                montant_donne,  # ✅ CORRECTION : C'est bien ce que le patient a donné
+                montant_effectif,
                 'patients',
                 vente_id,
                 'vente_acte',
-                f'Vente actes #{vente_id} - {data.get("patient_nom", "Patient")} - Montant donné: {montant_donne} FCFA, Rendu: {rendu} FCFA, Reste: {reste_a_payer} FCFA',
-                user_name
+                f'Vente actes #{vente_id} - {data.get("patient_nom", "Patient")} - Encaissé: {montant_effectif} FCFA (Donné: {montant_donne}, Rendu: {rendu})',
+        user_name
             ))
             
             if recette_result and len(recette_result) > 0:
-                print(f"✅ Recette patient ajoutée: {montant_donne} FCFA")
+                print(f"✅ Recette patient ajoutée: {montant_effectif} FCFA")
             else:
                 print("⚠️ Erreur lors de l'insertion de la recette patient")
         else:
-            print(f"ℹ️ Montant donné = 0, pas de recette patient")
+            print(f"ℹ️ montant_effectif = 0, pas de recette patient")
         
         # ========== 3. AJOUTER LA RECETTE ASSURANCE COMPLÉMENTAIRE ==========
         if assurance2_nom and taux_assurance2 > 0 and prise_en_charge2 > 0:

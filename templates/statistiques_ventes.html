@@ -396,7 +396,8 @@ function afficherVentes(ventes) {
         const netAPayer = vente.net_a_payer || 0;
         const pbr = vente.base_remboursement || 0;
         
-        totalPaye += montantDonne;
+        var caEffectif = montantDonne - (vente.rendu || 0);
+        totalPaye += caEffectif > 0 ? caEffectif : 0;
         totalReste += resteAPayer;
         
         if (vente.type === 'actes') totalActes++;
@@ -474,7 +475,8 @@ function updateStats(ventes) {
     let totalPharma = 0;
     
     ventes.forEach(vente => {
-        totalMontant += (vente.montant_donne || 0);
+        var caEffectif = (vente.montant_donne || 0) - (vente.rendu || 0);
+        totalMontant += caEffectif > 0 ? caEffectif : 0;
         if (vente.type === 'actes') totalActes++;
         else if (vente.type === 'pharmacie' || vente.type === 'pharma') totalPharma++;
     });
