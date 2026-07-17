@@ -13,9 +13,7 @@ from io import BytesIO
 
 # ⭐ Importer depuis db_helper et models
 from db_helper import db as db_helper
-from models import db, StructureMapping, Patient, Utilisateur, Structure
-
-
+from models import db, StructureMapping, Patient, Utilisateur, Structure, Employe, Service, Conge, Permission, DocumentRH, SignatureRH
 
 # ========== DÉTECTION ENVIRONNEMENT ==========
 IS_PRODUCTION = os.environ.get('RENDER') == 'true' or os.environ.get('PRODUCTION') == 'true'
@@ -34,6 +32,11 @@ app.secret_key = Config.SECRET_KEY
 
 # ⭐ Initialiser le db SQLAlchemy
 db.init_app(app)
+
+# ⭐ Importer le blueprint RH
+from routes.rh import rh_bp
+app.register_blueprint(rh_bp)
+
 
 @app.after_request
 def auto_commit_after_request(response):

@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Autorisation de conge{% endblock %}
+
+{% block extra_css %}
+<style>
+    @media print {
+        .no-print { display: none; }
+        body { font-size: 12pt; }
+    }
+    .container {
+        font-family: 'Times New Roman', serif;
+        padding: 30px 40px;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    .header {
+        text-align: center;
+        border-bottom: 2px solid #333;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+    .header .logo {
+        font-size: 22px;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+    .header .sub {
+        font-size: 13px;
+        color: #555;
+    }
+    .header .contact {
+        font-size: 11px;
+        color: #666;
+    }
+    .title {
+        text-align: center;
+        font-size: 18px;
+        font-weight: bold;
+        text-decoration: underline;
+        margin: 20px 0;
+    }
+    .content {
+        font-size: 13px;
+        line-height: 1.8;
+        text-align: justify;
+    }
+    .content .nom {
+        font-size: 15px;
+        font-weight: bold;
+        text-align: center;
+        margin: 10px 0;
+    }
+    .content .dates {
+        text-align: center;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+    .signatures {
+        margin-top: 30px;
+    }
+    .signatures table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .signatures td {
+        width: 33%;
+        text-align: center;
+        padding: 25px 5px 5px 5px;
+        border-top: 1px solid #333;
+        font-size: 11px;
+    }
+    .footer {
+        text-align: center;
+        font-size: 10px;
+        color: #777;
+        margin-top: 20px;
+        border-top: 1px solid #ddd;
+        padding-top: 8px;
+    }
+    .numero {
+        text-align: right;
+        font-size: 11px;
+        color: #555;
+    }
+    
+    @media print {
+        .no-print { display: none; }
+        body { font-size: 12pt; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Infos structure -->
+    {% set structure_nom = session.get('structure_nom') or 'Centre Medical' %}
+    {% set structure_telephone = session.get('structure_telephone') or '+228 90 00 00 00' %}
+    {% set structure_email = session.get('structure_email') or 'contact@medilogic-ghp.com' %}
+    {% set structure_adresse = session.get('structure_adresse') or 'Lomé - Togo' %}
+    
+    <div class="header">
+        <div class="logo">{{ structure_nom }}</div>
+        <div class="contact">
+            Tel: {{ structure_telephone }} | Email: {{ structure_email }}<br>
+            {{ structure_adresse }}
+        </div>
+    </div>
+
+    <div class="numero">N° ORDRE : {{ numero_ordre }}</div>
+
+    <div class="title">
+        AUTORISATION DE CONGE
+    </div>
+
+    <div class="content">
+        <p>
+            Je soussigné(e), <strong>{{ signataire }}</strong>, {{ structure_nom }},
+        </p>
+
+        <p>
+            Atteste que <strong>{{ titre }} {{ employe.nom }} {{ employe.prenom }}</strong>,
+        </p>
+
+        <div class="nom">
+            {{ employe.nom }} {{ employe.prenom }}<br>
+            <span style="font-size: 12px; font-weight: normal;">
+                Matricule : {{ employe.matricule }} | Service : {{ employe.service.nom if employe.service else '-' }} | Poste : {{ employe.poste }}
+            </span>
+        </div>
+
+        <p>
+            est {{ autorisee }} à jouir de ses droits de conges,
+        </p>
+
+        <div class="dates">
+            DU : {{ conge.date_debut.strftime('%d/%m/%Y') }}<br>
+            AU : {{ conge.date_fin.strftime('%d/%m/%Y') }} INCLUS
+        </div>
+
+        <p>
+            {{ reprise }} son service le <strong>{{ conge.date_reprise.strftime('%d/%m/%Y') }}</strong>.
+        </p>
+
+        <p>
+            Le present document est delivre a l'{{ interessee }} pour servir et valoir ce que de droit.
+        </p>
+
+        <div class="signatures">
+            <table>
+                <tr>
+                    <td>
+                        <strong>Visa du Chef de service</strong><br>
+                        Signature : ......................<br>
+                        Nom : ......................<br>
+                        Date : {{ date_actuelle }}
+                    </td>
+                    <td>
+                        <strong>Visa du Responsable GRH</strong><br>
+                        Signature : ......................<br>
+                        Nom : ......................<br>
+                        Date : {{ date_actuelle }}
+                    </td>
+                    <td>
+                        <strong>Visa du Directeur General</strong><br>
+                        Signature : ......................<br>
+                        Nom : {{ signataire }}<br>
+                        Date : {{ date_actuelle }}
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div style="text-align: center; margin-top: 15px;">
+            <strong>Cachet de l'etablissement</strong><br><br>
+            [               ]
+        </div>
+    </div>
+
+    <div class="footer">
+        Document genere par Medilogic-GHP le {{ date_actuelle }}
+    </div>
+
+    <div class="text-center no-print" style="margin-top: 20px;">
+        <button onclick="window.print()" class="btn btn-primary btn-sm">Imprimer</button>
+        <button onclick="window.close()" class="btn btn-secondary btn-sm">Fermer</button>
+    </div>
+</div>
+{% endblock %}

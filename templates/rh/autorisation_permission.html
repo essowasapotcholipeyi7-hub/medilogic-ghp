@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Autorisation d'absence (Permission){% endblock %}
+
+{% block extra_css %}
+<style>
+    @media print {
+        .no-print { display: none; }
+        body { font-size: 11pt; }
+    }
+    .container {
+        font-family: 'Times New Roman', serif;
+        padding: 25px 35px;
+        max-width: 750px;
+        margin: 0 auto;
+    }
+    .header {
+        text-align: center;
+        border-bottom: 2px solid #333;
+        padding-bottom: 8px;
+        margin-bottom: 15px;
+    }
+    .header .logo {
+        font-size: 20px;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+    .header .sub {
+        font-size: 12px;
+        color: #555;
+    }
+    .header .contact {
+        font-size: 10px;
+        color: #666;
+    }
+    .title {
+        text-align: center;
+        font-size: 17px;
+        font-weight: bold;
+        text-decoration: underline;
+        margin: 15px 0;
+    }
+    .content {
+        font-size: 13px;
+        line-height: 1.7;
+        text-align: justify;
+    }
+    .content .nom {
+        font-size: 14px;
+        font-weight: bold;
+        text-align: center;
+        margin: 8px 0;
+    }
+    .content .details {
+        text-align: center;
+        font-weight: bold;
+        margin: 8px 0;
+    }
+    .signatures {
+        margin-top: 25px;
+    }
+    .signatures table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .signatures td {
+        width: 33%;
+        text-align: center;
+        padding: 20px 5px 5px 5px;
+        border-top: 1px solid #333;
+        font-size: 11px;
+    }
+    .footer {
+        text-align: center;
+        font-size: 10px;
+        color: #777;
+        margin-top: 15px;
+        border-top: 1px solid #ddd;
+        padding-top: 6px;
+    }
+    .numero {
+        text-align: right;
+        font-size: 11px;
+        color: #555;
+    }
+    
+    @media print {
+        .no-print { display: none; }
+        body { font-size: 11pt; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- 🔥 Infos structure -->
+    {% set structure_nom = session.get('structure_nom') or 'Centre Medical' %}
+    {% set structure_telephone = session.get('structure_telephone') or '+228 90 00 00 00' %}
+    {% set structure_email = session.get('structure_email') or 'contact@medilogic-ghp.com' %}
+    {% set structure_adresse = session.get('structure_adresse') or 'Lomé - Togo' %}
+    
+    <div class="header">
+        <div class="logo">{{ structure_nom }}</div>
+        <div class="contact">
+            Tel: {{ structure_telephone }} | Email: {{ structure_email }}<br>
+            {{ structure_adresse }}
+        </div>
+    </div>
+
+    <div class="numero">N° ORDRE : {{ numero_ordre }}</div>
+
+    <div class="title">
+        AUTORISATION D'ABSENCE
+    </div>
+
+    <div class="content">
+        <p>
+            Je soussigné(e), <strong>{{ signataire }}</strong>, {{ structure_nom }},
+        </p>
+
+        <p>
+            Autorise <strong>{{ titre }} {{ employe.nom }} {{ employe.prenom }}</strong>,
+        </p>
+
+        <div class="nom">
+            {{ employe.nom }} {{ employe.prenom }}<br>
+            <span style="font-size: 11px; font-weight: normal;">
+                Matricule : {{ employe.matricule }} | Service : {{ employe.service.nom if employe.service else '-' }} | Poste : {{ employe.poste }}
+            </span>
+        </div>
+
+        <p>
+            à s'absenter de son poste de travail,
+        </p>
+
+<div class="details">
+    {% if permission.type_permission == 'heures' %}
+        LE : {{ permission.date_permission.strftime('%d/%m/%Y') if permission.date_permission else '-' }}<br>
+        DE : {{ permission.heure_debut.strftime('%H:%M') if permission.heure_debut else '-' }}<br>
+        A  : {{ permission.heure_fin.strftime('%H:%M') if permission.heure_fin else '-' }}
+    {% else %}
+        DU : {{ permission.date_debut.strftime('%d/%m/%Y') if permission.date_debut else '-' }}<br>
+        AU : {{ permission.date_fin.strftime('%d/%m/%Y') if permission.date_fin else '-' }} INCLUS
+        <br>
+        <span style="font-size: 12px; font-weight: normal;">
+            ({{ permission.nombre_jours }} jours)
+        </span>
+    {% endif %}
+</div>
+
+        <p>
+            <strong>Motif :</strong> {{ permission.motif }}
+        </p>
+
+        <p>
+            Le present document est delivre a l'interesse pour servir et valoir ce que de droit.
+        </p>
+
+        <div class="signatures">
+            <table>
+                <tr>
+                    <td>
+                        <strong>Visa du Chef de service</strong><br>
+                        Signature : ......................<br>
+                        Nom : ......................<br>
+                        Date : {{ date_actuelle }}
+                    </td>
+                    <td>
+                        <strong>Visa du Responsable GRH</strong><br>
+                        Signature : ......................<br>
+                        Nom : ......................<br>
+                        Date : {{ date_actuelle }}
+                    </td>
+                    <td>
+                        <strong>Visa du Directeur General</strong><br>
+                        Signature : ......................<br>
+                        Nom : {{ signataire }}<br>
+                        Date : {{ date_actuelle }}
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div style="text-align: center; margin-top: 12px;">
+            <strong>Cachet de l'etablissement</strong><br><br>
+            [               ]
+        </div>
+    </div>
+
+    <div class="footer">
+        Document genere par Medilogic-GHP le {{ date_actuelle }}
+    </div>
+
+    <div class="text-center no-print" style="margin-top: 15px;">
+        <button onclick="window.print()" class="btn btn-primary btn-sm">Imprimer</button>
+        <button onclick="window.close()" class="btn btn-secondary btn-sm">Fermer</button>
+    </div>
+</div>
+{% endblock %}

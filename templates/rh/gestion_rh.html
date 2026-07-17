@@ -1,0 +1,1727 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion des Ressources Humaines{% endblock %}
+
+{% block extra_css %}
+<style>
+    .nav-tabs .nav-link {
+        border-radius: 12px;
+        padding: 10px 20px;
+        margin-right: 8px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    .nav-tabs .nav-link.active {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+    }
+    .tab-pane {
+        padding-top: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3 mb-4">
+        {% include 'sidebar_menu.html' %}
+    </div>
+
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-users-cog"></i> Gestion des Ressources Humaines</h5>
+                <button class="btn btn-light btn-sm" onclick="location.reload()">
+                    <i class="fas fa-sync-alt"></i> Rafraichir
+                </button>
+            </div>
+            <div class="card-body">
+                
+                <!-- Onglets RH -->
+                <ul class="nav nav-tabs" id="rhTab" role="tablist">
+
+<!-- Dans les onglets -->
+<li class="nav-item">
+    <button class="nav-link" id="services-tab" data-bs-toggle="tab" data-bs-target="#services" type="button" role="tab">
+        <i class="fas fa-building"></i> Services
+    </button>
+</li>
+
+                    <li class="nav-item">
+                        <button class="nav-link active" id="personnel-tab" data-bs-toggle="tab" data-bs-target="#personnel" type="button" role="tab">
+                            <i class="fas fa-user-friends"></i> Personnel
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="conges-tab" data-bs-toggle="tab" data-bs-target="#conges" type="button" role="tab">
+                            <i class="fas fa-calendar-alt"></i> Conges
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="permissions-tab" data-bs-toggle="tab" data-bs-target="#permissions" type="button" role="tab">
+                            <i class="fas fa-door-open"></i> Permissions
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="dashboardrh-tab" data-bs-toggle="tab" data-bs-target="#dashboardrh" type="button" role="tab">
+                            <i class="fas fa-chart-pie"></i> Tableau de bord
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="rhTabContent">
+
+<!-- Onglet Services -->
+<div class="tab-pane fade" id="services" role="tabpanel">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6><i class="fas fa-building"></i> Gestion des services</h6>
+        <button class="btn btn-primary btn-sm" onclick="ouvrirAjoutServiceRH()">
+            <i class="fas fa-plus"></i> Nouveau service
+        </button>
+    </div>
+    
+    <div class="table-responsive">
+        <table class="table table-hover table-sm table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th>ID</th>
+                    <th>Nom</th>
+                    <th>Responsable</th>
+                    <th>Employes</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="servicesBodyRH">
+                <tr><td colspan="5" class="text-center">Chargement...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+                    <!-- ===== ONGLET PERSONNEL ===== -->
+                    <div class="tab-pane fade show active" id="personnel" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6><i class="fas fa-users"></i> Gestion du personnel</h6>
+                            <button class="btn btn-primary btn-sm" onclick="ouvrirAjoutEmploye()">
+                                <i class="fas fa-plus"></i> Nouvel employe
+                            </button>
+                        </div>
+                        
+                        <!-- Barre de recherche -->
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                    <input type="text" class="form-control" id="searchEmployeRH" 
+                                           placeholder="Rechercher..." onkeyup="filtrerEmployesRH()">
+                                    <button class="btn btn-outline-secondary" onclick="reinitialiserRechercheRH()" type="button">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-control form-control-sm" id="filtreServiceRH" onchange="filtrerEmployesRH()">
+                                    <option value="">Tous les services</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-control form-control-sm" id="filtreStatutRH" onchange="filtrerEmployesRH()">
+                                    <option value="">Tous les statuts</option>
+                                    <option value="Actif">Actif</option>
+                                    <option value="Inactif">Inactif</option>
+                                    <option value="En conge">En congé</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2 text-end">
+                                <span id="totalEmployesRH" class="badge bg-secondary">0</span>
+                            </div>
+                        </div>
+
+                        <!-- Tableau Personnel -->
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Matricule</th>
+                                        <th>Nom</th>
+                                        <th>Prenom</th>
+                                        <th>Service</th>
+                                        <th>Poste</th>
+                                        <th>Telephone</th>
+                                        <th>Solde conges</th>
+                                        <th>Statut</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="employesBodyRH">
+                                    <tr><td colspan="9" class="text-center">Chargement...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <div class="row mt-2">
+                            <div class="col-md-12">
+                                <nav>
+                                    <ul class="pagination justify-content-center pagination-sm" id="paginationEmployesRH"></ul>
+                                </nav>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== ONGLET CONGES ===== -->
+                    <div class="tab-pane fade" id="conges" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6><i class="fas fa-calendar-alt"></i> Gestion des conges</h6>
+                            <button class="btn btn-warning btn-sm" onclick="ouvrirDemandeConge()">
+                                <i class="fas fa-plus"></i> Demander un conge
+                            </button>
+                        </div>
+
+                        <!-- Filtres -->
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                    <input type="text" class="form-control" id="searchCongeRH" 
+                                           placeholder="Rechercher..." onkeyup="filtrerCongesRH()">
+                                    <button class="btn btn-outline-secondary" onclick="reinitialiserRechercheCongeRH()" type="button">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-control form-control-sm" id="filtreStatutCongeRH" onchange="filtrerCongesRH()">
+                                    <option value="">Tous les statuts</option>
+                                    <option value="en_attente">En attente</option>
+                                    <option value="approuve">Approuve</option>
+                                    <option value="refuse">Refuse</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-control form-control-sm" id="filtreTypeCongeRH" onchange="filtrerCongesRH()">
+                                    <option value="">Tous les types</option>
+                                    <option value="annuel">Annuel</option>
+                                    <option value="maladie">Maladie</option>
+                                    <option value="maternite">Maternite</option>
+                                    <option value="paternite">Paternite</option>
+                                    <option value="sans_solde">Sans solde</option>
+                                    <option value="exceptionnel">Exceptionnel</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2 text-end">
+                                <span id="totalCongesRH" class="badge bg-secondary">0</span>
+                            </div>
+                        </div>
+
+<!-- Tableau Conges -->
+<div class="table-responsive">
+    <table class="table table-hover table-sm table-bordered">
+        <thead class="table-light">
+            <tr>
+                <th>Employe</th>
+                <th>Type</th>
+                <th>Debut</th>
+                <th>Fin</th>
+                <th>Reprise</th>
+                <th>Jours</th>
+                <th>Annee d'utilisation</th>
+                <th>Solde restant</th>
+                <th>Statut</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="congesBodyRH">
+            <tr><td colspan="10" class="text-center">Chargement...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+                        <!-- Pagination -->
+                        <div class="row mt-2">
+                            <div class="col-md-12">
+                                <nav>
+                                    <ul class="pagination justify-content-center pagination-sm" id="paginationCongesRH"></ul>
+                                </nav>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== ONGLET PERMISSIONS ===== -->
+                    <div class="tab-pane fade" id="permissions" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6><i class="fas fa-door-open"></i> Gestion des permissions</h6>
+                            <button class="btn btn-info btn-sm" onclick="ouvrirDemandePermission()">
+                                <i class="fas fa-plus"></i> Demander une permission
+                            </button>
+                        </div>
+
+                        <!-- Filtres -->
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                    <input type="text" class="form-control" id="searchPermissionRH" 
+                                           placeholder="Rechercher..." onkeyup="filtrerPermissionsRH()">
+                                    <button class="btn btn-outline-secondary" onclick="reinitialiserRecherchePermissionRH()" type="button">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-control form-control-sm" id="filtreStatutPermissionRH" onchange="filtrerPermissionsRH()">
+                                    <option value="">Tous les statuts</option>
+                                    <option value="en_attente">En attente</option>
+                                    <option value="approuve">Approuve</option>
+                                    <option value="refuse">Refuse</option>
+                                </select>
+                            </div>
+                            <div class="col-md-5 text-end">
+                                <span id="totalPermissionsRH" class="badge bg-secondary">0</span>
+                            </div>
+                        </div>
+
+<!-- Tableau Permissions -->
+<div class="table-responsive">
+    <table class="table table-hover table-sm table-bordered">
+        <thead class="table-light">
+            <tr>
+                <th>Employe</th>
+                <th>Type</th>
+                <th>Date/Periode</th>
+                <th>Heure debut</th>
+                <th>Heure fin</th>
+                <th>Jours</th>
+                <th>Motif</th>
+                <th>Statut</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="permissionsBodyRH">
+            <tr><td colspan="9" class="text-center">Chargement...</td></tr>
+        </tbody>
+    </table>
+</div>
+                    <!-- ===== ONGLET TABLEAU DE BORD ===== -->
+                    <div class="tab-pane fade" id="dashboardrh" role="tabpanel">
+                        <h6><i class="fas fa-chart-pie"></i> Tableau de bord RH</h6>
+                        
+                        <div class="row g-3 mb-4" id="dashboardStats">
+                            <div class="col-md-3">
+                                <div class="card bg-primary text-white">
+                                    <div class="card-body text-center">
+                                        <h3 id="statTotalEmployes">0</h3>
+                                        <small>Total employes</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-success text-white">
+                                    <div class="card-body text-center">
+                                        <h3 id="statActifs">0</h3>
+                                        <small>Actifs</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-warning text-dark">
+                                    <div class="card-body text-center">
+                                        <h3 id="statEnConge">0</h3>
+                                        <small>En congé</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-danger text-white">
+                                    <div class="card-body text-center">
+                                        <h3 id="statDemandesAttente">0</h3>
+                                        <small>Demandes en attente</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Alertes -->
+                        <div class="card">
+                            <div class="card-header bg-warning">
+                                <i class="fas fa-bell"></i> Alertes
+                            </div>
+                            <div class="card-body" id="alertesRH">
+                                <div class="text-muted text-center">Chargement des alertes...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Service (ajout/modification) -->
+<div class="modal fade" id="serviceModalRH" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><span id="serviceModalTitleRH">Ajouter un service</span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="serviceFormRH">
+                    <input type="hidden" id="serviceIdRH">
+                    <div class="mb-3">
+                        <label class="form-label">Nom du service *</label>
+                        <input type="text" class="form-control" id="serviceNomRH" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Responsable</label>
+                        <input type="text" class="form-control" id="serviceResponsableRH">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-primary" onclick="sauvegarderServiceRH()">
+                    <i class="fas fa-save"></i> Enregistrer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODALS ===== -->
+
+<!-- Modal Ajout Employe -->
+<div class="modal fade" id="employeModalRH" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-user-plus"></i> Ajouter un employe</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="employeFormRH">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card bg-light mb-2">
+                                <div class="card-header bg-info text-white py-1">
+                                    <small><i class="fas fa-id-card"></i> Identite</small>
+                                </div>
+                                <div class="card-body py-2">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Nom *</label>
+                                            <input type="text" class="form-control form-control-sm" id="empNomRH" required>
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Prenom *</label>
+                                            <input type="text" class="form-control form-control-sm" id="empPrenomRH" required>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Sexe *</label>
+                                            <select class="form-control form-control-sm" id="empSexeRH" required>
+                                                <option value="">Selectionner</option>
+                                                <option value="Masculin">Masculin</option>
+                                                <option value="Feminin">Feminin</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Date naissance</label>
+                                            <input type="date" class="form-control form-control-sm" id="empDateNaissanceRH" onchange="calculerAgeRH()">
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Telephone *</label>
+                                            <input type="text" class="form-control form-control-sm" id="empTelephoneRH" required>
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Email</label>
+                                            <input type="email" class="form-control form-control-sm" id="empEmailRH">
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-12 mb-2">
+                                            <label class="form-label small">Quartier</label>
+                                            <input type="text" class="form-control form-control-sm" id="empQuartierRH">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light mb-2">
+                                <div class="card-header bg-success text-white py-1">
+                                    <small><i class="fas fa-briefcase"></i> Professionnel</small>
+                                </div>
+                                <div class="card-body py-2">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Service *</label>
+                                            <select class="form-control form-control-sm" id="empServiceRH" required>
+                                                <option value="">Selectionner</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Poste *</label>
+                                            <input type="text" class="form-control form-control-sm" id="empPosteRH" required>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Date embauche *</label>
+                                            <input type="date" class="form-control form-control-sm" id="empDateEmbaucheRH" required>
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Type contrat</label>
+                                            <select class="form-control form-control-sm" id="empTypeContratRH">
+                                                <option value="CDI">CDI</option>
+                                                <option value="CDD">CDD</option>
+                                                <option value="Stage">Stage</option>
+                                                <option value="Apprentissage">Apprentissage</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-12 mb-2">
+                                            <label class="form-label small">Personne a prevenir</label>
+                                            <input type="text" class="form-control form-control-sm" id="empPrevenirRH">
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Telephone prevenir</label>
+                                            <input type="text" class="form-control form-control-sm" id="empTelephonePrevenirRH">
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Lien parente</label>
+                                            <input type="text" class="form-control form-control-sm" id="empLienParenteRH">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-primary btn-sm" onclick="sauvegarderEmployeRH()">
+                    <i class="fas fa-save"></i> Enregistrer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Demande Conge -->
+<div class="modal fade" id="congeModalRH" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title"><i class="fas fa-calendar-plus"></i> Demander un conge</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="congeFormRH">
+                    <div class="mb-2">
+                        <label class="form-label small">Employe *</label>
+                        <select class="form-control form-control-sm" id="congeEmployeRH" required>
+                            <option value="">Selectionner</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Type de conge *</label>
+                        <select class="form-control form-control-sm" id="congeTypeRH" required onchange="verifierRegleCongeRH()">
+                            <option value="annuel">Annuel (paye)</option>
+                            <option value="maladie">Maladie</option>
+                            <option value="maternite">Maternite</option>
+                            <option value="paternite">Paternite</option>
+                            <option value="sans_solde">Sans solde</option>
+                            <option value="exceptionnel">Exceptionnel</option>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label small">Date debut *</label>
+                            <input type="date" class="form-control form-control-sm" id="congeDebutRH" required onchange="calculerJoursCongeRH()">
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label small">Date fin *</label>
+                            <input type="date" class="form-control form-control-sm" id="congeFinRH" required onchange="calculerJoursCongeRH()">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label small">Nombre jours</label>
+                            <input type="text" class="form-control form-control-sm" id="congeJoursRH" readonly>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label small">Date reprise</label>
+                            <input type="text" class="form-control form-control-sm" id="congeRepriseRH" readonly>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Motif</label>
+                        <textarea class="form-control form-control-sm" id="congeMotifRH" rows="2"></textarea>
+                    </div>
+
+<div class="alert alert-info py-1" id="soldeCongesInfo" style="display:none; font-size:12px;">
+    <i class="fas fa-info-circle"></i> 
+    Solde de conges restant: <strong id="soldeCongesRestant">0</strong> jours
+</div>
+
+<div class="mb-3">
+    <label class="form-label small text-danger">Signataire (Directeur/Responsable) *</label>
+    <input type="text" class="form-control form-control-sm" id="congeSignataireRH" 
+           placeholder="Nom du signataire" required>
+    <small class="text-muted">Ce nom apparaitra sur l'autorisation de conge</small>
+</div>
+
+                    <div id="congeAlerteRH" class="alert alert-warning py-1" style="display:none; font-size:12px;">
+                        <i class="fas fa-exclamation-triangle"></i> <span id="congeAlerteMessageRH"></span>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-warning btn-sm" onclick="sauvegarderCongeRH()">
+                    <i class="fas fa-paper-plane"></i> Soumettre
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Demande Permission -->
+<div class="modal fade" id="permissionModalRH" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-door-open"></i> Demander une permission</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="permissionFormRH">
+                    <div class="mb-2">
+                        <label class="form-label small">Employe *</label>
+                        <select class="form-control form-control-sm" id="permEmployeRH" required>
+                            <option value="">Selectionner</option>
+                        </select>
+                    </div>
+                    
+                    <!-- 🔥 TYPE DE PERMISSION -->
+                    <div class="mb-2">
+                        <label class="form-label small">Type de permission *</label>
+                        <select class="form-control form-control-sm" id="permTypeRH" required onchange="changerTypePermissionRH()">
+                            <option value="heures">Quelques heures</option>
+                            <option value="journee">Une journee</option>
+                            <option value="plusieurs_jours">Plusieurs jours</option>
+                        </select>
+                    </div>
+                    
+                    <!-- 🔥 SECTION HEURES -->
+                    <div id="permHeuresSection">
+                        <div class="mb-2">
+                            <label class="form-label small">Date *</label>
+                            <input type="date" class="form-control form-control-sm" id="permDateRH" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label small">Heure debut *</label>
+                                <input type="time" class="form-control form-control-sm" id="permHeureDebutRH" required>
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label small">Heure fin *</label>
+                                <input type="time" class="form-control form-control-sm" id="permHeureFinRH" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 🔥 SECTION JOURS -->
+                    <div id="permJoursSection" style="display:none;">
+<div class="row">
+    <div class="col-md-6 mb-2">
+        <label class="form-label small">Date debut *</label>
+        <input type="date" class="form-control form-control-sm" id="permDateDebutRH" 
+               required onchange="calculerJoursPermissionRH()">
+    </div>
+    <div class="col-md-6 mb-2">
+        <label class="form-label small">Date fin *</label>
+        <input type="date" class="form-control form-control-sm" id="permDateFinRH" 
+               required onchange="calculerJoursPermissionRH()">
+    </div>
+</div>
+                        <div class="mb-2">
+                            <label class="form-label small">Nombre de jours</label>
+                            <input type="text" class="form-control form-control-sm" id="permNbJoursRH" readonly>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small">Motif *</label>
+                        <textarea class="form-control form-control-sm" id="permMotifRH" rows="2" required></textarea>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small text-danger">Signataire (Directeur/Responsable) *</label>
+                        <input type="text" class="form-control form-control-sm" id="permSignataireRH" 
+                               placeholder="Nom du signataire" required>
+                        <small class="text-muted">Ce nom apparaitra sur l'autorisation</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-info btn-sm" onclick="sauvegarderPermissionRH()">
+                    <i class="fas fa-paper-plane"></i> Soumettre
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
+let tousEmployesRH = [];
+let tousCongesRH = [];
+let toutesPermissionsRH = [];
+let employesFiltresRH = [];
+let congesFiltresRH = [];
+let permissionsFiltresRH = [];
+let pageEmpRH = 1;
+let pageCongeRH = 1;
+let itemsParPageRH = 10;
+
+// ============================================
+// CHARGEMENT DES DONNEES
+// ============================================
+function chargerEmployesRH() {
+    const tbody = document.getElementById('employesBodyRH');
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center">Chargement...</td></tr>';
+    
+    fetch('/rh/api/employes')
+        .then(response => response.json())
+        .then(data => {
+            tousEmployesRH = data || [];
+            employesFiltresRH = tousEmployesRH;
+            document.getElementById('totalEmployesRH').textContent = tousEmployesRH.length;
+            chargerServicesRH();
+            afficherEmployesRH();
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger">Erreur de chargement</td></tr>';
+        });
+}
+
+function chargerCongesRH() {
+    const tbody = document.getElementById('congesBodyRH');
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center">Chargement...</td></tr>';
+    
+    fetch('/rh/api/conges')
+        .then(response => response.json())
+        .then(data => {
+            console.log('📊 Conges charges:', data.length);
+            tousCongesRH = data || [];
+            congesFiltresRH = tousCongesRH;
+            document.getElementById('totalCongesRH').textContent = tousCongesRH.length;
+            pageCongeRH = 1;  // 🔥 Réinitialiser la page
+            afficherCongesRH();
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Erreur de chargement</td></tr>';
+        });
+}
+
+function chargerPermissionsRH() {
+    const tbody = document.getElementById('permissionsBodyRH');
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center">Chargement...</td></tr>';
+    
+    fetch('/rh/api/permissions')
+        .then(response => response.json())
+        .then(data => {
+            toutesPermissionsRH = data || [];
+            permissionsFiltresRH = toutesPermissionsRH;
+            document.getElementById('totalPermissionsRH').textContent = toutesPermissionsRH.length;
+            afficherPermissionsRH();
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Erreur de chargement</td></tr>';
+        });
+}
+
+function chargerServicesRH() {
+    const tbody = document.getElementById('servicesBodyRH');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Chargement...</td></tr>';
+    
+    // 🔥 Utiliser /rh/api/services au lieu de /api/services
+    fetch('/rh/api/services')
+        .then(response => response.json())
+        .then(data => {
+            tbody.innerHTML = '';
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">Aucun service trouve</td></tr>';
+                return;
+            }
+            
+            data.forEach(s => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${s.id}</td>
+                    <td><strong>${s.nom}</strong></td>
+                    <td>${s.responsable || '-'}</td>
+                    <td><span class="badge bg-info">${s.nb_employes || 0}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-warning" onclick="modifierServiceRH(${s.id})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="supprimerServiceRH(${s.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+            });
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Erreur de chargement</td></tr>';
+        });
+}
+
+// ============================================================
+// GESTION DES SERVICES (dans l'onglet)
+// ============================================================
+
+function ouvrirAjoutServiceRH() {
+    document.getElementById('serviceModalTitleRH').textContent = 'Ajouter un service';
+    document.getElementById('serviceFormRH').reset();
+    document.getElementById('serviceIdRH').value = '';
+    const modal = new bootstrap.Modal(document.getElementById('serviceModalRH'));
+    modal.show();
+}
+
+function sauvegarderServiceRH() {
+    const id = document.getElementById('serviceIdRH').value;
+    const nom = document.getElementById('serviceNomRH').value.trim();
+    const responsable = document.getElementById('serviceResponsableRH').value.trim();
+    
+    if (!nom) {
+        alert('Veuillez saisir le nom du service');
+        return;
+    }
+    
+    const data = { nom: nom, responsable: responsable };
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? `/rh/api/services/${id}` : '/rh/api/services';
+    
+    fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert(id ? 'Service modifie avec succes !' : 'Service ajoute avec succes !');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('serviceModalRH'));
+            modal.hide();
+            chargerServicesRH();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+function modifierServiceRH(id) {
+    fetch('/rh/api/services')
+        .then(r => r.json())
+        .then(services => {
+            const service = services.find(s => s.id === id);
+            if (service) {
+                document.getElementById('serviceModalTitleRH').textContent = 'Modifier le service';
+                document.getElementById('serviceIdRH').value = id;
+                document.getElementById('serviceNomRH').value = service.nom;
+                document.getElementById('serviceResponsableRH').value = service.responsable || '';
+                const modal = new bootstrap.Modal(document.getElementById('serviceModalRH'));
+                modal.show();
+            }
+        })
+        .catch(error => alert('Erreur: ' + error));
+}
+
+function supprimerServiceRH(id) {
+    if (!confirm('Voulez-vous vraiment supprimer ce service ?')) return;
+    
+    fetch(`/rh/api/services/${id}`, {
+        method: 'DELETE'
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert('Service supprime avec succes !');
+            chargerServicesRH();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+function chargerDashboardRH() {
+    fetch('/rh/api/dashboard/stats')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('statTotalEmployes').textContent = data.total_employes || 0;
+            document.getElementById('statActifs').textContent = data.actifs || 0;
+            document.getElementById('statEnConge').textContent = data.en_conge || 0;
+            document.getElementById('statDemandesAttente').textContent = data.demandes_attente || 0;
+            chargerAlertesRH();
+        })
+        .catch(error => console.error('Erreur dashboard:', error));
+}
+
+function chargerAlertesRH() {
+    const container = document.getElementById('alertesRH');
+    
+    fetch('/rh/api/conges?statut=approuve')
+        .then(r => r.json())
+        .then(conges => {
+            let alertes = [];
+            let employesSoldeEpuise = {};
+            
+            conges.forEach(c => {
+                // 🔥 Vérifier si le solde est épuisé
+                if (c.solde_epuise && !employesSoldeEpuise[c.employe_nom]) {
+                    employesSoldeEpuise[c.employe_nom] = true;
+                    alertes.push(`⚠️ ${c.employe_nom} a epuise son solde de conges pour ${new Date().getFullYear()}`);
+                }
+                
+                if (c.nombre_jours > 30) {
+                    alertes.push(`⚠️ ${c.employe_nom} a pris ${c.nombre_jours} jours de conge (depasse 30 jours)`);
+                }
+            });
+            
+            // Verifier les demandes en attente
+            fetch('/rh/api/conges?statut=en_attente')
+                .then(r => r.json())
+                .then(attentes => {
+                    if (attentes.length > 0) {
+                        alertes.push(`⏳ ${attentes.length} demande(s) de conge en attente`);
+                    }
+                    
+                    if (alertes.length === 0) {
+                        container.innerHTML = '<div class="text-success text-center">✅ Aucune alerte a signaler</div>';
+                    } else {
+                        container.innerHTML = alertes.map(a => `<div class="alert alert-warning py-1 mb-1" style="font-size:13px;">${a}</div>`).join('');
+                    }
+                });
+        })
+        .catch(() => {
+            container.innerHTML = '<div class="text-muted text-center">Impossible de charger les alertes</div>';
+        });
+}
+
+// ============================================
+// AFFICHAGE EMPLOYES
+// ============================================
+function afficherEmployesRH() {
+    const tbody = document.getElementById('employesBodyRH');
+    const debut = (pageEmpRH - 1) * itemsParPageRH;
+    const fin = Math.min(debut + itemsParPageRH, employesFiltresRH.length);
+    const pageData = employesFiltresRH.slice(debut, fin);
+    
+    tbody.innerHTML = '';
+    
+    if (pageData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center">Aucun employe trouve</td></tr>';
+        return;
+    }
+    
+    pageData.forEach(e => {
+        const row = tbody.insertRow();
+        let badge = e.statut === 'Actif' ? 'bg-success' : (e.statut === 'En conge' ? 'bg-warning' : 'bg-danger');
+        row.innerHTML = `
+            <td><strong>${e.matricule}</strong></td>
+            <td>${e.nom}</td>
+            <td>${e.prenom}</td>
+            <td>${e.service || '-'}</td>
+            <td>${e.poste || '-'}</td>
+            <td>${e.telephone || '-'}</td>
+            <td>${e.solde_conges ? Math.round(e.solde_conges) : 0} jrs</td>
+            <td><span class="badge ${badge}">${e.statut}</span></td>
+            <td>
+                <button class="btn btn-sm btn-info" onclick="alert('Voir detail')"><i class="fas fa-eye"></i></button>
+                <button class="btn btn-sm btn-warning" onclick="alert('Modifier')"><i class="fas fa-edit"></i></button>
+            </td>
+        `;
+    });
+    
+    mettreAJourPaginationRH('employes');
+}
+
+// ============================================
+// AFFICHAGE CONGES
+// ============================================
+function afficherCongesRH() {
+    const tbody = document.getElementById('congesBodyRH');
+    
+    // 🔥 Vérifier que congesFiltresRH existe
+    if (!congesFiltresRH || congesFiltresRH.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center">Aucun conge trouve</td></tr>';
+        mettreAJourPaginationRH('conges');
+        return;
+    }
+    
+    const debut = (pageCongeRH - 1) * itemsParPageRH;
+    const fin = Math.min(debut + itemsParPageRH, congesFiltresRH.length);
+    const pageData = congesFiltresRH.slice(debut, fin);
+    
+    tbody.innerHTML = '';
+    
+    if (pageData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center">Aucun conge trouve</td></tr>';
+        mettreAJourPaginationRH('conges');
+        return;
+    }
+    
+    pageData.forEach(c => {
+        const row = tbody.insertRow();
+        let badge = c.statut === 'en_attente' ? 'bg-warning' : (c.statut === 'approuve' ? 'bg-success' : 'bg-danger');
+        let typeLabel = c.type_conge.charAt(0).toUpperCase() + c.type_conge.slice(1);
+        
+        // Solde
+        let soldeDisplay = c.solde_restant !== undefined ? c.solde_restant + ' jours' : '-';
+        let soldeBadge = '';
+        if (c.solde_epuise) {
+            soldeDisplay = '⚠️ Épuisé';
+            soldeBadge = 'bg-danger';
+        } else if (c.solde_restant < 5) {
+            soldeBadge = 'bg-warning';
+        } else {
+            soldeBadge = 'bg-success';
+        }
+        
+        row.innerHTML = `
+            <td><strong>${c.employe_nom}</strong></td>
+            <td>${typeLabel}</td>
+            <td>${c.date_debut}</td>
+            <td>${c.date_fin}</td>
+            <td>${c.date_reprise || '-'}</td>
+            <td>${c.nombre_jours || 0}</td>
+            <td><span class="badge bg-info">${c.annee_utilisation || c.date_debut.split('/')[2]}</span></td>
+            <td><span class="badge ${soldeBadge}">${soldeDisplay}</span></td>
+            <td><span class="badge ${badge}">${c.statut}</span></td>
+            <td>
+                ${c.statut === 'en_attente' ? `
+                    <button class="btn btn-sm btn-success" onclick="changerStatutCongeRH(${c.id}, 'approuve')"><i class="fas fa-check"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="changerStatutCongeRH(${c.id}, 'refuse')"><i class="fas fa-times"></i></button>
+                ` : ''}
+                ${c.statut === 'approuve' ? `
+                    <button class="btn btn-sm btn-info" onclick="window.open('/rh/conge/${c.id}/autorisation', '_blank')"><i class="fas fa-print"></i></button>
+                ` : ''}
+            </td>
+        `;
+    });
+    
+    mettreAJourPaginationRH('conges');
+}
+
+// ============================================
+// AFFICHAGE PERMISSIONS
+// ============================================
+function afficherPermissionsRH() {
+    const tbody = document.getElementById('permissionsBodyRH');
+    tbody.innerHTML = '';
+    
+    if (permissionsFiltresRH.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center">Aucune permission trouvee</td></tr>';
+        return;
+    }
+    
+    permissionsFiltresRH.forEach(p => {
+        const row = tbody.insertRow();
+        let badge = p.statut === 'en_attente' ? 'bg-warning' : (p.statut === 'approuve' ? 'bg-success' : 'bg-danger');
+        
+        // 🔥 Construire l'affichage selon le type
+        let typeLabel = '';
+        let dateDisplay = '';
+        let heureDebut = '-';
+        let heureFin = '-';
+        let jours = '-';
+        
+        if (p.type_permission === 'heures') {
+            typeLabel = 'Heures';
+            dateDisplay = p.date_permission || '-';
+            heureDebut = p.heure_debut || '-';
+            heureFin = p.heure_fin || '-';
+            jours = '1';
+        } else if (p.type_permission === 'journee') {
+            typeLabel = 'Journee';
+            dateDisplay = p.date_debut || '-';
+            heureDebut = '-';
+            heureFin = '-';
+            jours = '1';
+        } else if (p.type_permission === 'plusieurs_jours') {
+            typeLabel = 'Plusieurs jours';
+            dateDisplay = p.date_debut + ' -> ' + p.date_fin || '-';
+            heureDebut = '-';
+            heureFin = '-';
+            jours = p.nombre_jours || '-';
+        }
+        
+        row.innerHTML = `
+            <td><strong>${p.employe_nom}</strong></td>
+            <td><span class="badge bg-info">${typeLabel}</span></td>
+            <td>${dateDisplay}</td>
+            <td>${heureDebut}</td>
+            <td>${heureFin}</td>
+            <td>${jours}</td>
+            <td>${p.motif}</td>
+            <td><span class="badge ${badge}">${p.statut}</span></td>
+            <td>
+                ${p.statut === 'en_attente' ? `
+                    <button class="btn btn-sm btn-success" onclick="changerStatutPermissionRH(${p.id}, 'approuve')"><i class="fas fa-check"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="changerStatutPermissionRH(${p.id}, 'refuse')"><i class="fas fa-times"></i></button>
+                ` : ''}
+                ${p.statut === 'approuve' ? `
+                    <button class="btn btn-sm btn-info" onclick="window.open('/rh/permission/${p.id}/autorisation', '_blank')"><i class="fas fa-print"></i></button>
+                ` : ''}
+            </td>
+        `;
+    });
+}
+function changerTypePermissionRH() {
+    const type = document.getElementById('permTypeRH').value;
+    const heuresSection = document.getElementById('permHeuresSection');
+    const joursSection = document.getElementById('permJoursSection');
+    
+    if (type === 'heures') {
+        heuresSection.style.display = 'block';
+        joursSection.style.display = 'none';
+        document.getElementById('permDateRH').required = true;
+        document.getElementById('permHeureDebutRH').required = true;
+        document.getElementById('permHeureFinRH').required = true;
+        document.getElementById('permDateDebutRH').required = false;
+        document.getElementById('permDateFinRH').required = false;
+        document.getElementById('permNbJoursRH').value = '';
+    } else {
+        heuresSection.style.display = 'none';
+        joursSection.style.display = 'block';
+        document.getElementById('permDateRH').required = false;
+        document.getElementById('permHeureDebutRH').required = false;
+        document.getElementById('permHeureFinRH').required = false;
+        document.getElementById('permDateDebutRH').required = true;
+        document.getElementById('permDateFinRH').required = true;
+        calculerJoursPermissionRH();
+    }
+}
+
+// ============================================
+// FILTRES ET RECHERCHE
+// ============================================
+function filtrerEmployesRH() {
+    const search = document.getElementById('searchEmployeRH').value.toLowerCase().trim();
+    const service = document.getElementById('filtreServiceRH').value;
+    const statut = document.getElementById('filtreStatutRH').value;
+    
+    employesFiltresRH = tousEmployesRH.filter(e => {
+        let match = true;
+        if (search) {
+            const texte = (e.nom + ' ' + e.prenom + ' ' + e.matricule).toLowerCase();
+            if (!texte.includes(search)) match = false;
+        }
+        if (service && e.service_id != service) match = false;
+        if (statut && e.statut !== statut) match = false;
+        return match;
+    });
+    
+    pageEmpRH = 1;
+    afficherEmployesRH();
+}
+
+function filtrerCongesRH() {
+    const search = document.getElementById('searchCongeRH').value.toLowerCase().trim();
+    const statut = document.getElementById('filtreStatutCongeRH').value;
+    const type = document.getElementById('filtreTypeCongeRH').value;
+    
+    congesFiltresRH = tousCongesRH.filter(c => {
+        let match = true;
+        if (search) {
+            if (!c.employe_nom.toLowerCase().includes(search)) match = false;
+        }
+        if (statut && c.statut !== statut) match = false;
+        if (type && c.type_conge !== type) match = false;
+        return match;
+    });
+    
+    pageCongeRH = 1;
+    afficherCongesRH();
+}
+function filtrerPermissionsRH() {
+    const search = document.getElementById('searchPermissionRH').value.toLowerCase().trim();
+    const statut = document.getElementById('filtreStatutPermissionRH').value;
+    
+    permissionsFiltresRH = toutesPermissionsRH.filter(p => {
+        let match = true;
+        if (search) {
+            if (!p.employe_nom.toLowerCase().includes(search)) match = false;
+        }
+        if (statut && p.statut !== statut) match = false;
+        return match;
+    });
+    
+    afficherPermissionsRH();
+}
+
+function reinitialiserRechercheRH() {
+    document.getElementById('searchEmployeRH').value = '';
+    filtrerEmployesRH();
+}
+
+function reinitialiserRechercheCongeRH() {
+    document.getElementById('searchCongeRH').value = '';
+    filtrerCongesRH();
+}
+
+function reinitialiserRecherchePermissionRH() {
+    document.getElementById('searchPermissionRH').value = '';
+    filtrerPermissionsRH();
+}
+
+// ============================================
+// PAGINATION
+// ============================================
+function mettreAJourPaginationRH(type) {
+    let total, page, paginationId;
+    if (type === 'employes') {
+        total = employesFiltresRH ? employesFiltresRH.length : 0;
+        page = pageEmpRH;
+        paginationId = 'paginationEmployesRH';
+    } else if (type === 'conges') {
+        total = congesFiltresRH ? congesFiltresRH.length : 0;
+        page = pageCongeRH;
+        paginationId = 'paginationCongesRH';
+    } else {
+        return;
+    }
+    
+    const totalPages = Math.ceil(total / itemsParPageRH);
+    const pagination = document.getElementById(paginationId);
+    
+    if (!pagination || totalPages <= 1) {
+        if (pagination) pagination.innerHTML = '';
+        return;
+    }
+    
+    let html = `<li class="page-item ${page === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="changerPageRH('${type}', ${page - 1}); return false;">«</a>
+                </li>`;
+    
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<li class="page-item ${i === page ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="changerPageRH('${type}', ${i}); return false;">${i}</a>
+                 </li>`;
+    }
+    
+    html += `<li class="page-item ${page === totalPages ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="changerPageRH('${type}', ${page + 1}); return false;">»</a>
+             </li>`;
+    pagination.innerHTML = html;
+}
+
+function changerPageRH(type, page) {
+    let total;
+    if (type === 'employes') {
+        total = employesFiltresRH.length;
+        pageEmpRH = page;
+    } else {
+        total = congesFiltresRH.length;
+        pageCongeRH = page;
+    }
+    
+    const totalPages = Math.ceil(total / itemsParPageRH);
+    if (page < 1 || page > totalPages) return;
+    
+    if (type === 'employes') afficherEmployesRH();
+    else afficherCongesRH();
+}
+
+// ============================================
+// CHANGER STATUT
+// ============================================
+function changerStatutCongeRH(id, statut) {
+    if (!confirm(`Confirmer le changement de statut vers "${statut}" ?`)) return;
+    
+    fetch(`/rh/conge/${id}/statut`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({statut: statut})
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert('Statut mis a jour avec succes !');
+            chargerCongesRH();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+function changerStatutPermissionRH(id, statut) {
+    if (!confirm(`Confirmer le changement de statut vers "${statut}" ?`)) return;
+    
+    fetch(`/rh/permission/${id}/statut`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({statut: statut})
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert('Statut mis a jour avec succes !');
+            chargerPermissionsRH();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+// ============================================
+// OUVRIR MODALS
+// ============================================
+function ouvrirAjoutEmploye() {
+    console.log("🔵 Ouverture du formulaire d'ajout d'employe");
+    
+    // Réinitialiser le formulaire
+    document.getElementById('employeFormRH').reset();
+    
+    // 🔥 Vérifier que les champs existent avant de les modifier
+    const ageInput = document.getElementById('empAgeRH');
+    if (ageInput) ageInput.value = '';
+    
+    const ancienneteInput = document.getElementById('empAncienneteRH');
+    if (ancienneteInput) ancienneteInput.value = '';
+    
+    // Charger les services
+    const serviceSelect = document.getElementById('empServiceRH');
+    if (!serviceSelect) {
+        console.error('Select empServiceRH non trouve');
+        const modal = new bootstrap.Modal(document.getElementById('employeModalRH'));
+        modal.show();
+        return;
+    }
+    
+    serviceSelect.innerHTML = '<option value="">Chargement des services...</option>';
+    
+    fetch('/rh/api/services')
+        .then(response => response.json())
+        .then(services => {
+            console.log('Services charges:', services.length);
+            serviceSelect.innerHTML = '<option value="">Selectionner un service</option>';
+            services.forEach(s => {
+                serviceSelect.innerHTML += `<option value="${s.id}">${s.nom}</option>`;
+            });
+            const modal = new bootstrap.Modal(document.getElementById('employeModalRH'));
+            modal.show();
+        })
+        .catch(error => {
+            console.error('Erreur chargement services:', error);
+            serviceSelect.innerHTML = '<option value="">Erreur de chargement</option>';
+            const modal = new bootstrap.Modal(document.getElementById('employeModalRH'));
+            modal.show();
+        });
+}
+
+function chargerServicesPourFormulaire() {
+    const serviceSelect = document.getElementById('empServiceRH');
+    if (!serviceSelect) return;
+    
+    fetch('/rh/api/services')
+        .then(response => response.json())
+        .then(services => {
+            serviceSelect.innerHTML = '<option value="">Selectionner un service</option>';
+            services.forEach(s => {
+                serviceSelect.innerHTML += `<option value="${s.id}">${s.nom}</option>`;
+            });
+        })
+        .catch(error => {
+            console.error('Erreur chargement services:', error);
+            serviceSelect.innerHTML = '<option value="">Erreur de chargement</option>';
+        });
+}
+function ouvrirDemandeConge() {
+    fetch('/rh/api/employes')
+        .then(r => r.json())
+        .then(employes => {
+            const select = document.getElementById('congeEmployeRH');
+            select.innerHTML = '<option value="">Selectionner</option>';
+            employes.forEach(e => {
+                select.innerHTML += `<option value="${e.id}" data-solde="${e.solde_conges || 0}">${e.nom} ${e.prenom} (${e.matricule}) - Solde: ${e.solde_conges || 0} jours</option>`;
+            });
+        });
+    
+    document.getElementById('congeFormRH').reset();
+    document.getElementById('congeJoursRH').value = '';
+    document.getElementById('congeRepriseRH').value = '';
+    document.getElementById('congeAlerteRH').style.display = 'none';
+    new bootstrap.Modal(document.getElementById('congeModalRH')).show();
+}
+
+function ouvrirDemandePermission() {
+    fetch('/rh/api/employes')
+        .then(r => r.json())
+        .then(employes => {
+            const select = document.getElementById('permEmployeRH');
+            select.innerHTML = '<option value="">Selectionner</option>';
+            employes.forEach(e => {
+                select.innerHTML += `<option value="${e.id}">${e.nom} ${e.prenom} (${e.matricule})</option>`;
+            });
+        });
+    
+    document.getElementById('permissionFormRH').reset();
+    new bootstrap.Modal(document.getElementById('permissionModalRH')).show();
+}
+
+// ============================================
+// SAUVEGARDER
+// ============================================
+function sauvegarderEmployeRH() {
+    const data = {
+        nom: document.getElementById('empNomRH').value.trim(),
+        prenom: document.getElementById('empPrenomRH').value.trim(),
+        sexe: document.getElementById('empSexeRH').value,
+        date_naissance: document.getElementById('empDateNaissanceRH').value,
+        telephone: document.getElementById('empTelephoneRH').value.trim(),
+        email: document.getElementById('empEmailRH').value.trim(),
+        quartier: document.getElementById('empQuartierRH').value.trim(),
+        service_id: document.getElementById('empServiceRH').value,
+        poste: document.getElementById('empPosteRH').value.trim(),
+        date_embauche: document.getElementById('empDateEmbaucheRH').value,
+        type_contrat: document.getElementById('empTypeContratRH').value,
+        personne_a_prevenir: document.getElementById('empPrevenirRH').value.trim(),
+        telephone_prevenir: document.getElementById('empTelephonePrevenirRH').value.trim(),
+        lien_parente: document.getElementById('empLienParenteRH').value.trim()
+    };
+    
+    if (!data.nom || !data.prenom || !data.sexe || !data.telephone || !data.service_id || !data.poste || !data.date_embauche) {
+        alert('Veuillez remplir tous les champs obligatoires');
+        return;
+    }
+    
+    fetch('/rh/employe/ajouter', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert('Employe ajoute avec succes ! Matricule: ' + result.matricule);
+            bootstrap.Modal.getInstance(document.getElementById('employeModalRH')).hide();
+            chargerEmployesRH();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+function sauvegarderCongeRH() {
+    const signataire = document.getElementById('congeSignataireRH').value.trim();
+    
+    if (!signataire) {
+        alert('Veuillez saisir le nom du signataire');
+        document.getElementById('congeSignataireRH').focus();
+        return;
+    }
+    
+    const data = {
+        employe_id: document.getElementById('congeEmployeRH').value,
+        type_conge: document.getElementById('congeTypeRH').value,
+        date_debut: document.getElementById('congeDebutRH').value,
+        date_fin: document.getElementById('congeFinRH').value,
+        motif: document.getElementById('congeMotifRH').value,
+        signataire: signataire
+    };
+    
+    if (!data.employe_id || !data.date_debut || !data.date_fin) {
+        alert('Veuillez remplir tous les champs obligatoires');
+        return;
+    }
+    
+    fetch('/rh/conge/demander', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert('Demande de conge soumise avec succes !');
+            bootstrap.Modal.getInstance(document.getElementById('congeModalRH')).hide();
+            chargerCongesRH();
+        } else {
+            // 🔥 Gérer le cas du solde insuffisant avec choix d'année
+            if (result.solde_insuffisant && result.annees_futures && result.annees_futures.length > 0) {
+                let options = result.annees_futures.map(a => 
+                    `${a.annee} (${a.solde} jours disponibles)`
+                ).join('\n');
+                
+                const choix = prompt(
+                    `${result.message}\n\n` +
+                    `Entrez l'annee souhaitee (ex: ${result.annees_futures[0].annee}):`
+                );
+                
+                if (choix) {
+                    const anneeChoisie = parseInt(choix);
+                    const anneeTrouvee = result.annees_futures.find(a => a.annee === anneeChoisie);
+                    
+                    if (anneeTrouvee) {
+                        // Re-soumettre avec l'année choisie
+                        const newData = {
+                            ...data,
+                            annee_choisie: anneeChoisie
+                        };
+                        
+                        fetch('/rh/conge/demander', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(newData)
+                        })
+                        .then(r => r.json())
+                        .then(result2 => {
+                            if (result2.success) {
+                                alert(`Demande de conge soumise avec succes (sur ${anneeChoisie}) !`);
+                                bootstrap.Modal.getInstance(document.getElementById('congeModalRH')).hide();
+                                chargerCongesRH();
+                            } else {
+                                alert('Erreur: ' + (result2.error || 'Erreur inconnue'));
+                            }
+                        });
+                    } else {
+                        alert('Annee invalide. Veuillez recommencer.');
+                    }
+                }
+            } else {
+                alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+            }
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+function sauvegarderPermissionRH() {
+    const signataire = document.getElementById('permSignataireRH').value.trim();
+    
+    if (!signataire) {
+        alert('Veuillez saisir le nom du signataire');
+        document.getElementById('permSignataireRH').focus();
+        return;
+    }
+    
+    const type = document.getElementById('permTypeRH').value;
+    let data = {
+        employe_id: document.getElementById('permEmployeRH').value,
+        type_permission: type,
+        motif: document.getElementById('permMotifRH').value.trim(),
+        signataire: signataire
+    };
+    
+    if (!data.employe_id) {
+        alert('Veuillez selectionner un employe');
+        return;
+    }
+    
+    if (!data.motif) {
+        alert('Veuillez saisir le motif');
+        document.getElementById('permMotifRH').focus();
+        return;
+    }
+    
+    if (type === 'heures') {
+        data.date_permission = document.getElementById('permDateRH').value;
+        data.heure_debut = document.getElementById('permHeureDebutRH').value;
+        data.heure_fin = document.getElementById('permHeureFinRH').value;
+        
+        if (!data.date_permission || !data.heure_debut || !data.heure_fin) {
+            alert('Veuillez remplir tous les champs (date et heures)');
+            return;
+        }
+    } else {
+        data.date_debut = document.getElementById('permDateDebutRH').value;
+        data.date_fin = document.getElementById('permDateFinRH').value;
+        
+        if (!data.date_debut || !data.date_fin) {
+            alert('Veuillez remplir les dates de debut et de fin');
+            return;
+        }
+    }
+    
+    fetch('/rh/permission/demander', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert('Demande de permission soumise avec succes !');
+            bootstrap.Modal.getInstance(document.getElementById('permissionModalRH')).hide();
+            chargerPermissionsRH();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+// ============================================
+// CALCULS INTELLIGENTS
+// ============================================
+function calculerAgeRH() {
+    const dateNaiss = document.getElementById('empDateNaissanceRH').value;
+    if (dateNaiss) {
+        const naissance = new Date(dateNaiss);
+        const aujourdhui = new Date();
+        let age = aujourdhui.getFullYear() - naissance.getFullYear();
+        if (aujourdhui.getMonth() < naissance.getMonth() || 
+            (aujourdhui.getMonth() === naissance.getMonth() && aujourdhui.getDate() < naissance.getDate())) {
+            age--;
+        }
+        // Afficher l'age dans un petit span a cote
+        const ageSpan = document.createElement('span');
+        ageSpan.className = 'badge bg-info ms-2';
+        ageSpan.textContent = age + ' ans';
+        const input = document.getElementById('empDateNaissanceRH');
+        if (input.nextSibling && input.nextSibling.tagName === 'SPAN') {
+            input.nextSibling.textContent = age + ' ans';
+        } else {
+            input.insertAdjacentHTML('afterend', `<span class="badge bg-info ms-2">${age} ans</span>`);
+        }
+    }
+}
+
+function calculerJoursCongeRH() {
+    const debut = document.getElementById('congeDebutRH').value;
+    const fin = document.getElementById('congeFinRH').value;
+    
+    if (!debut || !fin) return;
+    
+    const d1 = new Date(debut);
+    const d2 = new Date(fin);
+    
+    if (d2 < d1) {
+        document.getElementById('congeJoursRH').value = 'Date invalide';
+        document.getElementById('congeRepriseRH').value = '';
+        return;
+    }
+    
+    let jours = 0;
+    let current = new Date(d1);
+    while (current <= d2) {
+        if (current.getDay() !== 0 && current.getDay() !== 6) jours++;
+        current.setDate(current.getDate() + 1);
+    }
+    document.getElementById('congeJoursRH').value = jours + ' jours';
+    
+    let reprise = new Date(d2);
+    reprise.setDate(reprise.getDate() + 1);
+    while (reprise.getDay() === 0 || reprise.getDay() === 6) {
+        reprise.setDate(reprise.getDate() + 1);
+    }
+    document.getElementById('congeRepriseRH').value = reprise.toLocaleDateString('fr-FR');
+    
+    verifierRegleCongeRH();
+}
+
+function verifierRegleCongeRH() {
+    const type = document.getElementById('congeTypeRH').value;
+    const joursText = document.getElementById('congeJoursRH').value;
+    const jours = parseInt(joursText) || 0;
+    const alerteDiv = document.getElementById('congeAlerteRH');
+    const message = document.getElementById('congeAlerteMessageRH');
+    
+    let alertes = [];
+    
+    if (type === 'annuel' && jours > 30) {
+        alertes.push('Conge annuel de plus de 30 jours consecutifs');
+    }
+    
+    if (type === 'annuel' && jours > 0 && jours < 10) {
+        alertes.push('Conge annuel de moins de 10 jours (minimum recommande: 2 semaines)');
+    }
+    
+    if (alertes.length > 0) {
+        alerteDiv.style.display = 'block';
+        message.textContent = alertes.join(' | ');
+    } else {
+        alerteDiv.style.display = 'none';
+    }
+}
+
+
+function calculerJoursPermissionRH() {
+    const type = document.getElementById('permTypeRH').value;
+    
+    if (type === 'heures') {
+        document.getElementById('permNbJoursRH').value = '';
+        return;
+    }
+    
+    const dateDebut = document.getElementById('permDateDebutRH').value;
+    const dateFin = document.getElementById('permDateFinRH').value;
+    
+    if (!dateDebut || !dateFin) {
+        document.getElementById('permNbJoursRH').value = '';
+        return;
+    }
+    
+    const d1 = new Date(dateDebut);
+    const d2 = new Date(dateFin);
+    
+    if (d2 < d1) {
+        document.getElementById('permNbJoursRH').value = 'Date invalide';
+        return;
+    }
+    
+    // Calculer le nombre de jours (différence en jours + 1)
+    const diffTime = Math.abs(d2 - d1);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    
+    document.getElementById('permNbJoursRH').value = diffDays + ' jour(s)';
+}
+
+// ============================================
+// INITIALISATION
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    // Charger tous les onglets
+    chargerEmployesRH();
+    chargerCongesRH();
+    chargerPermissionsRH();
+    chargerDashboardRH();
+    chargerServicesPourFormulaire();
+});
+
+// Recharger les donnees quand un onglet est active
+document.addEventListener('shown.bs.tab', function(e) {
+    const target = e.target.getAttribute('data-bs-target');
+    if (target === '#personnel') chargerEmployesRH();
+    else if (target === '#conges') chargerCongesRH();
+    else if (target === '#permissions') chargerPermissionsRH();
+    else if (target === '#dashboardrh') chargerDashboardRH();
+});
+</script>
+{% endblock %}
