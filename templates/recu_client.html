@@ -400,12 +400,17 @@ function telechargerPDF() {
 }
 
 function fermerOuRediriger() {
+    // 🔥 Essayer de fermer l'onglet
     window.close();
+    
+    // 🔥 Vérifier si la fenêtre a été fermée
     setTimeout(function() {
         if (!window.closed) {
+            // Si la fenêtre n'est pas fermée, rediriger vers le dashboard
             window.location.href = "{{ url_for('dashboard') }}";
         }
     }, 500);
 }
+
 </script>
 {% endblock %}

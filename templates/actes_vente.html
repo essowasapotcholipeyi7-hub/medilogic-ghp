@@ -1520,11 +1520,23 @@ function redirigerVersReçuActes(venteId, typeDocument, formatImpression, urlPar
     }
     
     const url = baseUrl + urlParams;
-    console.log('🔗 Redirection vers:', url);
-    window.open(url, '_blank');
+    console.log('🔗 Ouverture du reçu dans un nouvel onglet:', url);
+    
+    // 🔥 Ouvrir dans un nouvel onglet
+    const newWindow = window.open(url, '_blank');
+    
+    // 🔥 Si la fenêtre est bloquée, afficher un message
+    if (!newWindow || newWindow.closed || typeof newWindow.closed == 'undefined') {
+        alert('⚠️ Veuillez autoriser les pop-ups pour ce site.\n\nCliquez sur le bouton ci-dessous pour ouvrir le reçu manuellement.');
+        // Proposer une alternative
+        if (confirm('Voulez-vous ouvrir le reçu dans l\'onglet actuel ?')) {
+            window.location.href = url;
+        }
+    }
+    
+    // Rediriger vers le dashboard après ouverture
     window.location.href = "/dashboard";
 }
-
 // ============================================
 // AFFICHER LE RÉCAPITULATIF
 // ============================================
