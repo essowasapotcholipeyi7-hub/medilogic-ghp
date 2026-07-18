@@ -1402,31 +1402,8 @@ function finaliserVente() {
         }
     }
     
-    // Confirmation de la vente
-    let confirmationMsg = `📊 RÉCAPITULATIF DE LA VENTE\n\n`;
-    confirmationMsg += `👤 Patient: ${patientNom}\n`;
-    confirmationMsg += `🏥 Assurance principale: ${patientAssurance || 'Non assuré'} (${patientTaux}%)\n`;
-    if (assurance2Active && patientAssurance2) {
-        const tauxAffiche = tauxTempModifie ? `${tauxTempValeur}% (modifié)` : `${patientTaux2}%`;
-        confirmationMsg += `🏥 Assurance complémentaire: ${patientAssurance2} (${tauxAffiche}) - APPLIQUÉE\n`;
-    }
-    confirmationMsg += `\n💰 Sous-total: ${sousTotal.toLocaleString()} FCFA\n`;
-    confirmationMsg += `📊 Base remboursement: ${baseRemboursement.toLocaleString()} FCFA\n`;
-    confirmationMsg += `🎯 Prise en charge principale: ${priseEnCharge.toLocaleString()} FCFA\n`;
-    if (priseEnCharge2 > 0) {
-        confirmationMsg += `🎯 Prise en charge complémentaire: ${priseEnCharge2.toLocaleString()} FCFA\n`;
-    }
-    confirmationMsg += `💵 Net à payer: ${netAPayer.toLocaleString()} FCFA\n`;
-    confirmationMsg += `💶 Montant donné: ${montantDonne.toLocaleString()} FCFA\n`;
-    if (rendu > 0) {
-        confirmationMsg += `🔄 Rendu: ${rendu.toLocaleString()} FCFA\n`;
-    }
-    if (resteAPayer > 0) {
-        confirmationMsg += `⚠️ Reste à payer: ${resteAPayer.toLocaleString()} FCFA\n`;
-    }
-    confirmationMsg += `\nConfirmer la vente ?`;
-    
-    if (!confirm(confirmationMsg)) {
+    // 🔥 Dans finaliserVente(), remplacer le gros confirm par :
+    if (!confirm('✅ Confirmer cette vente ?')) {
         return;
     }
     

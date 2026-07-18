@@ -1861,14 +1861,7 @@ def recu(vente_id, type):
     assurance2_appliquee = False
     if assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and prise_en_charge2 > 0:
         assurance2_appliquee = True
-    
-    print(f"=== REÇU {vente_id} ({type_bd}) ===")
-    print(f"Patient: {patient_nom}")
-    print(f"💰 montant_donne={montant_donne}, rendu={rendu}, reste_a_payer={reste_a_payer}")
-    print(f"📊 Base remboursement (PBR)={base_remboursement}")
-    print(f"📊 Prise en charge recalculée={prise_en_charge}")
-    print(f"📊 Net à payer recalculé={net_a_payer}")
-    
+        
     return render_template('recu_client.html',
                          vente_id=vente_id,
                          articles=articles,

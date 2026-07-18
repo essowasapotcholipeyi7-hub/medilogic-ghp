@@ -1538,7 +1538,7 @@ function redirigerVersReçuActes(venteId, typeDocument, formatImpression, urlPar
     window.location.href = "/dashboard";
 }
 // ============================================
-// AFFICHER LE RÉCAPITULATIF
+// CONFIRMATION SIMPLE
 // ============================================
 function afficherRecapVente() {
     if (panier.length === 0) {
@@ -1551,108 +1551,8 @@ function afficherRecapVente() {
         return false;
     }
     
-    let sousTotal = 0;
-    let pbrTotal = 0;
-    for (const item of panier) {
-        sousTotal += item.prix * item.quantite;
-        pbrTotal += (item.pbr || item.prix) * item.quantite;
-    }
-    
-    let baseRemboursement = pbrTotal;
-    if (sousTotal < pbrTotal) {
-        baseRemboursement = sousTotal;
-    }
-    
-    let tauxPrincipal = parseFloat(document.getElementById('tauxVente').value);
-    if (isNaN(tauxPrincipal)) {
-        tauxPrincipal = patientTaux;
-    }
-    let priseEnCharge = (baseRemboursement * tauxPrincipal) / 100;
-    let resteApresPrincipal = sousTotal - priseEnCharge;
-    let priseEnCharge2 = 0;
-    
-    let tauxComplementaire = patientTaux2Original || 0;
-    if (tauxTempModifie) {
-        tauxComplementaire = tauxTempValeur;
-    }
-    
-    if (assurance2Active && tauxComplementaire > 0 && resteApresPrincipal > 0) {
-        priseEnCharge2 = (resteApresPrincipal * tauxComplementaire) / 100;
-    }
-    
-    let netAPayer = sousTotal - priseEnCharge - priseEnCharge2;
-    if (netAPayer < 0) netAPayer = 0;
-    
-    let modePaiement = document.getElementById('modePaiement').value;
-    let typeDocument = document.getElementById('typeDocument').value;
-    let formatImpression = document.getElementById('formatImpression').value;
-    const montantDonne = parseFloat(document.getElementById('montantDonne').value) || 0;
-    const rendu = montantDonne - netAPayer;
-    
-    let msg = "📋 RÉCAPITULATIF DE LA VENTE\n";
-    msg += "═".repeat(40) + "\n\n";
-    
-    msg += "👤 PATIENT\n";
-    msg += "   Nom: " + patientName + "\n";
-    msg += "   ID: " + patientId + "\n";
-    msg += "   Assurance principale: " + patientTaux + "%\n";
-    if (assurance2Active && patientAssurance2 && patientAssurance2 !== 'Aucune' && tauxComplementaire > 0) {
-        const tauxAffiche = tauxTempModifie ? `${tauxComplementaire}% (modifié)` : `${tauxComplementaire}%`;
-        msg += "   ✅ Assurance complémentaire: " + patientAssurance2 + " (" + tauxAffiche + ") - APPLIQUÉE\n";
-        if (tauxTempModifie) {
-            msg += "      (taux habituel: " + patientTaux2Original + "%)\n";
-        }
-    } else if (patientAssurance2 && patientAssurance2 !== 'Aucune' && patientTaux2 > 0) {
-        msg += "   ❌ Assurance complémentaire: " + patientAssurance2 + " (" + patientTaux2 + "%) - NON APPLIQUÉE\n";
-    }
-    msg += "\n";
-    
-    msg += "📦 ACTES\n";
-    panier.forEach((item, index) => {
-        msg += "   " + (index + 1) + ". " + item.nom + "\n";
-        msg += "      Quantité: " + item.quantite + "\n";
-        msg += "      Prix clinique: " + item.prix.toLocaleString() + " FCFA\n";
-        msg += "      PBR: " + (item.pbr || item.prix).toLocaleString() + " FCFA\n";
-        msg += "      Total clinique: " + (item.prix * item.quantite).toLocaleString() + " FCFA\n\n";
-    });
-    
-    msg += "─".repeat(40) + "\n";
-    msg += "💰 RÉSUMÉ FINANCIER\n";
-    msg += "   Sous-total clinique: " + sousTotal.toLocaleString() + " FCFA\n";
-    msg += "   Base remboursement (PBR): " + baseRemboursement.toLocaleString() + " FCFA\n";
-    msg += "   Taux assurance principale: " + tauxPrincipal + "%\n";
-    msg += "   Prise en charge: -" + priseEnCharge.toLocaleString() + " FCFA\n";
-    msg += "   " + "═".repeat(30) + "\n";
-    msg += "   NET À PAYER: " + netAPayer.toLocaleString() + " FCFA\n";
-    msg += "   Montant donné: " + montantDonne.toLocaleString() + " FCFA\n";
-    if (rendu >= 0) {
-        msg += "   RENDU: " + rendu.toLocaleString() + " FCFA\n";
-    } else {
-        msg += "   MANQUE: " + Math.abs(rendu).toLocaleString() + " FCFA\n";
-    }
-    msg += "\n";
-    if (assurance2Active && patientAssurance2 && patientAssurance2 !== 'Aucune' && tauxComplementaire > 0) {
-        const tauxAffiche = tauxTempModifie ? `${tauxComplementaire}%` : `${tauxComplementaire}%`;
-        msg += "   ✅ Prise en charge complémentaire (" + patientAssurance2 + " " + tauxAffiche + "): -" + priseEnCharge2.toLocaleString() + " FCFA\n";
-        if (tauxTempModifie) {
-            msg += "      (taux habituel: " + patientTaux2Original + "%)\n";
-        }
-    }
-    msg += "   " + "═".repeat(30) + "\n";
-    msg += "   NET À PAYER: " + netAPayer.toLocaleString() + " FCFA\n\n";
-    
-    msg += "💳 MODE DE PAIEMENT\n";
-    msg += "   " + modePaiement + "\n\n";
-    
-    msg += "📄 DOCUMENT\n";
-    msg += "   Type: " + typeDocument + "\n";
-    msg += "   Format: " + (formatImpression === '80mm' ? 'Ticket 80mm' : 'A4') + "\n\n";
-    
-    msg += "✅ Voulez-vous confirmer cette vente ?";
-    
-    return confirm(msg);
+    return confirm('✅ Confirmer cette vente ?');
 }
-
 // ============================================
 // CRÉER PROFORMA
 // ============================================
