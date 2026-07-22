@@ -333,3 +333,134 @@ class SignatureRH(db.Model):
     signature_date = db.Column(db.Date)
     commentaire = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+# ============================================================
+# COMPTABILITE - MODELES (CORRIGES)
+# ============================================================
+
+class CompteComptable(db.Model):
+    __tablename__ = 'comptes_comptables'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    numero = db.Column(db.String(20), nullable=False)
+    nom = db.Column(db.String(200), nullable=False)
+    type = db.Column(db.String(20), nullable=False)
+    classe = db.Column(db.String(10))
+    parent_id = db.Column(db.Integer, db.ForeignKey('comptes_comptables.id'))
+    niveau = db.Column(db.Integer, default=1)
+    actif = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    enfants = db.relationship('CompteComptable', backref='parent', remote_side=[id])
+    lignes = db.relationship('LigneEcriture', backref='compte', lazy=True)
+    
+    def get_solde(self, date_debut=None, date_fin=None):
+        query = db.session.query(db.func.sum(LigneEcriture.debit - LigneEcriture.credit)).filter(
+            LigneEcriture.compte_id == self.id
+        )
+        if date_debut:
+            query = query.filter(LigneEcriture.ecriture.has(EcritureComptable.date_ecriture >= date_debut))
+        if date_fin:
+            query = query.filter(LigneEcriture.ecriture.has(EcritureComptable.date_ecriture <= date_fin))
+        return query.scalar() or 0
+
+
+class EcritureComptable(db.Model):
+    __tablename__ = 'ecritures_comptables'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    date_ecriture = db.Column(db.Date, nullable=False)
+    libelle = db.Column(db.Text, nullable=False)
+    piece_justificative = db.Column(db.String(100))
+    statut = db.Column(db.String(20), default='brouillon')
+    created_by = db.Column(db.Integer, nullable=True)          # Sans ForeignKey
+    created_by_nom = db.Column(db.String(100))
+    validated_by = db.Column(db.Integer, nullable=True)        # Sans ForeignKey
+    validated_by_nom = db.Column(db.String(100))
+    date_validation = db.Column(db.Date)
+    commentaire = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    lignes = db.relationship('LigneEcriture', backref='ecriture', lazy=True, cascade='all, delete-orphan')
+    validations = db.relationship('ValidationComptable', backref='ecriture', lazy=True)
+    
+    def est_equilibree(self):
+        total_debit = sum(l.debit for l in self.lignes) or 0
+        total_credit = sum(l.credit for l in self.lignes) or 0
+        return total_debit == total_credit
+    
+    def get_total_debit(self):
+        return sum(l.debit for l in self.lignes) or 0
+    
+    def get_total_credit(self):
+        return sum(l.credit for l in self.lignes) or 0
+    
+    def get_statut_label(self):
+        labels = {
+            'brouillon': 'Brouillon',
+            'en_attente': 'En attente',
+            'valide': 'Validee',
+            'refuse': 'Refusee',
+            'annulee': 'Annulee'
+        }
+        return labels.get(self.statut, self.statut)
+
+
+class LigneEcriture(db.Model):
+    __tablename__ = 'lignes_ecritures'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    ecriture_id = db.Column(db.Integer, db.ForeignKey('ecritures_comptables.id'), nullable=False)
+    compte_id = db.Column(db.Integer, db.ForeignKey('comptes_comptables.id'), nullable=False)
+    debit = db.Column(db.Numeric, default=0)
+    credit = db.Column(db.Numeric, default=0)
+    libelle = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Budget(db.Model):
+    __tablename__ = 'budget'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    compte_id = db.Column(db.Integer, db.ForeignKey('comptes_comptables.id'))
+    annee = db.Column(db.Integer, nullable=False)
+    mois = db.Column(db.Integer, nullable=False)
+    montant_prevu = db.Column(db.Numeric, default=0)
+    montant_reel = db.Column(db.Numeric, default=0)
+    ecart = db.Column(db.Numeric, default=0)
+    commentaire = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ValidationComptable(db.Model):
+    __tablename__ = 'validations_comptables'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    ecriture_id = db.Column(db.Integer, db.ForeignKey('ecritures_comptables.id'), nullable=False)
+    niveau = db.Column(db.Integer, default=1)
+    statut = db.Column(db.String(20), default='en_attente')
+    valide_par = db.Column(db.Integer, nullable=True)          # Sans ForeignKey
+    valide_par_nom = db.Column(db.String(100))
+    date_validation = db.Column(db.Date)
+    commentaire = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class HistoriqueEcriture(db.Model):
+    __tablename__ = 'historique_ecritures'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    ecriture_id = db.Column(db.Integer, db.ForeignKey('ecritures_comptables.id'))
+    action = db.Column(db.String(50), nullable=False)
+    ancien_statut = db.Column(db.String(20))
+    nouveau_statut = db.Column(db.String(20))
+    modifie_par = db.Column(db.Integer, nullable=True)         # Sans ForeignKey
+    modifie_par_nom = db.Column(db.String(100))
+    commentaire = db.Column(db.Text)
+    date_action = db.Column(db.DateTime, default=datetime.utcnow)

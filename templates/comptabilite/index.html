@@ -1,0 +1,1666 @@
+{% extends "base.html" %}
+
+{% block title %}Comptabilité{% endblock %}
+
+{% block extra_css %}
+<style>
+    .nav-tabs .nav-link {
+        border-radius: 10px;
+        padding: 10px 20px;
+        margin-right: 8px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        color: #4a5568;
+    }
+    .nav-tabs .nav-link:hover {
+        background: #f0f4ff;
+    }
+    .nav-tabs .nav-link.active {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+    .tab-pane {
+        padding-top: 20px;
+    }
+    .stats-card {
+        border-radius: 15px;
+        transition: all 0.3s ease;
+        border: none;
+    }
+    .stats-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3 mb-4">
+        {% include 'sidebar_menu.html' %}
+    </div>
+
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-calculator"></i> Comptabilité</h5>
+                <button class="btn btn-light btn-sm" onclick="location.reload()">
+                    <i class="fas fa-sync-alt"></i> Rafraîchir
+                </button>
+            </div>
+            <div class="card-body">
+
+                <!-- Onglets Comptabilité -->
+                <ul class="nav nav-tabs" id="comptaTab" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard" type="button" role="tab">
+                            <i class="fas fa-chart-pie"></i> Tableau de bord
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="comptes-tab" data-bs-toggle="tab" data-bs-target="#comptes" type="button" role="tab">
+                            <i class="fas fa-list"></i> Plan comptable
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="budget-tab" data-bs-toggle="tab" data-bs-target="#budget" type="button" role="tab">
+                            <i class="fas fa-coins"></i> Budget
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="ecritures-tab" data-bs-toggle="tab" data-bs-target="#ecritures" type="button" role="tab">
+                            <i class="fas fa-pen"></i> Écritures
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="rapports-tab" data-bs-toggle="tab" data-bs-target="#rapports" type="button" role="tab">
+                            <i class="fas fa-file-alt"></i> Rapports
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="comptaTabContent">
+
+                    <!-- ========================================== -->
+                    <!-- ONGLET TABLEAU DE BORD -->
+                    <!-- ========================================== -->
+                    <div class="tab-pane fade show active" id="dashboard" role="tabpanel">
+                        <div class="row g-3 mb-4" id="dashboardStats">
+                            <div class="col-md-3">
+                                <div class="card stats-card bg-info bg-opacity-10">
+                                    <div class="card-body text-center">
+                                        <h3 class="text-info" id="statTotalEcritures">0</h3>
+                                        <small class="text-muted">Total écritures</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card stats-card bg-warning bg-opacity-10">
+                                    <div class="card-body text-center">
+                                        <h3 class="text-warning" id="statEnAttente">0</h3>
+                                        <small class="text-muted">En attente</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card stats-card bg-success bg-opacity-10">
+                                    <div class="card-body text-center">
+                                        <h3 class="text-success" id="statValidees">0</h3>
+                                        <small class="text-muted">Validées</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card stats-card bg-primary bg-opacity-10">
+                                    <div class="card-body text-center">
+                                        <h3 class="text-primary" id="statSoldeTotal">0 FCFA</h3>
+                                        <small class="text-muted">Solde total</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <i class="fas fa-clock"></i> Dernières écritures
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover mb-0" id="dernieresEcritures">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Libellé</th>
+                                                <th>Débit</th>
+                                                <th>Crédit</th>
+                                                <th>Statut</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="dernieresEcrituresBody">
+                                            <tr><td colspan="5" class="text-center text-muted">Aucune écriture</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ========================================== -->
+                    <!-- ONGLET PLAN COMPTABLE -->
+                    <!-- ========================================== -->
+                    <div class="tab-pane fade" id="comptes" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6><i class="fas fa-list"></i> Plan comptable</h6>
+                            <button class="btn btn-primary btn-sm" onclick="ouvrirAjoutCompte()">
+                                <i class="fas fa-plus"></i> Ajouter un compte
+                            </button>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                    <input type="text" class="form-control form-control-sm" id="searchCompte" 
+                                           placeholder="Rechercher..." onkeyup="filtrerComptes()">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-control form-control-sm" id="filtreTypeCompte" onchange="filtrerComptes()">
+                                    <option value="">Tous les types</option>
+                                    <option value="actif">Actif</option>
+                                    <option value="passif">Passif</option>
+                                    <option value="charge">Charge</option>
+                                    <option value="produit">Produit</option>
+                                </select>
+                            </div>
+                            <div class="col-md-5 text-end">
+                                <span id="totalComptes" class="badge bg-secondary">0 compte(s)</span>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Numéro</th>
+                                        <th>Nom</th>
+                                        <th>Type</th>
+                                        <th>Solde</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="comptesBody">
+                                    <tr><td colspan="5" class="text-center">Chargement...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+
+                    <!-- ========================================== -->
+                    <!-- ONGLET BUDGET -->
+                    <!-- ========================================== -->
+                    <div class="tab-pane fade" id="budget" role="tabpanel">
+                        <h6><i class="fas fa-coins"></i> Budget</h6>
+
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label small">Année</label>
+                                <select class="form-control form-control-sm" id="budgetAnnee" onchange="chargerBudget()">
+                                    <option value="2026">2026</option>
+                                    <option value="2027">2027</option>
+                                    <option value="2028">2028</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">Compte</label>
+                                <select class="form-control form-control-sm" id="budgetCompte" onchange="chargerBudget()">
+                                    <option value="">Tous les comptes</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <span class="badge bg-success" id="totalBudget">0 FCFA</span>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Compte</th>
+                                        <th>Jan</th>
+                                        <th>Fév</th>
+                                        <th>Mar</th>
+                                        <th>Avr</th>
+                                        <th>Mai</th>
+                                        <th>Juin</th>
+                                        <th>Juil</th>
+                                        <th>Aoû</th>
+                                        <th>Sep</th>
+                                        <th>Oct</th>
+                                        <th>Nov</th>
+                                        <th>Déc</th>
+                                        <th>Total</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="budgetBody">
+                                    <tr><td colspan="15" class="text-center">Chargement...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- ========================================== -->
+                    <!-- ONGLET ÉCRITURES -->
+                    <!-- ========================================== -->
+                    <div class="tab-pane fade" id="ecritures" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6><i class="fas fa-pen"></i> Écritures comptables</h6>
+                            <button class="btn btn-primary btn-sm" onclick="ouvrirNouvelleEcriture()">
+                                <i class="fas fa-plus"></i> Nouvelle écriture
+                            </button>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                    <input type="text" class="form-control form-control-sm" id="searchEcriture" 
+                                           placeholder="Rechercher..." onkeyup="filtrerEcritures()">
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-control form-control-sm" id="filtreStatutEcriture" onchange="filtrerEcritures()">
+                                    <option value="">Tous les statuts</option>
+                                    <option value="brouillon">Brouillon</option>
+                                    <option value="en_attente">En attente</option>
+                                    <option value="valide">Validé</option>
+                                    <option value="refuse">Refusé</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <input type="date" class="form-control form-control-sm" id="filtreDateDebutEcriture" 
+                                       placeholder="Début" onchange="filtrerEcritures()">
+                            </div>
+                            <div class="col-md-2">
+                                <input type="date" class="form-control form-control-sm" id="filtreDateFinEcriture" 
+                                       placeholder="Fin" onchange="filtrerEcritures()">
+                            </div>
+                            <div class="col-md-3 text-end">
+                                <span id="totalEcritures" class="badge bg-secondary">0 écriture(s)</span>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Libellé</th>
+                                        <th>Débit</th>
+                                        <th>Crédit</th>
+                                        <th>Statut</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ecrituresBody">
+                                    <tr><td colspan="6" class="text-center">Chargement...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+
+                    <!-- ========================================== -->
+                    <!-- ONGLET RAPPORTS -->
+                    <!-- ========================================== -->
+                    <div class="tab-pane fade" id="rapports" role="tabpanel">
+                        <h6><i class="fas fa-file-alt"></i> Rapports comptables</h6>
+
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label small">Date début</label>
+                                <input type="date" class="form-control form-control-sm" id="rapportDateDebut" onchange="chargerJournal()">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">Date fin</label>
+                                <input type="date" class="form-control form-control-sm" id="rapportDateFin" onchange="chargerJournal()">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">Type</label>
+                                <select class="form-control form-control-sm" id="rapportType" onchange="chargerJournal()">
+                                    <option value="journal">Journal</option>
+                                    <option value="grand_livre">Grand livre</option>
+                                    <option value="balance">Balance</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 text-end">
+                                <button class="btn btn-success btn-sm" onclick="exporterCSVRapport()">
+                                    <i class="fas fa-file-excel"></i> Exporter CSV
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm table-bordered" id="rapportTable">
+                                <thead class="table-light" id="rapportHeader">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Pièce</th>
+                                        <th>Libellé</th>
+                                        <th>Compte</th>
+                                        <th>Débit</th>
+                                        <th>Crédit</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rapportBody">
+                                    <tr><td colspan="6" class="text-center">Chargement...</td></tr>
+                                </tbody>
+                                <tfoot class="table-light" id="rapportFooter"></tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                </div><!-- Fin tab-content -->
+            </div><!-- Fin card-body -->
+        </div><!-- Fin card -->
+    </div><!-- Fin col-md-9 -->
+</div><!-- Fin row -->
+
+<!-- ============================================================ -->
+<!-- MODALS -->
+<!-- ============================================================ -->
+
+<!-- Modal Compte -->
+<div class="modal fade" id="compteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><span id="compteModalTitle">Ajouter un compte</span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <form id="compteForm">
+                    <input type="hidden" id="compteId">
+                    <div class="mb-3">
+                        <label class="form-label">Numéro *</label>
+                        <input type="text" class="form-control" id="compteNumero" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nom *</label>
+                        <input type="text" class="form-control" id="compteNom" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type *</label>
+                        <select class="form-control" id="compteType" required>
+                            <option value="">Sélectionner</option>
+                            <option value="actif">Actif</option>
+                            <option value="passif">Passif</option>
+                            <option value="charge">Charge</option>
+                            <option value="produit">Produit</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-primary" onclick="sauvegarderCompte()">
+                    <i class="fas fa-save"></i> Enregistrer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Écriture -->
+<div class="modal fade" id="ecritureModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="ecritureModalTitle">Nouvelle écriture</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <form id="ecritureForm">
+                    <input type="hidden" id="ecritureId" value="">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Date *</label>
+                            <input type="date" class="form-control" id="ecritureDate" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Pièce</label>
+                            <input type="text" class="form-control" id="ecriturePiece">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Libellé *</label>
+                            <input type="text" class="form-control" id="ecritureLibelle" required>
+                        </div>
+                    </div>
+
+                    <h6>Lignes</h6>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm">
+                            <thead>
+                                <tr>
+                                    <th style="width:30%">Compte</th>
+                                    <th style="width:15%">Débit</th>
+                                    <th style="width:15%">Crédit</th>
+                                    <th style="width:30%">Libellé</th>
+                                    <th style="width:10%">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lignesBody">
+                                <!-- Les lignes seront ajoutées dynamiquement -->
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th class="text-end">Totaux</th>
+                                    <th id="totalDebitDisplay">0 FCFA</th>
+                                    <th id="totalCreditDisplay">0 FCFA</th>
+                                    <th colspan="2">
+                                        <span id="equilibreDisplay" class="badge bg-danger">Non équilibré</span>
+                                    </th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <button class="btn btn-sm btn-secondary" type="button" onclick="ajouterLigne()">
+                        <i class="fas fa-plus"></i> Ajouter ligne
+                    </button>
+
+                    <div class="mt-3">
+                        <label class="form-label">Commentaire</label>
+                        <textarea class="form-control" id="ecritureCommentaire" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-warning" onclick="sauvegarderEcriture(false)">
+                    <i class="fas fa-save"></i> Brouillon
+                </button>
+                <button class="btn btn-success" onclick="sauvegarderEcriture(true)">
+                    <i class="fas fa-paper-plane"></i> Soumettre
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Validation -->
+<div class="modal fade" id="validationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">Validation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="validationEcritureId">
+                <input type="hidden" id="validationNiveau" value="2">
+                <div class="mb-3">
+                    <label class="form-label">Décision</label>
+                    <select class="form-control" id="validationAction">
+                        <option value="approuve">Approuver</option>
+                        <option value="refuse">Refuser</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Commentaire</label>
+                    <textarea class="form-control" id="validationCommentaire" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-primary" onclick="confirmerValidation()">
+                    <i class="fas fa-check"></i> Confirmer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Détail Écriture -->
+<div class="modal fade" id="detailEcritureModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-eye"></i> Détails de l'écriture</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body" id="detailEcritureBody">
+                <!-- Contenu chargé dynamiquement -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Budget -->
+<div class="modal fade" id="budgetModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">Modifier budget</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="budgetCompteId">
+                <div class="mb-3">
+                    <label class="form-label">Mois</label>
+                    <select class="form-control" id="budgetMois">
+                        <option value="1">Janvier</option>
+                        <option value="2">Février</option>
+                        <option value="3">Mars</option>
+                        <option value="4">Avril</option>
+                        <option value="5">Mai</option>
+                        <option value="6">Juin</option>
+                        <option value="7">Juillet</option>
+                        <option value="8">Août</option>
+                        <option value="9">Septembre</option>
+                        <option value="10">Octobre</option>
+                        <option value="11">Novembre</option>
+                        <option value="12">Décembre</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Montant prévu (FCFA)</label>
+                    <input type="number" class="form-control" id="budgetPrevu" step="100">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Commentaire</label>
+                    <textarea class="form-control" id="budgetCommentaire" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-success" onclick="sauvegarderBudget()">
+                    <i class="fas fa-save"></i> Enregistrer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SCRIPT -->
+<!-- ============================================================ -->
+<script>
+// ============================================================
+// VARIABLES GLOBALES
+// ============================================================
+let tousComptes = [];
+let toutesEcritures = [];
+let compteModal = null;
+let ecritureModal = null;
+let validationModal = null;
+let detailModal = null;
+let budgetModal = null;
+
+// ============================================================
+// TABLEAU DE BORD
+// ============================================================
+function chargerDashboard() {
+    fetch('/comptabilite/api/dashboard/stats')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('statTotalEcritures').textContent = data.total_ecritures || 0;
+            document.getElementById('statEnAttente').textContent = data.en_attente || 0;
+            document.getElementById('statValidees').textContent = data.validees || 0;
+            document.getElementById('statSoldeTotal').textContent = (data.solde || 0).toLocaleString() + ' FCFA';
+        })
+        .catch(error => console.error('Erreur chargement dashboard:', error));
+}
+
+function chargerDernieresEcritures() {
+    fetch('/comptabilite/api/ecritures')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('dernieresEcrituresBody');
+            const latest = data.slice(0, 5);
+            tbody.innerHTML = '';
+            if (latest.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Aucune écriture</td></tr>';
+                return;
+            }
+            const badges = {
+                'brouillon': 'bg-secondary',
+                'en_attente': 'bg-warning',
+                'valide': 'bg-success',
+                'refuse': 'bg-danger'
+            };
+            latest.forEach(e => {
+                const row = tbody.insertRow();
+                const statutLabel = e.statut_label || e.statut;
+                row.innerHTML = `
+                    <td>${e.date_ecriture || ''}</td>
+                    <td>${e.libelle || ''}</td>
+                    <td class="text-end">${(e.total_debit || 0).toLocaleString()} F</td>
+                    <td class="text-end">${(e.total_credit || 0).toLocaleString()} F</td>
+                    <td><span class="badge ${badges[e.statut] || 'bg-secondary'}">${statutLabel}</span></td>
+                `;
+            });
+        })
+        .catch(error => console.error('Erreur chargement dernieres ecritures:', error));
+}
+
+// ============================================================
+// PLAN COMPTABLE
+// ============================================================
+function chargerComptes() {
+    fetch('/comptabilite/api/comptes')
+        .then(r => r.json())
+        .then(data => {
+            tousComptes = data || [];
+            document.getElementById('totalComptes').textContent = tousComptes.length + ' compte(s)';
+            afficherComptes();
+            chargerComptesSelect();
+        })
+        .catch(error => console.error('Erreur chargement comptes:', error));
+}
+
+function afficherComptes() {
+    const tbody = document.getElementById('comptesBody');
+    const search = document.getElementById('searchCompte').value.toLowerCase().trim();
+    const type = document.getElementById('filtreTypeCompte').value;
+    
+    let filtres = tousComptes;
+    if (search) {
+        filtres = filtres.filter(c => (c.numero + ' ' + c.nom).toLowerCase().includes(search));
+    }
+    if (type) {
+        filtres = filtres.filter(c => c.type === type);
+    }
+    
+    tbody.innerHTML = '';
+    if (filtres.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center">Aucun compte</td></tr>';
+        return;
+    }
+    
+    const badges = { 'actif': 'bg-primary', 'passif': 'bg-secondary', 'charge': 'bg-danger', 'produit': 'bg-success' };
+    const labels = { 'actif': 'Actif', 'passif': 'Passif', 'charge': 'Charge', 'produit': 'Produit' };
+    
+    filtres.forEach(c => {
+        const row = tbody.insertRow();
+        const solde = c.solde || 0;
+        row.innerHTML = `
+            <td><strong>${c.numero}</strong></td>
+            <td>${c.nom}</td>
+            <td><span class="badge ${badges[c.type] || 'bg-secondary'}">${labels[c.type] || c.type}</span></td>
+            <td class="${solde >= 0 ? 'text-success' : 'text-danger'}">${solde.toLocaleString()} F</td>
+            <td>
+                <button class="btn btn-sm btn-warning" onclick="modifierCompte(${c.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="supprimerCompte(${c.id})"><i class="fas fa-trash"></i></button>
+            </td>
+        `;
+    });
+}
+
+function chargerComptesSelect() {
+    // Pour les selects dans les lignes d'écriture
+    const selects = document.querySelectorAll('#lignesBody .compte-select');
+    selects.forEach(select => {
+        const currentValue = select.value;
+        select.innerHTML = '<option value="">Sélectionner</option>';
+        tousComptes.forEach(c => {
+            const selected = c.id == currentValue ? 'selected' : '';
+            select.innerHTML += `<option value="${c.id}" ${selected}>${c.numero} - ${c.nom}</option>`;
+        });
+    });
+}
+
+// ============================================================
+// MODALS - CORRIGÉ
+// ============================================================
+
+function initModals() {
+    try {
+        const compteModalEl = document.getElementById('compteModal');
+        if (compteModalEl) {
+            compteModal = new bootstrap.Modal(compteModalEl, {
+                backdrop: 'static',
+                keyboard: true
+            });
+        }
+        
+        const ecritureModalEl = document.getElementById('ecritureModal');
+        if (ecritureModalEl) {
+            ecritureModal = new bootstrap.Modal(ecritureModalEl, {
+                backdrop: 'static',
+                keyboard: true
+            });
+        }
+        
+        const validationModalEl = document.getElementById('validationModal');
+        if (validationModalEl) {
+            validationModal = new bootstrap.Modal(validationModalEl, {
+                backdrop: 'static',
+                keyboard: true
+            });
+        }
+        
+        const detailModalEl = document.getElementById('detailEcritureModal');
+        if (detailModalEl) {
+            detailModal = new bootstrap.Modal(detailModalEl, {
+                backdrop: 'static',
+                keyboard: true
+            });
+        }
+        
+        const budgetModalEl = document.getElementById('budgetModal');
+        if (budgetModalEl) {
+            budgetModal = new bootstrap.Modal(budgetModalEl, {
+                backdrop: 'static',
+                keyboard: true
+            });
+        }
+        
+        console.log('✅ Modals initialisés avec succès');
+    } catch (error) {
+        console.error('❌ Erreur lors de l\'initialisation des modals:', error);
+    }
+}
+
+// ============================================================
+// PLAN COMPTABLE - MODALS
+// ============================================================
+
+function ouvrirAjoutCompte() {
+    try {
+        document.getElementById('compteModalTitle').textContent = 'Ajouter un compte';
+        document.getElementById('compteForm').reset();
+        document.getElementById('compteId').value = '';
+        
+        if (compteModal) {
+            compteModal.show();
+        } else {
+            const modal = new bootstrap.Modal(document.getElementById('compteModal'));
+            modal.show();
+        }
+    } catch (error) {
+        console.error('Erreur ouverture modal compte:', error);
+        alert('Erreur lors de l\'ouverture du modal');
+    }
+}
+
+function modifierCompte(id) {
+    try {
+        const c = tousComptes.find(item => item.id === id);
+        if (!c) {
+            alert('Compte non trouvé');
+            return;
+        }
+        document.getElementById('compteModalTitle').textContent = 'Modifier le compte';
+        document.getElementById('compteId').value = id;
+        document.getElementById('compteNumero').value = c.numero;
+        document.getElementById('compteNom').value = c.nom;
+        document.getElementById('compteType').value = c.type;
+        
+        if (compteModal) {
+            compteModal.show();
+        } else {
+            const modal = new bootstrap.Modal(document.getElementById('compteModal'));
+            modal.show();
+        }
+    } catch (error) {
+        console.error('Erreur ouverture modal modification compte:', error);
+        alert('Erreur lors de l\'ouverture du modal');
+    }
+}
+
+function sauvegarderCompte() {
+    const id = document.getElementById('compteId').value;
+    const data = {
+        numero: document.getElementById('compteNumero').value.trim(),
+        nom: document.getElementById('compteNom').value.trim(),
+        type: document.getElementById('compteType').value
+    };
+    if (!data.numero || !data.nom || !data.type) {
+        alert('Veuillez remplir tous les champs');
+        return;
+    }
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? `/comptabilite/api/comptes/${id}` : '/comptabilite/api/comptes';
+    fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert(id ? 'Compte modifié' : 'Compte ajouté');
+            bootstrap.Modal.getInstance(document.getElementById('compteModal')).hide();
+            chargerComptes();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+function supprimerCompte(id) {
+    if (!confirm('Supprimer ce compte ?')) return;
+    fetch(`/comptabilite/api/comptes/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                alert('Compte supprimé');
+                chargerComptes();
+            } else {
+                alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+            }
+        })
+        .catch(error => alert('Erreur: ' + error));
+}
+
+function filtrerComptes() { afficherComptes(); }
+
+// ============================================================
+// ÉCRITURES
+// ============================================================
+function chargerEcritures() {
+    fetch('/comptabilite/api/ecritures')
+        .then(r => r.json())
+        .then(data => {
+            toutesEcritures = data || [];
+            document.getElementById('totalEcritures').textContent = toutesEcritures.length + ' écriture(s)';
+            afficherEcritures();
+        })
+        .catch(error => console.error('Erreur chargement ecritures:', error));
+}
+
+function afficherEcritures() {
+    const tbody = document.getElementById('ecrituresBody');
+    const search = document.getElementById('searchEcriture').value.toLowerCase().trim();
+    const statut = document.getElementById('filtreStatutEcriture').value;
+    const dateDebut = document.getElementById('filtreDateDebutEcriture').value;
+    const dateFin = document.getElementById('filtreDateFinEcriture').value;
+    
+    let filtres = toutesEcritures;
+    if (search) filtres = filtres.filter(e => (e.libelle || '').toLowerCase().includes(search));
+    if (statut) filtres = filtres.filter(e => e.statut === statut);
+    if (dateDebut) filtres = filtres.filter(e => e.date_ecriture >= dateDebut);
+    if (dateFin) filtres = filtres.filter(e => e.date_ecriture <= dateFin);
+    
+    tbody.innerHTML = '';
+    if (filtres.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center">Aucune écriture</td></tr>';
+        return;
+    }
+    
+    const badges = { 'brouillon': 'bg-secondary', 'en_attente': 'bg-warning', 'valide': 'bg-success', 'refuse': 'bg-danger' };
+    filtres.forEach(e => {
+        const row = tbody.insertRow();
+        const statutLabel = e.statut_label || e.statut;
+        let actions = '';
+        if (e.statut === 'en_attente') {
+            actions = `<button class="btn btn-sm btn-warning" onclick="ouvrirValidation(${e.id}, 2)"><i class="fas fa-check-double"></i></button>`;
+        } else if (e.statut === 'brouillon') {
+            actions = `<button class="btn btn-sm btn-warning" onclick="modifierEcriture(${e.id})"><i class="fas fa-edit"></i></button>`;
+        } else if (e.statut === 'valide') {
+            actions = `<button class="btn btn-sm btn-info" onclick="voirEcriture(${e.id})"><i class="fas fa-eye"></i></button>`;
+        }
+        row.innerHTML = `
+            <td>${e.date_ecriture || ''}</td>
+            <td>${e.libelle || ''}</td>
+            <td class="text-end">${(e.total_debit || 0).toLocaleString()} F</td>
+            <td class="text-end">${(e.total_credit || 0).toLocaleString()} F</td>
+            <td><span class="badge ${badges[e.statut] || 'bg-secondary'}">${statutLabel}</span></td>
+            <td>${actions}</td>
+        `;
+    });
+}
+
+function ouvrirNouvelleEcriture() {
+    try {
+        document.getElementById('ecritureForm').reset();
+        document.getElementById('ecritureId').value = '';
+        document.getElementById('ecritureModalTitle').textContent = 'Nouvelle écriture';
+        document.getElementById('ecritureDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('ecriturePiece').value = '';
+        document.getElementById('ecritureLibelle').value = '';
+        document.getElementById('ecritureCommentaire').value = '';
+        
+        document.getElementById('lignesBody').innerHTML = '';
+        ajouterLigne();
+        chargerComptesSelect();
+        
+        if (ecritureModal) {
+            ecritureModal.show();
+        } else {
+            const modal = new bootstrap.Modal(document.getElementById('ecritureModal'));
+            modal.show();
+        }
+    } catch (error) {
+        console.error('Erreur ouverture modal ecriture:', error);
+        alert('Erreur lors de l\'ouverture du modal');
+    }
+}
+
+function modifierEcriture(id) {
+    try {
+        fetch(`/comptabilite/api/ecritures/${id}`)
+            .then(response => {
+                if (!response.ok) throw new Error('Erreur de chargement');
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('ecritureId').value = id;
+                document.getElementById('ecritureModalTitle').textContent = 'Modifier l\'écriture';
+                document.getElementById('ecritureDate').value = data.date_ecriture || '';
+                document.getElementById('ecritureLibelle').value = data.libelle || '';
+                document.getElementById('ecriturePiece').value = data.piece_justificative || '';
+                document.getElementById('ecritureCommentaire').value = data.commentaire || '';
+                
+                const tbody = document.getElementById('lignesBody');
+                tbody.innerHTML = '';
+                
+                if (data.lignes && data.lignes.length > 0) {
+                    data.lignes.forEach(ligne => {
+                        ajouterLigne(ligne.compte_id, ligne.debit, ligne.credit, ligne.libelle);
+                    });
+                } else {
+                    ajouterLigne();
+                }
+                chargerComptesSelect();
+                
+                if (ecritureModal) {
+                    ecritureModal.show();
+                } else {
+                    const modal = new bootstrap.Modal(document.getElementById('ecritureModal'));
+                    modal.show();
+                }
+            })
+            .catch(error => {
+                console.error('❌ Erreur:', error);
+                alert('Erreur de chargement de l\'écriture');
+            });
+    } catch (error) {
+        console.error('Erreur:', error);
+        alert('Erreur lors de l\'ouverture du modal');
+    }
+}
+
+function voirEcriture(id) {
+    try {
+        fetch(`/comptabilite/api/ecritures/${id}`)
+            .then(response => {
+                if (!response.ok) throw new Error('Erreur de chargement');
+                return response.json();
+            })
+            .then(data => {
+                let html = `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Date :</strong> ${data.date_ecriture || ''}</p>
+                            <p><strong>Libellé :</strong> ${data.libelle || ''}</p>
+                            <p><strong>Pièce :</strong> ${data.piece_justificative || '-'}</p>
+                            <p><strong>Statut :</strong> <span class="badge bg-success">${data.statut_label || data.statut}</span></p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Créé par :</strong> ${data.created_by_nom || '-'}</p>
+                            <p><strong>Créé le :</strong> ${data.created_at || '-'}</p>
+                            <p><strong>Validé par :</strong> ${data.validated_by_nom || '-'}</p>
+                            <p><strong>Validé le :</strong> ${data.date_validation || '-'}</p>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6>Lignes de l'écriture</h6>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Compte</th>
+                                    <th>Débit</th>
+                                    <th>Crédit</th>
+                                    <th>Libellé</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                let totalDebit = 0, totalCredit = 0;
+                
+                if (data.lignes && data.lignes.length > 0) {
+                    data.lignes.forEach(ligne => {
+                        totalDebit += ligne.debit || 0;
+                        totalCredit += ligne.credit || 0;
+                        html += `
+                            <tr>
+                                <td>${ligne.compte_numero || ''} - ${ligne.compte_nom || ''}</td>
+                                <td class="text-end">${(ligne.debit || 0) > 0 ? (ligne.debit || 0).toLocaleString() + ' F' : '-'}</td>
+                                <td class="text-end">${(ligne.credit || 0) > 0 ? (ligne.credit || 0).toLocaleString() + ' F' : '-'}</td>
+                                <td>${ligne.libelle || '-'}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                
+                html += `
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr class="fw-bold">
+                                    <td class="text-end">TOTAUX</td>
+                                    <td class="text-end">${totalDebit.toLocaleString()} F</td>
+                                    <td class="text-end">${totalCredit.toLocaleString()} F</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td colspan="4" class="text-center">
+                                        <span class="badge ${totalDebit === totalCredit ? 'bg-success' : 'bg-danger'}">
+                                            ${totalDebit === totalCredit ? '✅ Équilibrée' : '❌ Déséquilibrée'}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    ${data.commentaire ? `<div class="mt-2"><strong>Commentaire :</strong> ${data.commentaire}</div>` : ''}
+                    <div class="mt-2 text-muted small">
+                        <i class="fas fa-info-circle"></i> Cette écriture est validée et ne peut pas être modifiée.
+                    </div>
+                `;
+                
+                document.getElementById('detailEcritureBody').innerHTML = html;
+                
+                if (detailModal) {
+                    detailModal.show();
+                } else {
+                    const modal = new bootstrap.Modal(document.getElementById('detailEcritureModal'));
+                    modal.show();
+                }
+            })
+            .catch(error => {
+                console.error('❌ Erreur:', error);
+                alert('Erreur de chargement des détails de l\'écriture');
+            });
+    } catch (error) {
+        console.error('Erreur:', error);
+        alert('Erreur lors de l\'ouverture du modal');
+    }
+}
+
+function filtrerEcritures() { afficherEcritures(); }
+
+// ============================================================
+// LIGNES ÉCRITURES
+// ============================================================
+function ajouterLigne(compteId = null, debit = 0, credit = 0, libelle = '') {
+    const tbody = document.getElementById('lignesBody');
+    const row = tbody.insertRow();
+    
+    let options = '<option value="">Sélectionner</option>';
+    tousComptes.forEach(c => {
+        const selected = (c.id == compteId) ? 'selected' : '';
+        options += `<option value="${c.id}" ${selected}>${c.numero} - ${c.nom}</option>`;
+    });
+    
+    row.innerHTML = `
+        <td><select class="form-control form-control-sm compte-select">${options}</select></td>
+        <td><input type="number" class="form-control form-control-sm debit-input" value="${debit || ''}" step="100" onchange="calculerTotaux()" oninput="calculerTotaux()"></td>
+        <td><input type="number" class="form-control form-control-sm credit-input" value="${credit || ''}" step="100" onchange="calculerTotaux()" oninput="calculerTotaux()"></td>
+        <td><input type="text" class="form-control form-control-sm libelle-input" placeholder="Libellé" value="${libelle || ''}"></td>
+        <td><button class="btn btn-sm btn-danger" onclick="supprimerLigne(this)"><i class="fas fa-times"></i></button></td>
+    `;
+    calculerTotaux();
+}
+
+function supprimerLigne(btn) {
+    const tbody = document.getElementById('lignesBody');
+    if (tbody.children.length > 1) {
+        btn.closest('tr').remove();
+        calculerTotaux();
+    } else {
+        alert('Au moins une ligne est requise');
+    }
+}
+
+function calculerTotaux() {
+    const rows = document.querySelectorAll('#lignesBody tr');
+    let totalDebit = 0, totalCredit = 0;
+    rows.forEach(row => {
+        const debit = parseFloat(row.querySelector('.debit-input')?.value) || 0;
+        const credit = parseFloat(row.querySelector('.credit-input')?.value) || 0;
+        totalDebit += debit;
+        totalCredit += credit;
+    });
+    document.getElementById('totalDebitDisplay').textContent = totalDebit.toLocaleString() + ' FCFA';
+    document.getElementById('totalCreditDisplay').textContent = totalCredit.toLocaleString() + ' FCFA';
+    
+    const eq = totalDebit === totalCredit;
+    const el = document.getElementById('equilibreDisplay');
+    el.textContent = eq ? '✅ Équilibré' : '❌ Non équilibré';
+    el.className = 'badge ' + (eq ? 'bg-success' : 'bg-danger');
+}
+
+// ============================================================
+// SAUVEGARDE ÉCRITURE
+// ============================================================
+function sauvegarderEcriture(soumettre) {
+    const date = document.getElementById('ecritureDate').value;
+    const libelle = document.getElementById('ecritureLibelle').value.trim();
+    const piece = document.getElementById('ecriturePiece').value.trim();
+    const commentaire = document.getElementById('ecritureCommentaire').value.trim();
+    const ecritureId = document.getElementById('ecritureId').value;
+    
+    if (!date || !libelle) {
+        alert('Veuillez remplir la date et le libellé');
+        return;
+    }
+    
+    const lignes = [];
+    const rows = document.querySelectorAll('#lignesBody tr');
+    let totalDebit = 0, totalCredit = 0;
+    
+    rows.forEach(row => {
+        const compteSelect = row.querySelector('.compte-select');
+        const debitInput = row.querySelector('.debit-input');
+        const creditInput = row.querySelector('.credit-input');
+        const libelleInput = row.querySelector('.libelle-input');
+        
+        const compteId = compteSelect?.value;
+        const debit = parseFloat(debitInput?.value) || 0;
+        const credit = parseFloat(creditInput?.value) || 0;
+        const libelleLigne = libelleInput?.value || '';
+        
+        if (compteId && (debit > 0 || credit > 0)) {
+            lignes.push({ compte_id: parseInt(compteId), debit, credit, libelle: libelleLigne });
+            totalDebit += debit;
+            totalCredit += credit;
+        }
+    });
+    
+    if (lignes.length === 0) {
+        alert('Ajoutez au moins une ligne valide');
+        return;
+    }
+    
+    if (totalDebit !== totalCredit) {
+        alert('Les totaux débit et crédit doivent être égaux');
+        return;
+    }
+    
+    const data = {
+        date_ecriture: date,
+        libelle: libelle,
+        piece_justificative: piece,
+        commentaire: commentaire,
+        lignes: lignes,
+        soumettre: soumettre ? 'true' : 'false'
+    };
+    
+    const method = ecritureId ? 'PUT' : 'POST';
+    const url = ecritureId ? `/comptabilite/api/ecritures/${ecritureId}` : '/comptabilite/api/ecritures';
+    
+    fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            const msg = soumettre ? 'Écriture soumise pour validation' : 'Écriture sauvegardée';
+            alert(msg);
+            bootstrap.Modal.getInstance(document.getElementById('ecritureModal')).hide();
+            chargerEcritures();
+            chargerDernieresEcritures();
+            chargerDashboard();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur: ' + error);
+    });
+}
+
+// ============================================================
+// VALIDATION
+// ============================================================
+function ouvrirValidation(id, niveau) {
+    try {
+        document.getElementById('validationEcritureId').value = id;
+        document.getElementById('validationNiveau').value = niveau;
+        document.getElementById('validationAction').value = 'approuve';
+        document.getElementById('validationCommentaire').value = '';
+        
+        if (validationModal) {
+            validationModal.show();
+        } else {
+            const modal = new bootstrap.Modal(document.getElementById('validationModal'));
+            modal.show();
+        }
+    } catch (error) {
+        console.error('Erreur ouverture modal validation:', error);
+        alert('Erreur lors de l\'ouverture du modal');
+    }
+}
+
+function confirmerValidation() {
+    const id = document.getElementById('validationEcritureId').value;
+    const niveau = document.getElementById('validationNiveau').value;
+    const action = document.getElementById('validationAction').value;
+    const commentaire = document.getElementById('validationCommentaire').value;
+    
+    if (!id) {
+        alert('Erreur: ID d\'écriture manquant');
+        return;
+    }
+    
+    fetch(`/comptabilite/api/ecritures/${id}/valider`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ 
+            niveau: parseInt(niveau), 
+            action: action, 
+            commentaire: commentaire 
+        })
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert('Validation effectuée');
+            bootstrap.Modal.getInstance(document.getElementById('validationModal')).hide();
+            chargerEcritures();
+            chargerDernieresEcritures();
+            chargerDashboard();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+// ============================================================
+// BUDGET
+// ============================================================
+function chargerBudget() {
+    const tbody = document.getElementById('budgetBody');
+    const annee = document.getElementById('budgetAnnee').value;
+    const compteId = document.getElementById('budgetCompte').value;
+    
+    tbody.innerHTML = '<tr><td colspan="15" class="text-center">Chargement...</td></tr>';
+    
+    let url = `/comptabilite/api/budget?annee=${annee}`;
+    if (compteId) {
+        url += `&compte_id=${compteId}`;
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            tbody.innerHTML = '';
+            
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="15" class="text-center">Aucun compte trouvé. Créez d\'abord des comptes dans le plan comptable.</td></tr>';
+                document.getElementById('totalBudget').textContent = '0 FCFA';
+                return;
+            }
+            
+            let grandTotal = 0;
+            const moisNoms = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+            
+            data.forEach(item => {
+                const row = tbody.insertRow();
+                let totalLigne = 0;
+                
+                row.innerHTML = `<td><strong>${item.compte_numero} - ${item.compte_nom}</strong></td>`;
+                
+                if (item.mois_data) {
+                    for (let m = 1; m <= 12; m++) {
+                        const moisData = item.mois_data.find(d => d.mois === m);
+                        const montant = moisData ? moisData.montant_prevu : 0;
+                        totalLigne += montant;
+                        row.innerHTML += `<td class="text-end">${montant > 0 ? montant.toLocaleString() : '-'}</td>`;
+                    }
+                } else {
+                    for (let m = 1; m <= 12; m++) {
+                        row.innerHTML += `<td class="text-end text-muted">-</td>`;
+                    }
+                }
+                
+                grandTotal += totalLigne;
+                
+                row.innerHTML += `
+                    <td class="text-end fw-bold">${totalLigne > 0 ? totalLigne.toLocaleString() : '0'} F</td>
+                    <td>
+                        <button class="btn btn-sm btn-warning" onclick="ouvrirBudget(${item.compte_id}, '${item.compte_nom}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    </td>
+                `;
+            });
+            
+            document.getElementById('totalBudget').textContent = grandTotal.toLocaleString() + ' FCFA';
+        })
+        .catch(error => {
+            console.error('❌ Erreur:', error);
+            tbody.innerHTML = '<tr><td colspan="15" class="text-center text-danger">Erreur de chargement</td></tr>';
+        });
+}
+
+function chargerComptesBudget() {
+    const select = document.getElementById('budgetCompte');
+    if (!select) return;
+    
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">Chargement...</option>';
+    
+    fetch('/comptabilite/api/comptes')
+        .then(r => r.json())
+        .then(comptes => {
+            select.innerHTML = '<option value="">Tous les comptes</option>';
+            comptes.forEach(c => {
+                const selected = c.id == currentValue ? 'selected' : '';
+                select.innerHTML += `<option value="${c.id}" ${selected}>${c.numero} - ${c.nom}</option>`;
+            });
+            if (currentValue) {
+                select.value = currentValue;
+            }
+        })
+        .catch(error => {
+            console.error('Erreur chargement comptes:', error);
+            select.innerHTML = '<option value="">Erreur de chargement</option>';
+        });
+}
+
+function ouvrirBudget(compteId, compteNom) {
+    try {
+        document.getElementById('budgetCompteId').value = compteId;
+        document.getElementById('budgetMois').value = 1;
+        document.getElementById('budgetPrevu').value = 0;
+        document.getElementById('budgetCommentaire').value = '';
+        document.querySelector('#budgetModal .modal-title').textContent = 'Budget - ' + compteNom;
+        
+        if (budgetModal) {
+            budgetModal.show();
+        } else {
+            const modal = new bootstrap.Modal(document.getElementById('budgetModal'));
+            modal.show();
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        alert('Erreur lors de l\'ouverture du modal');
+    }
+}
+
+function sauvegarderBudget() {
+    const compteId = document.getElementById('budgetCompteId').value;
+    const mois = document.getElementById('budgetMois').value;
+    const annee = document.getElementById('budgetAnnee').value;
+    const montantPrevu = parseFloat(document.getElementById('budgetPrevu').value) || 0;
+    const commentaire = document.getElementById('budgetCommentaire').value;
+    
+    if (!compteId) {
+        alert('Erreur: compte non sélectionné');
+        return;
+    }
+    
+    const data = {
+        compte_id: parseInt(compteId),
+        mois: parseInt(mois),
+        annee: parseInt(annee),
+        montant_prevu: montantPrevu,
+        commentaire: commentaire
+    };
+    
+    fetch('/comptabilite/api/budget', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert('Budget enregistré avec succès !');
+            bootstrap.Modal.getInstance(document.getElementById('budgetModal')).hide();
+            chargerBudget();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+// ============================================================
+// RAPPORTS
+// ============================================================
+function chargerJournal() {
+    const tbody = document.getElementById('rapportBody');
+    const thead = document.getElementById('rapportHeader');
+    const tfoot = document.getElementById('rapportFooter');
+    const type = document.getElementById('rapportType').value;
+    const dateDebut = document.getElementById('rapportDateDebut').value;
+    const dateFin = document.getElementById('rapportDateFin').value;
+    
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center">Chargement...</td></tr>';
+    
+    let url = `/comptabilite/api/rapports/${type}`;
+    const params = [];
+    if (dateDebut) params.push('date_debut=' + dateDebut);
+    if (dateFin) params.push('date_fin=' + dateFin);
+    if (params.length) url += '?' + params.join('&');
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            let totalDebit = 0, totalCredit = 0;
+            let html = '';
+            
+            if (!data || data.length === 0) {
+                let colspan = type === 'balance' ? 4 : 6;
+                tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center">Aucune donnée</td></tr>`;
+                
+                if (type === 'balance') {
+                    thead.innerHTML = '<th>Compte</th><th>Total Débit</th><th>Total Crédit</th><th>Solde</th>';
+                    tfoot.innerHTML = `
+                        <tr class="fw-bold">
+                            <td colspan="3" class="text-end">TOTAUX :</td>
+                            <td id="rapportTotalSolde" class="text-end">0 FCFA</td>
+                        </tr>
+                    `;
+                } else {
+                    thead.innerHTML = '<th>Date</th><th>Pièce</th><th>Libellé</th><th>Compte</th><th>Débit</th><th>Crédit</th>';
+                    tfoot.innerHTML = `
+                        <tr class="fw-bold">
+                            <td colspan="4" class="text-end">TOTAUX :</td>
+                            <td id="rapportTotalDebit" class="text-end">0 FCFA</td>
+                            <td id="rapportTotalCredit" class="text-end">0 FCFA</td>
+                        </tr>
+                    `;
+                }
+                return;
+            }
+            
+            if (type === 'journal') {
+                thead.innerHTML = '<th>Date</th><th>Pièce</th><th>Libellé</th><th>Compte</th><th>Débit</th><th>Crédit</th>';
+                
+                data.forEach(item => {
+                    const debit = item.debit || 0;
+                    const credit = item.credit || 0;
+                    totalDebit += debit;
+                    totalCredit += credit;
+                    html += `<tr>
+                        <td>${item.date || ''}</td>
+                        <td>${item.piece || '-'}</td>
+                        <td>${item.libelle || ''}</td>
+                        <td>${item.compte_numero || ''} - ${item.compte_nom || ''}</td>
+                        <td class="text-end">${debit > 0 ? debit.toLocaleString() + ' F' : '-'}</td>
+                        <td class="text-end">${credit > 0 ? credit.toLocaleString() + ' F' : '-'}</td>
+                    </tr>`;
+                });
+                
+                tfoot.innerHTML = `
+                    <tr class="fw-bold">
+                        <td colspan="4" class="text-end">TOTAUX :</td>
+                        <td id="rapportTotalDebit" class="text-end">${totalDebit.toLocaleString()} FCFA</td>
+                        <td id="rapportTotalCredit" class="text-end">${totalCredit.toLocaleString()} FCFA</td>
+                    </tr>
+                `;
+                
+            } else if (type === 'grand_livre') {
+                thead.innerHTML = '<th>Date</th><th>Compte</th><th>Libellé</th><th>Débit</th><th>Crédit</th><th>Solde</th>';
+                
+                let solde_cumul = 0;
+                data.forEach(item => {
+                    const debit = item.debit || 0;
+                    const credit = item.credit || 0;
+                    solde_cumul += debit - credit;
+                    totalDebit += debit;
+                    totalCredit += credit;
+                    const soldeClass = solde_cumul >= 0 ? 'text-success' : 'text-danger';
+                    html += `<tr>
+                        <td>${item.date || ''}</td>
+                        <td>${item.compte_numero || ''} - ${item.compte_nom || ''}</td>
+                        <td>${item.libelle || ''}</td>
+                        <td class="text-end">${debit > 0 ? debit.toLocaleString() + ' F' : '-'}</td>
+                        <td class="text-end">${credit > 0 ? credit.toLocaleString() + ' F' : '-'}</td>
+                        <td class="text-end fw-bold ${soldeClass}">${solde_cumul.toLocaleString()} F</td>
+                    </tr>`;
+                });
+                
+                const soldeFinal = totalDebit - totalCredit;
+                const soldeClass = soldeFinal >= 0 ? 'text-success' : 'text-danger';
+                tfoot.innerHTML = `
+                    <tr class="fw-bold">
+                        <td colspan="3" class="text-end">TOTAUX :</td>
+                        <td id="rapportTotalDebit" class="text-end">${totalDebit.toLocaleString()} FCFA</td>
+                        <td id="rapportTotalCredit" class="text-end">${totalCredit.toLocaleString()} FCFA</td>
+                        <td id="rapportTotalSolde" class="text-end ${soldeClass}">${soldeFinal.toLocaleString()} FCFA</td>
+                    </tr>
+                `;
+                
+            } else if (type === 'balance') {
+                thead.innerHTML = '<th>Compte</th><th>Total Débit</th><th>Total Crédit</th><th>Solde</th>';
+                
+                data.forEach(item => {
+                    const totalDebitCompte = item.total_debit || 0;
+                    const totalCreditCompte = item.total_credit || 0;
+                    const solde = item.solde || 0;
+                    totalDebit += totalDebitCompte;
+                    totalCredit += totalCreditCompte;
+                    const soldeClass = solde >= 0 ? 'text-success' : 'text-danger';
+                    html += `<tr>
+                        <td><strong>${item.compte_numero || ''} - ${item.compte_nom || ''}</strong></td>
+                        <td class="text-end">${totalDebitCompte.toLocaleString()} F</td>
+                        <td class="text-end">${totalCreditCompte.toLocaleString()} F</td>
+                        <td class="text-end ${soldeClass} fw-bold">${solde.toLocaleString()} F</td>
+                    </tr>`;
+                });
+                
+                const soldeGeneral = totalDebit - totalCredit;
+                const soldeClass = soldeGeneral >= 0 ? 'text-success' : 'text-danger';
+                tfoot.innerHTML = `
+                    <tr class="fw-bold">
+                        <td class="text-end">TOTAUX :</td>
+                        <td id="rapportTotalDebit" class="text-end">${totalDebit.toLocaleString()} FCFA</td>
+                        <td id="rapportTotalCredit" class="text-end">${totalCredit.toLocaleString()} FCFA</td>
+                        <td id="rapportTotalSolde" class="text-end ${soldeClass}">${soldeGeneral.toLocaleString()} FCFA</td>
+                    </tr>
+                `;
+            }
+            
+            tbody.innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            let colspan = type === 'balance' ? 4 : 6;
+            tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-danger">Erreur de chargement</td></tr>`;
+        });
+}
+
+function exporterCSVRapport() {
+    const type = document.getElementById('rapportType').value;
+    const rows = document.querySelectorAll('#rapportBody tr');
+    let csv = "";
+    
+    if (type === 'journal') {
+        csv = "Date;Pièce;Libellé;Compte;Débit;Crédit\n";
+    } else if (type === 'grand_livre') {
+        csv = "Date;Compte;Libellé;Débit;Crédit;Solde\n";
+    } else if (type === 'balance') {
+        csv = "Compte;Total Débit;Total Crédit;Solde\n";
+    }
+    
+    rows.forEach(row => {
+        const cells = row.cells;
+        const firstCell = cells[0]?.innerText || '';
+        if (firstCell !== 'Chargement...' && 
+            firstCell !== 'Aucune donnée' && 
+            firstCell !== 'Erreur de chargement' &&
+            cells.length > 1) {
+            let rowData = [];
+            for (let i = 0; i < cells.length; i++) {
+                let text = cells[i].innerText.replace(/\s+/g, ' ').trim();
+                text = text.replace(/"/g, '""');
+                rowData.push(`"${text}"`);
+            }
+            csv += rowData.join(';') + '\n';
+        }
+    });
+    
+    const footerCells = document.querySelectorAll('#rapportFooter td');
+    if (footerCells.length > 0) {
+        let footerData = [];
+        for (let i = 0; i < footerCells.length; i++) {
+            let text = footerCells[i].innerText.trim();
+            text = text.replace(/"/g, '""');
+            footerData.push(`"${text}"`);
+        }
+        csv += footerData.join(';') + '\n';
+    }
+    
+    const blob = new Blob(["\uFEFF" + csv], {type: 'text/csv;charset=utf-8;'});
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `rapport_${type}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+}
+
+// ============================================================
+// INITIALISATION
+// ============================================================
+document.addEventListener('DOMContentLoaded', function() {
+    initModals();
+    
+    chargerDashboard();
+    chargerDernieresEcritures();
+    chargerComptes();
+    chargerEcritures();
+    chargerBudget();
+    chargerComptesBudget();
+    
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    document.getElementById('rapportDateDebut').value = firstDay.toISOString().split('T')[0];
+    document.getElementById('rapportDateFin').value = now.toISOString().split('T')[0];
+    document.getElementById('budgetAnnee').value = now.getFullYear();
+    chargerJournal();
+    
+    document.addEventListener('input', function(e) {
+        if (e.target.classList.contains('debit-input') || e.target.classList.contains('credit-input')) {
+            calculerTotaux();
+        }
+    });
+    
+    document.addEventListener('hidden.bs.modal', function(event) {
+        if (event.target.id === 'ecritureModal') {
+            document.getElementById('ecritureId').value = '';
+        }
+    });
+    
+    console.log('✅ Application comptabilité initialisée');
+});
+</script>
+{% endblock %}

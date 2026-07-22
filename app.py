@@ -37,6 +37,8 @@ db.init_app(app)
 from routes.rh import rh_bp
 app.register_blueprint(rh_bp)
 
+from routes.comptabilite import compta_bp
+app.register_blueprint(compta_bp)
 
 @app.after_request
 def auto_commit_after_request(response):
