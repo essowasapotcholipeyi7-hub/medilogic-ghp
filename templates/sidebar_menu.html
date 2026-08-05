@@ -8,23 +8,23 @@
         <a class="nav-link" href="{{ url_for('patients') }}">
             <i class="fas fa-users"></i> Patients
         </a>
-<li class="nav-item">
-    <a class="nav-link" href="{{ url_for('prescriptions_recues') }}">
-        <i class="fas fa-prescription-bottle me-2 text-success"></i>
-        Prescriptions reçues
-        <span class="badge bg-danger ms-1" id="prescriptionBadge">0</span>
-    </a>
-</li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('prescriptions_recues') }}">
+                <i class="fas fa-prescription-bottle me-2 text-success"></i>
+                Prescriptions reçues
+                <span class="badge bg-danger ms-1" id="prescriptionBadge">0</span>
+            </a>
+        </li>
         <a class="nav-link" href="{{ url_for('actes_vente') }}">
             <i class="fas fa-stethoscope"></i> LABO/RADIO/Actes & Vente
         </a>
         <a class="nav-link" href="{{ url_for('pharma_vente') }}">
             <i class="fas fa-pills"></i> Pharmacie
         </a>
-<!-- Dans sidebar_menu.html -->
-<a class="nav-link" href="{{ url_for('factures') }}">
-    <i class="fas fa-file-invoice"></i> Factures clients
-</a>
+        <a class="nav-link" href="{{ url_for('factures') }}">
+            <i class="fas fa-file-invoice"></i> Factures clients
+        </a>
+        
         <!-- Référentiels AMU avec sous-menu -->
         <div class="dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="amuDropdown" data-bs-toggle="dropdown" aria-expanded="false">
@@ -55,34 +55,29 @@
             <i class="fas fa-bell"></i> Rappels
         </a>
 
-        <!-- ============================================ -->
-        <!-- FACTURES PROFORMA -->
-        <!-- ============================================ -->
+        <!-- Factures Proforma -->
         <a class="nav-link {% if request.endpoint == 'proformas' %}active{% endif %}" href="{{ url_for('proformas') }}">
             <i class="fas fa-file-invoice"></i> Factures Proforma
             <span class="badge bg-warning text-dark float-end" id="proformaBadge" style="display:none;">0</span>
         </a>
 
-        <!-- Dans sidebar_menu.html pour afficher le bon menu -->
+        <!-- Consultation -->
         {% if session.role in ['admin', 'medecin', 'paramedical'] %}
             <a class="nav-link" href="{{ url_for('consultation') }}">
                 <i class="fas fa-stethoscope"></i> Consultation & Prise en charge
             </a>
         {% endif %}
 
-<!-- Dans sidebar_menu.html -->
-{% if session.role in ['admin', 'comptable', 'gestionnaire', 'pharmacien'] %}
-<li class="nav-item">
-    <a class="nav-link" href="{{ url_for('gestion_stock') }}">
-        <i class="fas fa-boxes"></i> Gestion des stocks
-    </a>
-</li>
-{% endif %}
+        <!-- Gestion des stocks -->
+        {% if session.role in ['admin', 'comptable', 'gestionnaire', 'pharmacien'] %}
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('gestion_stock') }}">
+                <i class="fas fa-boxes"></i> Gestion des stocks
+            </a>
+        </li>
+        {% endif %}
 
-
-        <!-- ============================================ -->
-        <!-- ADMINISTRATION -->
-        <!-- ============================================ -->
+        <!-- Administration -->
         {% if session.is_admin %}
         <a class="nav-link" href="{{ url_for('admin_finances') }}">
             <i class="fas fa-coins"></i> Finances
@@ -93,14 +88,12 @@
         <a class="nav-link" href="{{ url_for('historique_annulations') }}">
             <i class="fas fa-ban"></i> Annulations
         </a>
-<a class="nav-link" href="{{ url_for('rh.gestion_rh') }}">
-    <i class="fas fa-users-cog"></i> GRH
-</a>
-
-<a class="nav-link" href="{{ url_for('comptabilite.index') }}">
-    <i class="fas fa-calculator"></i> Comptabilite
-</a>
-
+        <a class="nav-link" href="{{ url_for('rh.gestion_rh') }}">
+            <i class="fas fa-users-cog"></i> GRH
+        </a>
+        <a class="nav-link" href="{{ url_for('comptabilite.index') }}">
+            <i class="fas fa-calculator"></i> Comptabilite
+        </a>
         <a class="nav-link" href="{{ url_for('admin_structure') }}">
             <i class="fas fa-cog"></i> Administration
         </a>
@@ -165,9 +158,9 @@ function chargerProformaBadge() {
 // ============================================
 // LOADER SUR LES LIENS DU MENU
 // ============================================
-document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+document.querySelectorAll('.sidebar .nav-link').forEach(function(link) {
     link.addEventListener('click', function(e) {
-        const href = this.getAttribute('href');
+        var href = this.getAttribute('href');
         if (href === '#' || href === 'javascript:void(0)' || this.getAttribute('target') === '_blank') {
             return;
         }

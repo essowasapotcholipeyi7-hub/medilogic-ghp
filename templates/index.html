@@ -9,7 +9,7 @@
                 <div class="position-absolute top-0 start-0 w-100 h-100 opacity-10 bg-pattern"></div>
                 <i class="fas fa-stethoscope fa-4x text-white mb-2 animate-float"></i>
                 <h4 class="text-white mb-0 fw-bold">SSoftone V10</h4>
-                <p class="text-white-50 small mb-0">Système de Gestion Hospitalière & Pharmacie</p>
+                <p class="text-white-50 small mb-0">Systeme de Gestion Hospitaliere & Pharmacie</p>
             </div>
             
             <div class="card-body p-4 p-md-5">
@@ -18,7 +18,7 @@
                         <i class="fas fa-user-md text-primary fa-2x"></i>
                     </div>
                     <h3 class="fw-bold text-gray-800">Connexion</h3>
-                    <p class="text-muted small">Accédez à votre espace sécurisé</p>
+                    <p class="text-muted small">Accedez a votre espace securise</p>
                 </div>
                 
                 <form method="POST">
@@ -74,7 +74,7 @@
                     
                     <div class="text-center mt-3">
                         <a href="#" class="text-muted text-decoration-none small" data-bs-toggle="modal" data-bs-target="#forgotModal">
-                            <i class="fas fa-question-circle me-1"></i>Mot de passe oublié ?
+                            <i class="fas fa-question-circle me-1"></i>Mot de passe oublie ?
                         </a>
                     </div>
                 </form>
@@ -104,23 +104,23 @@
     </div>
 </div>
 
-<!-- Modal Mot de passe oublié -->
+<!-- Modal Mot de passe oublie -->
 <div class="modal fade" id="forgotModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-4">
             <div class="modal-header bg-gradient-primary text-white border-0">
                 <h5 class="modal-title">
-                    <i class="fas fa-key me-2"></i>Réinitialisation
+                    <i class="fas fa-key me-2"></i>Reinitialisation
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-4">
-                <p class="text-muted small">Entrez votre email pour recevoir un lien de réinitialisation</p>
+                <p class="text-muted small">Entrez votre email pour recevoir un lien de reinitialisation</p>
                 <input type="email" class="form-control rounded-pill" placeholder="votre@email.com">
             </div>
             <div class="modal-footer border-0">
                 <button type="button" class="btn btn-light rounded-pill" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-primary rounded-pill" onclick="alert('Fonctionnalité en développement')">
+                <button type="button" class="btn btn-primary rounded-pill" onclick="alert('Fonctionnalite en developpement')">
                     Envoyer
                 </button>
             </div>
@@ -275,8 +275,8 @@
 
 <script>
 function togglePassword() {
-    const passwordInput = document.getElementById('password');
-    const toggleIcon = document.getElementById('toggleIcon');
+    var passwordInput = document.getElementById('password');
+    var toggleIcon = document.getElementById('toggleIcon');
     
     if (passwordInput.type === 'password') {
         passwordInput.type = 'text';
@@ -291,8 +291,8 @@ function togglePassword() {
 
 // Animation de chargement sur soumission du formulaire
 document.querySelector('form').addEventListener('submit', function(e) {
-    const btn = this.querySelector('button[type="submit"]');
-    const spinner = btn.querySelector('#loading');
+    var btn = this.querySelector('button[type="submit"]');
+    var spinner = btn.querySelector('#loading');
     spinner.classList.remove('d-none');
     btn.disabled = true;
 });

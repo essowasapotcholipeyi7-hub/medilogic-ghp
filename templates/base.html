@@ -14,17 +14,18 @@
             box-sizing: border-box;
         }
         
-body {
-    background: linear-gradient(135deg, #e3f2fd 0%, #e8f0fe 100%) !important;
-    min-height: 100vh;
-}
-.main-content {
-    background-color: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(10px);
-    padding: 20px;
-    border-radius: 15px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-}
+        body {
+            background: linear-gradient(135deg, #e3f2fd 0%, #e8f0fe 100%) !important;
+            min-height: 100vh;
+        }
+        
+        .main-content {
+            background-color: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+        }
         
         /* Navbar moderne avec effet glass */
         .navbar {
@@ -51,6 +52,143 @@ body {
             background: none;
             -webkit-text-fill-color: #667eea;
             margin-right: 8px;
+        }
+        
+        /* ============================================
+           STRUCTURE BRAND - ROUGE ÉLÉGANT
+           ============================================ */
+        .structure-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+        }
+        
+        .structure-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 6px 20px 6px 16px;
+            border-radius: 50px;
+            border: 2px solid #dc3545;
+            box-shadow: 0 2px 15px rgba(220, 53, 69, 0.12);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .structure-brand::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(220, 53, 69, 0.06), transparent);
+            transition: left 0.6s ease;
+        }
+        
+        .structure-brand:hover::before {
+            left: 100%;
+        }
+        
+        .structure-brand .structure-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #dc3545, #c82333);
+            border-radius: 50%;
+            color: white;
+            font-size: 14px;
+            flex-shrink: 0;
+            transition: transform 0.3s ease;
+        }
+        
+        .structure-brand:hover .structure-icon {
+            transform: rotate(-5deg) scale(1.05);
+        }
+        
+        .structure-brand .structure-name {
+            font-weight: 700;
+            font-size: 16px;
+            color: #dc3545;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+            background: linear-gradient(135deg, #dc3545, #a71d2a);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .structure-brand .structure-badge {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: white;
+            background: linear-gradient(135deg, #dc3545, #a71d2a);
+            padding: 2px 10px;
+            border-radius: 50px;
+            text-transform: uppercase;
+            -webkit-text-fill-color: white;
+            flex-shrink: 0;
+        }
+        
+        /* Version mobile */
+        @media (max-width: 768px) {
+            .structure-brand {
+                padding: 4px 14px 4px 12px;
+                gap: 6px;
+                border-width: 1.5px;
+            }
+            
+            .structure-brand .structure-icon {
+                width: 26px;
+                height: 26px;
+                font-size: 11px;
+            }
+            
+            .structure-brand .structure-name {
+                font-size: 13px;
+                max-width: 120px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            
+            .structure-brand .structure-badge {
+                font-size: 7px;
+                padding: 1px 8px;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .structure-brand .structure-name {
+                max-width: 80px;
+                font-size: 12px;
+            }
+            
+            .structure-brand .structure-badge {
+                display: none;
+            }
+        }
+        
+        /* Animation d'apparition */
+        .structure-brand {
+            animation: structureFadeIn 0.6s ease-out;
+        }
+        
+        @keyframes structureFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
         }
         
         /* Cartes modernes avec effet glass */
@@ -409,15 +547,18 @@ body {
 <nav class="navbar navbar-expand-lg">
     <div class="container">
         <a class="navbar-brand" href="{{ url_for('dashboard' if session.user_id else 'index') }}">
-            <i class="fas fa-heartbeat"></i> SSoftone<span style="color: #667eea;">-V10</span>
+            SSoftone<span style="color: #667eea;">-V10</span>
         </a>
         
-        <!-- 🔥 AFFICHAGE DU NOM DE LA STRUCTURE (centré) 🔥 -->
+        <!-- NOM DE LA STRUCTURE EN ROUGE ÉLÉGANT -->
         {% if session.user_id and session.structure_nom %}
-        <div class="mx-auto">
-            <div class="d-none d-md-block" style="background: linear-gradient(135deg, #667eea15, #764ba215); padding: 6px 16px; border-radius: 30px;">
-                <i class="fas fa-building me-1" style="color: #667eea;"></i>
-                <span style="font-weight: 600; font-size: 14px; color: #4a5568;">{{ session.structure_nom }}</span>
+        <div class="structure-container mx-auto">
+            <div class="structure-brand">
+                <span class="structure-icon">
+                    <i class="fas fa-building"></i>
+                </span>
+                <span class="structure-name">{{ session.structure_nom }}</span>
+                <span class="structure-badge">****</span>
             </div>
         </div>
         {% endif %}
@@ -457,95 +598,96 @@ body {
         {% endif %}
     </div>
 </nav>
-    <!-- BANDEAU PATIENT SÉLECTIONNÉ -->
-    {% if session.user_id %}
-    <div class="container mt-3">
-        <div id="selectedPatientBadge" class="alert py-3 mb-0 fade-in" style="display:none;">
-            <div class="row align-items-center">
-                <div class="col-md-8">
-                    <i class="fas fa-user-check text-success fa-lg"></i> 
-                    <strong class="ms-1">Patient actuel :</strong> 
-                    <span id="currentPatientName" class="fw-bold ms-1">-</span>
-                    <span class="badge bg-info text-white ms-2" id="currentPatientAssurance">-</span>
-                    <span class="badge bg-warning text-dark ms-1" id="currentPatientTaux">-</span>
-                </div>
-                <div class="col-md-4 text-end">
-                    <button onclick="clearSelectedPatient()" class="btn btn-sm btn-outline-danger me-2 rounded-pill">
-                        <i class="fas fa-times-circle"></i> Désélectionner
-                    </button>
-                    <a href="{{ url_for('patients') }}" class="btn btn-sm btn-outline-primary rounded-pill">
-                        <i class="fas fa-exchange-alt"></i> Changer
-                    </a>
-                </div>
+
+<!-- BANDEAU PATIENT SÉLECTIONNÉ -->
+{% if session.user_id %}
+<div class="container mt-3">
+    <div id="selectedPatientBadge" class="alert py-3 mb-0 fade-in" style="display:none;">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <i class="fas fa-user-check text-success fa-lg"></i> 
+                <strong class="ms-1">Patient actuel :</strong> 
+                <span id="currentPatientName" class="fw-bold ms-1">-</span>
+                <span class="badge bg-info text-white ms-2" id="currentPatientAssurance">-</span>
+                <span class="badge bg-warning text-dark ms-1" id="currentPatientTaux">-</span>
+            </div>
+            <div class="col-md-4 text-end">
+                <button onclick="clearSelectedPatient()" class="btn btn-sm btn-outline-danger me-2 rounded-pill">
+                    <i class="fas fa-times-circle"></i> Désélectionner
+                </button>
+                <a href="{{ url_for('patients') }}" class="btn btn-sm btn-outline-primary rounded-pill">
+                    <i class="fas fa-exchange-alt"></i> Changer
+                </a>
             </div>
         </div>
     </div>
+</div>
+
+<script>
+// Horloge temps réel
+function updateHorloge() {
+    const maintenant = new Date();
+    const jours = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+    const mois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const jourSemaine = jours[maintenant.getDay()];
+    const moisNom = mois[maintenant.getMonth()];
+    const jour = maintenant.getDate();
+    const annee = maintenant.getFullYear();
+    const dateFormatee = jourSemaine + ' ' + jour + ' ' + moisNom + ' ' + annee;
     
-    <script>
-    // Horloge temps réel
-    function updateHorloge() {
-        const maintenant = new Date();
-        const jours = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-        const mois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-        const jourSemaine = jours[maintenant.getDay()];
-        const moisNom = mois[maintenant.getMonth()];
-        const jour = maintenant.getDate();
-        const annee = maintenant.getFullYear();
-        const dateFormatee = `${jourSemaine} ${jour} ${moisNom} ${annee}`;
-        
-        let heures = maintenant.getHours();
-        let minutes = maintenant.getMinutes();
-        let secondes = maintenant.getSeconds();
-        heures = heures < 10 ? '0' + heures : heures;
-        minutes = minutes < 10 ? '0' + minutes : minutes;
-        secondes = secondes < 10 ? '0' + secondes : secondes;
-        const heureFormatee = `${heures}:${minutes}:${secondes}`;
-        
-        const dateElement = document.getElementById('dateActuelle');
-        const heureElement = document.getElementById('heureActuelle');
-        const heureMobile = document.getElementById('heureMobile');
-        
-        if (dateElement) dateElement.textContent = dateFormatee;
-        if (heureElement) heureElement.textContent = heureFormatee;
-        if (heureMobile) heureMobile.textContent = `${heures}:${minutes}`;
+    let heures = maintenant.getHours();
+    let minutes = maintenant.getMinutes();
+    let secondes = maintenant.getSeconds();
+    heures = heures < 10 ? '0' + heures : heures;
+    minutes = minutes < 10 ? '0' + minutes : minutes;
+    secondes = secondes < 10 ? '0' + secondes : secondes;
+    const heureFormatee = heures + ':' + minutes + ':' + secondes;
+    
+    const dateElement = document.getElementById('dateActuelle');
+    const heureElement = document.getElementById('heureActuelle');
+    const heureMobile = document.getElementById('heureMobile');
+    
+    if (dateElement) dateElement.textContent = dateFormatee;
+    if (heureElement) heureElement.textContent = heureFormatee;
+    if (heureMobile) heureMobile.textContent = heures + ':' + minutes;
+}
+    
+setInterval(updateHorloge, 1000);
+updateHorloge();
+    
+// Stocker les infos de la structure
+{% if session.structure_nom %}
+localStorage.setItem('structureNom', '{{ session.structure_nom }}');
+{% endif %}
+{% if session.structure_id %}
+localStorage.setItem('structureId', '{{ session.structure_id }}');
+{% endif %}
+{% if session.structure_telephone %}
+localStorage.setItem('structureTelephone', '{{ session.structure_telephone }}');
+{% endif %}
+{% if session.structure_logo %}
+localStorage.setItem('structureLogo', '{{ session.structure_logo }}');
+{% endif %}
+{% if session.structure_email %}
+localStorage.setItem('structureEmail', '{{ session.structure_email }}');
+{% endif %}
+    
+// Récupérer le nom de la structure
+function getStructureNom(callback) {
+    let nom = localStorage.getItem('structureNom');
+    if (nom) {
+        callback(nom);
+        return;
     }
-    
-    setInterval(updateHorloge, 1000);
-    updateHorloge();
-    
-    // Stocker les infos de la structure
-    {% if session.structure_nom %}
-    localStorage.setItem('structureNom', '{{ session.structure_nom }}');
-    {% endif %}
-    {% if session.structure_id %}
-    localStorage.setItem('structureId', '{{ session.structure_id }}');
-    {% endif %}
-    {% if session.structure_telephone %}
-    localStorage.setItem('structureTelephone', '{{ session.structure_telephone }}');
-    {% endif %}
-    {% if session.structure_logo %}
-    localStorage.setItem('structureLogo', '{{ session.structure_logo }}');
-    {% endif %}
-    {% if session.structure_email %}
-    localStorage.setItem('structureEmail', '{{ session.structure_email }}');
-    {% endif %}
-    
-    // Récupérer le nom de la structure
-    function getStructureNom(callback) {
-        let nom = localStorage.getItem('structureNom');
-        if (nom) {
+    fetch('/api/structure/nom')
+        .then(response => response.json())
+        .then(data => {
+            let nom = data.nom || 'Notre établissement';
+            localStorage.setItem('structureNom', nom);
             callback(nom);
-            return;
-        }
-        fetch('/api/structure/nom')
-            .then(response => response.json())
-            .then(data => {
-                let nom = data.nom || 'Notre établissement';
-                localStorage.setItem('structureNom', nom);
-                callback(nom);
-            })
-            .catch(() => callback('Notre établissement'));
-    }
+        })
+        .catch(() => callback('Notre établissement'));
+}
     
 // Charger les infos de la structure au démarrage
 function chargerInfosStructure() {
@@ -573,124 +715,121 @@ function chargerInfosStructure() {
 if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
     chargerInfosStructure();
 }    
-    // Chargement du patient sélectionné
-    function loadSelectedPatient() {
-        let patientId = sessionStorage.getItem('selectedPatientId');
-        let patientName = sessionStorage.getItem('selectedPatientName');
-        let assurance = sessionStorage.getItem('selectedPatientAssurance');
-        let taux = sessionStorage.getItem('selectedPatientTaux');
-        
-        if (!patientId || patientId === 'null' || patientId === 'undefined') {
-            patientId = localStorage.getItem('selectedPatientId');
-            patientName = localStorage.getItem('selectedPatientName');
-            assurance = localStorage.getItem('selectedPatientAssurance');
-            taux = localStorage.getItem('selectedPatientTaux');
-        }
-        
-        if (patientId && patientId !== 'null' && patientId !== 'undefined') {
-            let badge = document.getElementById('selectedPatientBadge');
-            if (badge) badge.style.display = 'block';
-            let nameSpan = document.getElementById('currentPatientName');
-            if (nameSpan) nameSpan.innerText = patientName || 'Patient';
-            
-            let assuranceText = 'Non assuré';
-            if (assurance === 'amu_cnss') {
-                assuranceText = 'AMU-CNSS';
-            } else if (assurance === 'amu_inam') {
-                assuranceText = 'AMU-INAM';
-            } else if (assurance === 'autre') {
-                assuranceText = 'Autre assurance';
-            } else if (assurance && assurance !== 'non_assure' && assurance !== 'null') {
-                assuranceText = assurance;
-            }
-            
-            let assuranceSpan = document.getElementById('currentPatientAssurance');
-            if (assuranceSpan) assuranceSpan.innerText = assuranceText;
-            
-            let tauxSpan = document.getElementById('currentPatientTaux');
-            if (tauxSpan) tauxSpan.innerText = (taux || 0) + '%';
-        } else {
-            let badge = document.getElementById('selectedPatientBadge');
-            if (badge) badge.style.display = 'none';
-        }
+    
+// Chargement du patient sélectionné
+function loadSelectedPatient() {
+    let patientId = sessionStorage.getItem('selectedPatientId');
+    let patientName = sessionStorage.getItem('selectedPatientName');
+    let assurance = sessionStorage.getItem('selectedPatientAssurance');
+    let taux = sessionStorage.getItem('selectedPatientTaux');
+    
+    if (!patientId || patientId === 'null' || patientId === 'undefined') {
+        patientId = localStorage.getItem('selectedPatientId');
+        patientName = localStorage.getItem('selectedPatientName');
+        assurance = localStorage.getItem('selectedPatientAssurance');
+        taux = localStorage.getItem('selectedPatientTaux');
     }
     
-    function clearSelectedPatient() {
-        sessionStorage.removeItem('selectedPatientId');
-        sessionStorage.removeItem('selectedPatientName');
-        sessionStorage.removeItem('selectedPatientAssurance');
-        sessionStorage.removeItem('selectedPatientTaux');
-        localStorage.removeItem('selectedPatientId');
-        localStorage.removeItem('selectedPatientName');
-        localStorage.removeItem('selectedPatientAssurance');
-        localStorage.removeItem('selectedPatientTaux');
+    if (patientId && patientId !== 'null' && patientId !== 'undefined') {
+        let badge = document.getElementById('selectedPatientBadge');
+        if (badge) badge.style.display = 'block';
+        let nameSpan = document.getElementById('currentPatientName');
+        if (nameSpan) nameSpan.innerText = patientName || 'Patient';
+        
+        let assuranceText = 'Non assuré';
+        if (assurance === 'amu_cnss') {
+            assuranceText = 'AMU-CNSS';
+        } else if (assurance === 'amu_inam') {
+            assuranceText = 'AMU-INAM';
+        } else if (assurance === 'autre') {
+            assuranceText = 'Autre assurance';
+        } else if (assurance && assurance !== 'non_assure' && assurance !== 'null') {
+            assuranceText = assurance;
+        }
+        
+        let assuranceSpan = document.getElementById('currentPatientAssurance');
+        if (assuranceSpan) assuranceSpan.innerText = assuranceText;
+        
+        let tauxSpan = document.getElementById('currentPatientTaux');
+        if (tauxSpan) tauxSpan.innerText = (taux || 0) + '%';
+    } else {
         let badge = document.getElementById('selectedPatientBadge');
         if (badge) badge.style.display = 'none';
-        location.reload();
     }
+}
     
-    document.addEventListener('DOMContentLoaded', loadSelectedPatient);
+function clearSelectedPatient() {
+    sessionStorage.removeItem('selectedPatientId');
+    sessionStorage.removeItem('selectedPatientName');
+    sessionStorage.removeItem('selectedPatientAssurance');
+    sessionStorage.removeItem('selectedPatientTaux');
+    localStorage.removeItem('selectedPatientId');
+    localStorage.removeItem('selectedPatientName');
+    localStorage.removeItem('selectedPatientAssurance');
+    localStorage.removeItem('selectedPatientTaux');
+    let badge = document.getElementById('selectedPatientBadge');
+    if (badge) badge.style.display = 'none';
+    location.reload();
+}
     
-    // Loader functions améliorées
-    function showLoader(message = 'Chargement en cours...') {
-        let loader = document.getElementById('loaderOverlay');
-        if (!loader) {
-            loader = document.createElement('div');
-            loader.id = 'loaderOverlay';
-            loader.className = 'loader-overlay';
-            loader.innerHTML = `
-                <div class="text-center">
-                    <div class="loader"></div>
-                    <div class="loader-text">${message}</div>
+document.addEventListener('DOMContentLoaded', loadSelectedPatient);
+    
+// Loader functions améliorées
+function showLoader(message) {
+    message = message || 'Chargement en cours...';
+    let loader = document.getElementById('loaderOverlay');
+    if (!loader) {
+        loader = document.createElement('div');
+        loader.id = 'loaderOverlay';
+        loader.className = 'loader-overlay';
+        loader.innerHTML = '<div class="text-center"><div class="loader"></div><div class="loader-text">' + message + '</div></div>';
+        document.body.appendChild(loader);
+    }
+    loader.style.display = 'flex';
+    const loaderText = loader.querySelector('.loader-text');
+    if (loaderText) loaderText.textContent = message;
+}
+    
+function hideLoader() {
+    const loader = document.getElementById('loaderOverlay');
+    if (loader) loader.style.display = 'none';
+}
+    
+// Afficher le loader avant de quitter la page
+window.addEventListener('beforeunload', function() {
+    showLoader();
+});
+    
+// Intercepter les clics sur les liens
+document.addEventListener('click', function(e) {
+    const link = e.target.closest('a');
+    if (link && link.href && !link.target && link.hostname === window.location.hostname) {
+        if (!link.href.includes('javascript:') && !link.href.includes('#')) {
+            showLoader('Navigation en cours...');
+        }
+    }
+});
+</script>
+{% endif %}
+
+<div class="container mt-4">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm fade-in" role="alert">
+                    <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-triangle' if category == 'danger' else 'info-circle' }} me-2"></i>
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
-            `;
-            document.body.appendChild(loader);
-        }
-        loader.style.display = 'flex';
-        const loaderText = loader.querySelector('.loader-text');
-        if (loaderText) loaderText.textContent = message;
-    }
-    
-    function hideLoader() {
-        const loader = document.getElementById('loaderOverlay');
-        if (loader) loader.style.display = 'none';
-    }
-    
-    // Afficher le loader avant de quitter la page
-    window.addEventListener('beforeunload', function() {
-        showLoader();
-    });
-    
-    // Intercepter les clics sur les liens
-    document.addEventListener('click', function(e) {
-        const link = e.target.closest('a');
-        if (link && link.href && !link.target && link.hostname === window.location.hostname) {
-            if (!link.href.includes('javascript:') && !link.href.includes('#')) {
-                showLoader('Navigation en cours...');
-            }
-        }
-    });
-    </script>
-    {% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
 
-    <div class="container mt-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm fade-in" role="alert">
-                        <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-triangle' if category == 'danger' else 'info-circle' }} me-2"></i>
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+    {% block content %}{% endblock %}
+</div>
 
-        {% block content %}{% endblock %}
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    {% block scripts %}{% endblock %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+{% block scripts %}{% endblock %}
 </body>
 </html>
