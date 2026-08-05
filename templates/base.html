@@ -538,6 +538,109 @@
         .fade-in {
             animation: fadeIn 0.4s ease-out;
         }
+
+/* ============================================
+   SIDEBAR AMÉLIORÉ - SANS ICÔNES
+   ============================================ */
+
+.sidebar .menu-title {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.65rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sidebar .nav-link {
+    color: rgba(255, 255, 255, 0.55);
+    padding: 10px 16px;
+    margin: 4px 0;
+    border-radius: 10px;
+    transition: all 0.25s ease;
+    font-weight: 400;
+    font-size: 14px;
+    letter-spacing: 0.2px;
+    position: relative;
+}
+
+.sidebar .nav-link:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+    transform: translateX(4px);
+}
+
+.sidebar .nav-link.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #ffffff;
+    font-weight: 500;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.25);
+}
+
+/* Couleurs spécifiques pour chaque section */
+.sidebar .nav-link[href*="dashboard"] { color: #4fc3f7; }
+.sidebar .nav-link[href*="patients"] { color: #81c784; }
+.sidebar .nav-link[href*="prescriptions"] { color: #ff8a65; }
+.sidebar .nav-link[href*="actes_vente"] { color: #ce93d8; }
+.sidebar .nav-link[href*="pharma_vente"] { color: #ffd54f; }
+.sidebar .nav-link[href*="factures"] { color: #4dd0e1; }
+.sidebar .nav-link[href*="historique"] { color: #90a4ae; }
+.sidebar .nav-link[href*="rendez_vous"] { color: #aed581; }
+.sidebar .nav-link[href*="rappels"] { color: #ffab91; }
+.sidebar .nav-link[href*="proformas"] { color: #ffcc02; }
+.sidebar .nav-link[href*="consultation"] { color: #80cbc4; }
+.sidebar .nav-link[href*="gestion_stock"] { color: #b39ddb; }
+.sidebar .nav-link[href*="admin_finances"] { color: #ef9a9a; }
+.sidebar .nav-link[href*="statistiques"] { color: #90caf9; }
+.sidebar .nav-link[href*="annulations"] { color: #ef9a9a; }
+.sidebar .nav-link[href*="gestion_rh"] { color: #a1887f; }
+.sidebar .nav-link[href*="comptabilite"] { color: #bcaaa4; }
+.sidebar .nav-link[href*="admin_structure"] { color: #b0bec5; }
+
+/* Au survol, toutes deviennent blanches */
+.sidebar .nav-link:hover {
+    color: #ffffff !important;
+}
+
+/* Dropdown dans sidebar */
+.sidebar .dropdown-toggle {
+    background: transparent !important;
+    color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.sidebar .dropdown-toggle:hover {
+    color: #ffffff !important;
+}
+
+.sidebar .dropdown-menu {
+    background: rgba(26, 26, 46, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    margin-top: 4px;
+    padding: 6px;
+    backdrop-filter: blur(10px);
+}
+
+.sidebar .dropdown-item {
+    color: rgba(255, 255, 255, 0.6);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    transition: all 0.2s ease;
+}
+
+.sidebar .dropdown-item:hover {
+    background: rgba(102, 126, 234, 0.2);
+    color: #ffffff;
+}
+
+/* Badges dans sidebar */
+.sidebar .badge {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 20px;
+}
     </style>
     {% block extra_css %}{% endblock %}
 </head>
