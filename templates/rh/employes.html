@@ -250,6 +250,17 @@
                                             <label class="form-label">Lien de parente</label>
                                             <input type="text" class="form-control" id="empLienParente">
                                         </div>
+<div class="row">
+    <div class="col-md-12 mb-2">
+        <label class="form-label">Statut</label>
+        <select class="form-control" id="empStatut">
+            <option value="Actif">Actif</option>
+            <option value="En conge">En congé</option>
+            <option value="Inactif">Inactif</option>
+        </select>
+    </div>
+</div>
+
                                     </div>
                                 </div>
                             </div>
@@ -267,7 +278,6 @@
     </div>
 </div>
 
-<script>
 // ============================================
 // VARIABLES
 // ============================================
@@ -275,6 +285,7 @@ let tousEmployes = [];
 let employesFiltres = [];
 let pageActuelle = 1;
 let itemsParPage = 25;
+let employeIdEnCours = null;
 
 // ============================================
 // CHARGEMENT DES EMPLOYES
@@ -445,6 +456,7 @@ function changerItemsParPage() {
 function ajouterEmploye() {
     document.getElementById('employeModalTitle').textContent = 'Ajouter un employe';
     document.getElementById('employeForm').reset();
+    document.getElementById('empId').value = '';
     document.getElementById('empAge').value = '';
     document.getElementById('empAnciennete').value = '';
     new bootstrap.Modal(document.getElementById('employeModal')).show();
@@ -479,6 +491,7 @@ function calculerAnciennete() {
 }
 
 function sauvegarderEmploye() {
+    const id = document.getElementById('empId').value;
     const data = {
         nom: document.getElementById('empNom').value.trim(),
         prenom: document.getElementById('empPrenom').value.trim(),
@@ -496,7 +509,8 @@ function sauvegarderEmploye() {
         salaire_base: parseFloat(document.getElementById('empSalaire').value) || 0,
         personne_a_prevenir: document.getElementById('empPrevenir').value.trim(),
         telephone_prevenir: document.getElementById('empTelephonePrevenir').value.trim(),
-        lien_parente: document.getElementById('empLienParente').value.trim()
+        lien_parente: document.getElementById('empLienParente').value.trim(),
+        statut: document.getElementById('empStatut')?.value || 'Actif'
     };
     
     if (!data.nom || !data.prenom || !data.sexe || !data.telephone || !data.service_id || !data.poste || !data.date_embauche) {
@@ -504,15 +518,18 @@ function sauvegarderEmploye() {
         return;
     }
     
-    fetch('/rh/employe/ajouter', {
-        method: 'POST',
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? `/rh/employe/${id}` : '/rh/employe/ajouter';
+    
+    fetch(url, {
+        method: method,
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
     })
     .then(r => r.json())
     .then(result => {
         if (result.success) {
-            alert('Employe ajoute avec succes ! Matricule: ' + result.matricule);
+            alert(id ? 'Employé modifié avec succès !' : 'Employé ajouté avec succès ! Matricule: ' + result.matricule);
             bootstrap.Modal.getInstance(document.getElementById('employeModal')).hide();
             chargerEmployes();
         } else {
@@ -523,19 +540,81 @@ function sauvegarderEmploye() {
 }
 
 // ============================================
-// VOIR EMPLOYE
+// VOIR EMPLOYE - PAGE DE DÉTAIL
 // ============================================
 function voirEmploye(id) {
+    // ⭐ Ouvrir une nouvelle page ou un modal de détail
     window.open(`/rh/employe/${id}`, '_blank');
 }
 
+// ============================================
+// MODIFIER EMPLOYE
+// ============================================
 function modifierEmploye(id) {
-    alert('Fonctionnalite en cours de developpement');
+    // ⭐ Charger les données dans le modal
+    fetch(`/rh/api/employes/${id}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('employeModalTitle').textContent = 'Modifier l\'employé';
+            document.getElementById('empId').value = data.id;
+            document.getElementById('empNom').value = data.nom;
+            document.getElementById('empPrenom').value = data.prenom;
+            document.getElementById('empSexe').value = data.sexe;
+            document.getElementById('empDateNaissance').value = data.date_naissance ? data.date_naissance.split('/').reverse().join('-') : '';
+            document.getElementById('empAge').value = data.age + ' ans';
+            document.getElementById('empNationalite').value = data.nationalite || '';
+            document.getElementById('empQuartier').value = data.quartier || '';
+            document.getElementById('empTelephone').value = data.telephone || '';
+            document.getElementById('empEmail').value = data.email || '';
+            document.getElementById('empService').value = data.service_id || '';
+            document.getElementById('empPoste').value = data.poste || '';
+            document.getElementById('empNumeroPoste').value = data.numero_poste || '';
+            document.getElementById('empDateEmbauche').value = data.date_embauche ? data.date_embauche.split('/').reverse().join('-') : '';
+            document.getElementById('empAnciennete').value = data.anciennete + ' ans';
+            document.getElementById('empTypeContrat').value = data.type_contrat || 'CDI';
+            document.getElementById('empSalaire').value = data.salaire_base || 0;
+            document.getElementById('empPrevenir').value = data.personne_a_prevenir || '';
+            document.getElementById('empTelephonePrevenir').value = data.telephone_prevenir || '';
+            document.getElementById('empLienParente').value = data.lien_parente || '';
+            
+            // Ajouter le champ statut si présent dans le modal
+            const statutSelect = document.getElementById('empStatut');
+            if (statutSelect) {
+                statutSelect.value = data.statut || 'Actif';
+            }
+            
+            // Recharger les services et sélectionner le bon
+            chargerServices(data.service_id);
+            
+            new bootstrap.Modal(document.getElementById('employeModal')).show();
+        })
+        .catch(error => {
+            alert('Erreur de chargement: ' + error);
+        });
 }
 
+// ============================================
+// SUPPRIMER EMPLOYE
+// ============================================
 function supprimerEmploye(id) {
-    if (confirm('Voulez-vous vraiment supprimer cet employe ?')) {
-        alert('Fonctionnalite en cours de developpement');
+    const employe = tousEmployes.find(e => e.id === id);
+    if (!employe) return;
+    
+    if (confirm(`Voulez-vous vraiment supprimer l'employé ${employe.nom} ${employe.prenom} (${employe.matricule}) ?\n\nCette action est irréversible.`)) {
+        fetch(`/rh/employe/${id}`, {
+            method: 'DELETE',
+            headers: {'Content-Type': 'application/json'}
+        })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                alert('Employé supprimé avec succès !');
+                chargerEmployes();
+            } else {
+                alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+            }
+        })
+        .catch(error => alert('Erreur: ' + error));
     }
 }
 
@@ -546,4 +625,5 @@ document.addEventListener('DOMContentLoaded', function() {
     chargerEmployes();
 });
 </script>
+
 {% endblock %}

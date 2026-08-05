@@ -142,7 +142,7 @@
                             <img src="{{ structure_logo }}" alt="Logo" style="max-height: 60px; max-width: 120px; background: white; padding: 4px; border-radius: 6px;">
                             {% endif %}
                             <div>
-                                <h4 style="margin: 0; font-size: 14px;">{{ structure_nom or "Medilogic-GHP" }}</h4>
+                                <h4 style="margin: 0; font-size: 14px;">{{ structure_nom or "SSoftone v10" }}</h4>
                                 <p style="margin: 3px 0 0 0; font-size: 9px; opacity: 0.9;">
                                     {{ structure_adresse or "" }}<br>
                                     Tél: {{ structure_telephone or "" }} | Email: {{ structure_email or "" }}
@@ -157,37 +157,46 @@
                     </div>
                 </div>
 
-                <!-- INFOS PATIENT -->
-                <div style="font-size: 9px; margin-bottom: 8px; padding: 4px 8px; background: #f8f9fa; border-radius: 4px;">
-                    <strong>Patient :</strong> {{ patient_nom }}<br>
-                    
-                    {% if type_assurance in ['AMU-CNSS', 'AMU-INAM'] %}
-                        <strong>Assurance :</strong> {{ type_assurance }} ({{ taux_assurance }}%)<br>
-                        {% if numero_assure and numero_assure != '' %}
-                        <strong>N° Assuré :</strong> {{ numero_assure }}<br>
-                        {% endif %}
-                        
-                        {% if assurance2_appliquee and assurance2_appliquee == true and assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' %}
-                        <strong>Assurance complémentaire :</strong> {{ assurance2_nom }} ({{ taux_assurance2 }}%)
-                        {% if taux_modifie and taux_modifie == true %}
-                        <span style="color: #856404; background: #fff3cd; padding: 0px 4px; border-radius: 2px; font-size: 8px;">⚠️ exceptionnel</span>
-                        {% endif %}
-                        <br>
-                        {% if numero_assure2 and numero_assure2 != '' %}
-                        <strong>N° Assuré 2 :</strong> {{ numero_assure2 }}<br>
-                        {% endif %}
-                        {% endif %}
-                    {% else %}
-                        <strong>Assurance :</strong> Non assuré<br>
-                        {% if taux_assurance > 0 %}
-                        <strong>Aide hospitalière :</strong> {{ taux_assurance }}%<br>
-                        {% endif %}
-                    {% endif %}
-                    
-                    <strong>Paiement :</strong> {{ mode_paiement }}
-                </div>
+<!-- INFOS PATIENT -->
+<div style="font-size: 9px; margin-bottom: 8px; padding: 4px 8px; background: #f8f9fa; border-radius: 4px;">
+    <strong>Patient :</strong> {{ patient_nom }}<br>
+    
+    <!-- 🔥 ASSURANCE PRINCIPALE -->
+    {% if type_assurance in ['AMU-CNSS', 'AMU-INAM'] %}
+        <strong>Assurance :</strong> {{ type_assurance }} ({{ taux_assurance }}%)
+        {% if not assurance_principale_active %}
+        <span style="color: #856404; background: #fff3cd; padding: 0px 4px; border-radius: 2px; font-size: 8px;">⚠️ Désactivée</span>
+        {% endif %}
+        <br>
+        {% if numero_assure and numero_assure != '' %}
+        <strong>N° Assuré :</strong> {{ numero_assure }}<br>
+        {% endif %}
+    {% else %}
+        <strong>Assurance :</strong> Non assuré<br>
+    {% endif %}
+    
+    <!-- 🔥 ASSURANCE COMPLÉMENTAIRE (CAC) - S'affiche si présente -->
+    {% if assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and assurance2_appliquee and assurance2_appliquee == true %}
+    <strong>Assurance complémentaire :</strong> {{ assurance2_nom }} ({{ taux_assurance2 }}%)
+    {% if taux_modifie and taux_modifie == true %}
+    <span style="color: #856404; background: #fff3cd; padding: 0px 4px; border-radius: 2px; font-size: 8px;">⚠️ exceptionnel</span>
+    {% endif %}
+    <br>
+    {% if numero_assure2 and numero_assure2 != '' %}
+    <strong>N° Assuré 2 :</strong> {{ numero_assure2 }}<br>
+    {% endif %}
+    {% endif %}
+    
+    <!-- 🔥 AIDE HOSPITALIÈRE - S'affiche si > 0 -->
+    {% if taux_aide and taux_aide > 0 and aide_hospitaliere and aide_hospitaliere > 0 %}
+    <strong>Aide hospitalière :</strong> {{ taux_aide }}%
+    <span style="color: #17a2b8; font-size: 8px;">(appliquée)</span><br>
+    {% endif %}
+    
+    <strong>Paiement :</strong> {{ mode_paiement }}
+</div>
 
-                <!-- TABLEAU DES ARTICLES - SANS ICÔNES -->
+                <!-- TABLEAU DES ARTICLES -->
                 <table style="width:100%; border-collapse: collapse; font-size: 10px;">
                     <thead>
                         <tr style="background:#f8f9fa; border-bottom: 2px solid #dee2e6;">
@@ -221,78 +230,83 @@
 
                 <hr style="margin:6px 0;">
 
-                <!-- TOTAUX -->
-                <div style="margin-top:6px; font-size:10px;">
-                    <div style="display:flex; justify-content:space-between;">
-                        <span>Sous-total clinique :</span>
-                        <span><strong>{{ sous_total|default(0)|round(0)|int }} FCFA</strong></span>
-                    </div>
-                    
-                    {% if type_assurance in ['AMU-CNSS', 'AMU-INAM'] and base_remboursement and base_remboursement > 0 %}
-                    <div style="display:flex; justify-content:space-between; color:#6c757d; font-size:0.9em; border-top:1px dashed #ddd; padding-top:2px; margin-top:2px;">
-                        <span>Base remboursement (PBR) :</span>
-                        <span><strong>{{ base_remboursement|default(0)|round(0)|int }} FCFA</strong></span>
-                    </div>
-                    {% endif %}
-                    
-                    {% if prise_en_charge > 0 %}
-                    <div style="display:flex; justify-content:space-between; color:#28a745;">
-                        <span>
-                            {% if type_assurance in ['AMU-CNSS', 'AMU-INAM'] %}
-                                Prise en charge AMU ({{ taux_assurance }}%) :
-                            {% else %}
-                                Aide hospitalière ({{ taux_assurance }}%) :
-                            {% endif %}
-                        </span>
-                        <span>- {{ prise_en_charge|default(0)|round(0)|int }} FCFA</span>
-                    </div>
-                    {% endif %}
-                    
-                    {% if type_assurance in ['AMU-CNSS', 'AMU-INAM'] and assurance2_appliquee and assurance2_appliquee == true and prise_en_charge2 and prise_en_charge2 > 0 %}
-                    <div style="display:flex; justify-content:space-between; {% if taux_modifie and taux_modifie == true %}color:#856404;{% else %}color:#17a2b8;{% endif %}">
-                        <span>
-                            Prise en charge {{ assurance2_nom }} ({{ taux_assurance2 }}%)
-                            {% if taux_modifie and taux_modifie == true %}
-                            <span style="font-size:8px; background:#fff3cd; padding:0px 3px; border-radius:2px;">⚠️ exceptionnel</span>
-                            {% endif %}
-                        </span>
-                        <span>- {{ prise_en_charge2|default(0)|round(0)|int }} FCFA</span>
-                    </div>
-                    {% if taux_modifie and taux_modifie == true and taux_original and taux_original > 0 %}
-                    <div style="display:flex; justify-content:space-between; color:#6c757d; font-size:9px; padding-left:20px;">
-                        <span>Taux habituel:</span>
-                        <span>{{ taux_original }}%</span>
-                    </div>
-                    {% endif %}
-                    {% endif %}
-                    
-                    <div style="display:flex; justify-content:space-between; font-weight:bold; margin-top:6px; padding-top:6px; border-top:2px solid #ddd;">
-                        <span>NET À PAYER :</span>
-                        <span style="color:#dc3545;">{{ net_a_payer|default(0)|round(0)|int }} FCFA</span>
-                    </div>
-                    
-                    {% if montant_donne and montant_donne > 0 %}
-                    <div style="display:flex; justify-content:space-between; margin-top:3px; padding-top:3px; border-top:1px dashed #ddd;">
-                        <span>Montant donné :</span>
-                        <span><strong>{{ montant_donne|round(0)|int }} FCFA</strong></span>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; color:#28a745; font-weight:bold; margin-top:3px; padding-top:3px; border-top:1px dashed #28a745;">
-                        <span>Rendu au patient :</span>
-                        <span><strong>{{ rendu|default(0)|round(0)|int }} FCFA</strong></span>
-                    </div>
-                    {% endif %}
-                    
-                    {% if reste_a_payer and reste_a_payer > 0 %}
-                    <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:2px solid #dc3545; background:#fff3cd; padding:4px 8px; border-radius:4px;">
-                        <span style="font-weight:bold; color:#856404;">RESTE À PAYER :</span>
-                        <span style="font-weight:bold; color:#dc3545;">{{ reste_a_payer|default(0)|round(0)|int }} FCFA</span>
-                    </div>
-                    <div style="font-size:8px; color:#856404; margin-top:2px; text-align:center;">
-                        Facture N° : {% if numero_facture %}{{ numero_facture }}{% else %}en cours{% endif %}
-                    </div>
-                    {% endif %}
-                </div>
-
+<!-- TOTAUX -->
+<div style="margin-top:6px; font-size:10px;">
+    <div style="display:flex; justify-content:space-between;">
+        <span>Sous-total clinique :</span>
+        <span><strong>{{ sous_total|default(0)|round(0)|int }} FCFA</strong></span>
+    </div>
+    
+    {% if type_assurance in ['AMU-CNSS', 'AMU-INAM'] and base_remboursement and base_remboursement > 0 %}
+    <div style="display:flex; justify-content:space-between; color:#6c757d; font-size:0.9em; border-top:1px dashed #ddd; padding-top:2px; margin-top:2px;">
+        <span>Base remboursement (PBR) :</span>
+        <span><strong>{{ base_remboursement|default(0)|round(0)|int }} FCFA</strong></span>
+    </div>
+    {% endif %}
+    
+    <!-- 🔥 PRISE EN CHARGE AMU -->
+    {% if type_assurance in ['AMU-CNSS', 'AMU-INAM'] and assurance_principale_active != false and prise_en_charge > 0 %}
+    <div style="display:flex; justify-content:space-between; color:#28a745;">
+        <span>Prise en charge AMU ({{ taux_assurance }}%) :</span>
+        <span>- {{ prise_en_charge|default(0)|round(0)|int }} FCFA</span>
+    </div>
+    {% endif %}
+    
+    <!-- 🔥🔥🔥 CAC (en premier - même si patient non assuré) 🔥🔥🔥 -->
+    {% if assurance2_appliquee and assurance2_appliquee == true and prise_en_charge2 and prise_en_charge2 > 0 %}
+    <div style="display:flex; justify-content:space-between; {% if taux_modifie and taux_modifie == true %}color:#856404;{% else %}color:#17a2b8;{% endif %}">
+        <span>
+            Prise en charge {{ assurance2_nom }} ({{ taux_assurance2 }}%)
+            {% if taux_modifie and taux_modifie == true %}
+            <span style="font-size:8px; background:#fff3cd; padding:0px 3px; border-radius:2px;">⚠️ exceptionnel</span>
+            {% endif %}
+        </span>
+        <span>- {{ prise_en_charge2|default(0)|round(0)|int }} FCFA</span>
+    </div>
+    {% if taux_modifie and taux_modifie == true and taux_original and taux_original > 0 %}
+    <div style="display:flex; justify-content:space-between; color:#6c757d; font-size:9px; padding-left:20px;">
+        <span>Taux habituel:</span>
+        <span>{{ taux_original }}%</span>
+    </div>
+    {% endif %}
+    {% endif %}
+    
+    <!-- 🔥🔥🔥 AIDE HOSPITALIÈRE (après la CAC) 🔥🔥🔥 -->
+    {% if taux_aide and taux_aide > 0 and aide_hospitaliere and aide_hospitaliere > 0 %}
+    <div style="display:flex; justify-content:space-between; color:#17a2b8; border-top:1px dashed #17a2b8; padding-top:2px; margin-top:2px;">
+        <span>Aide de l'hôpital ({{ taux_aide }}%) :</span>
+        <span>- {{ aide_hospitaliere|default(0)|round(0)|int }} FCFA</span>
+    </div>
+    {% endif %}
+    
+    <!-- NET À PAYER -->
+    <div style="display:flex; justify-content:space-between; font-weight:bold; margin-top:6px; padding-top:6px; border-top:2px solid #ddd;">
+        <span>NET À PAYER :</span>
+        <span style="color:#dc3545;">{{ net_a_payer|default(0)|round(0)|int }} FCFA</span>
+    </div>
+    
+    <!-- PAIEMENT -->
+    {% if montant_donne and montant_donne > 0 %}
+    <div style="display:flex; justify-content:space-between; margin-top:3px; padding-top:3px; border-top:1px dashed #ddd;">
+        <span>Montant donné :</span>
+        <span><strong>{{ montant_donne|round(0)|int }} FCFA</strong></span>
+    </div>
+    <div style="display:flex; justify-content:space-between; color:#28a745; font-weight:bold; margin-top:3px; padding-top:3px; border-top:1px dashed #28a745;">
+        <span>Rendu au patient :</span>
+        <span><strong>{{ rendu|default(0)|round(0)|int }} FCFA</strong></span>
+    </div>
+    {% endif %}
+    
+    {% if reste_a_payer and reste_a_payer > 0 %}
+    <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:2px solid #dc3545; background:#fff3cd; padding:4px 8px; border-radius:4px;">
+        <span style="font-weight:bold; color:#856404;">RESTE À PAYER :</span>
+        <span style="font-weight:bold; color:#dc3545;">{{ reste_a_payer|default(0)|round(0)|int }} FCFA</span>
+    </div>
+    <div style="font-size:8px; color:#856404; margin-top:2px; text-align:center;">
+        Facture N° : {% if numero_facture %}{{ numero_facture }}{% else %}en cours{% endif %}
+    </div>
+    {% endif %}
+</div>
                 <!-- CAISSIER -->
                 <div style="color:#6c757d; font-size:8px; margin-top:6px; text-align:center;">
                     Vendu par : {{ nom_caissier }}
@@ -302,7 +316,7 @@
 
                 <!-- MERCI -->
                 <div style="text-align:center; font-size:8px; color:#6c757d;">
-                    Merci de votre visite !
+                    Bonne guérison!
                 </div>
             </div>
         </div>

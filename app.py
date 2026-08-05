@@ -10,10 +10,12 @@ import json
 import os
 import pandas as pd
 from io import BytesIO
-
+from models import Vente
 # ⭐ Importer depuis db_helper et models
 from db_helper import db as db_helper
-from models import db, StructureMapping, Patient, Utilisateur, Structure, Employe, Service, Conge, Permission, DocumentRH, SignatureRH
+from models import db, StructureMapping, Patient, Utilisateur, Structure, Employe, Service, Conge, Permission, DocumentRH, Vente, SignatureRH
+
+from routes.statistiques import statistiques_bp
 
 # ========== DÉTECTION ENVIRONNEMENT ==========
 IS_PRODUCTION = os.environ.get('RENDER') == 'true' or os.environ.get('PRODUCTION') == 'true'
@@ -39,6 +41,9 @@ app.register_blueprint(rh_bp)
 
 from routes.comptabilite import compta_bp
 app.register_blueprint(compta_bp)
+
+# Enregistrer le blueprint
+app.register_blueprint(statistiques_bp)
 
 @app.after_request
 def auto_commit_after_request(response):
@@ -174,6 +179,65 @@ def execute_query(query, params=None, commit=False):
 db.execute_query = execute_query
 
 print("✅ db.execute_query défini avec succès")  # Pour vérifier
+
+
+# app.py - Fonction de traitement auto (version sans dépendance aux scripts)
+
+def traiter_vente_auto(vente_id, structure_id):
+    """
+    Traite automatiquement une vente (sans dépendance aux scripts)
+    """
+    from sqlalchemy import text
+    import json
+    from datetime import date
+    from utils.categorisation import categoriser_acte
+    
+    with app.app_context():
+        try:
+            print(f"🚀 Traitement automatique de la vente #{vente_id}")
+            
+            # ⭐ 1. Récupérer la vente
+            vente = Vente.query.get(vente_id)
+            if not vente:
+                print(f"❌ Vente #{vente_id} non trouvée")
+                return
+            
+            # ⭐ 2. Catégoriser les actes (si pas déjà fait)
+            if not vente.traite_comptable:
+                actes = vente.actes if isinstance(vente.actes, list) else []
+                
+                if actes:
+                    actes_categorises = []
+                    for acte in actes:
+                        if isinstance(acte, dict):
+                            nom = acte.get('nom', '')
+                            info = categoriser_acte(nom)
+                            acte['categorie'] = info['categorie']
+                            acte['compte'] = info['compte']
+                            acte['code'] = info['code']
+                            actes_categorises.append(acte)
+                    
+                    vente.categorie_actes = actes_categorises
+                    vente.traite_comptable = True
+                    db.session.commit()
+                    print(f"✅ Vente #{vente_id} catégorisée ({len(actes_categorises)} actes)")
+                else:
+                    vente.traite_comptable = True
+                    db.session.commit()
+            
+            # ⭐ 3. Marquer comme générée (regroupement se fera via le script)
+            if vente.traite_comptable and not vente.ecriture_generee:
+                vente.ecriture_generee = True
+                db.session.commit()
+                print(f"✅ Vente #{vente_id} marquée comme générée")
+            
+            print(f"✅ Vente #{vente_id} traitée avec succès")
+            
+        except Exception as e:
+            print(f"❌ Erreur traitement auto vente #{vente_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            db.session.rollback()
 
 # ========== CONFIGURATION EMAIL ==========
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
@@ -1689,18 +1753,26 @@ def recu(vente_id, type):
     reste_a_payer = 0
     numero_facture = None
     
+    # 🔥🔥🔥 CHAMPS POUR L'AIDE HOSPITALIÈRE 🔥🔥🔥
+    taux_aide = 0
+    aide_hospitaliere = 0
+    assurance_principale_active = True
+    
     type_bd = 'pharmacie' if type == 'pharma' else type
     
     print(f"🔍 Recherche vente {vente_id} (type reçu: {type}, type BD: {type_bd})")
     
-    # 🔥 Lire depuis NEON
+    # 🔥 Lire depuis NEON - AJOUTER taux_aide et aide_hospitaliere
     vente = db.execute_query("""
         SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
                p.assurance2_nom as patient_assurance2_nom, 
                p.taux_assurance2 as patient_taux_assurance2, 
                p.numero_assure2,
                v.reste_a_payer,
-               v.base_remboursement
+               v.base_remboursement,
+               v.assurance_principale_active,
+               v.taux_aide,
+               v.aide_hospitaliere
         FROM ventes v
         LEFT JOIN patients p ON v.patient_id = p.id
         WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
@@ -1733,6 +1805,9 @@ def recu(vente_id, type):
         taux_assurance2 = float(v.get('taux_assurance2', 0))
         prise_en_charge2 = float(v.get('prise_en_charge2', 0))
         numero_assure2 = v.get('numero_assure2', '')
+
+        assurance2_appliquee = assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and prise_en_charge2 > 0
+
         
         # Récupérer le montant donné et le rendu
         montant_donne = float(v.get('montant_donne', 0)) if v.get('montant_donne') is not None else 0
@@ -1740,6 +1815,11 @@ def recu(vente_id, type):
         
         # Récupérer le reste à payer
         reste_a_payer = float(v.get('reste_a_payer', 0)) if v.get('reste_a_payer') is not None else 0
+        
+        # 🔥🔥🔥 RÉCUPÉRER L'AIDE HOSPITALIÈRE 🔥🔥🔥
+        assurance_principale_active = v.get('assurance_principale_active', True)
+        taux_aide = float(v.get('taux_aide', 0)) if v.get('taux_aide') is not None else 0
+        aide_hospitaliere = float(v.get('aide_hospitaliere', 0)) if v.get('aide_hospitaliere') is not None else 0
         
         # Récupérer le taux original du patient
         patient_taux_original = float(v.get('patient_taux_assurance2', 0))
@@ -1754,9 +1834,6 @@ def recu(vente_id, type):
                 print(f"🔴 TAUX MODIFIÉ DÉTECTÉ: {taux_assurance2}% (original: {patient_taux_original}%)")
         
         # ⭐⭐ RECALCULER LA PRISE EN CHARGE ICI ⭐⭐
-        # ⭐ Patient non assuré → l'aide s'applique sur le sous-total
-        # ⭐ Patient assuré → la prise en charge s'applique sur le PBR
-        
         est_assure = type_assurance in ['amu_cnss', 'amu_inam']
         
         # 🔥 Récupérer les articles avec leurs infos de prise en charge
@@ -1765,9 +1842,10 @@ def recu(vente_id, type):
             if isinstance(produits_data, str):
                 produits_data = json.loads(produits_data)
             
-            # ⭐ Calculer le sous-total des articles avec prise_en_charge_amu = True
             sous_total_amu = 0
             pbr_total_amu = 0
+            baseCAC = 0
+
             
             for p in produits_data:
                 prix_unitaire = float(p.get('prix_reel', p.get('prix', p.get('prix_vente', 0))))
@@ -1782,6 +1860,20 @@ def recu(vente_id, type):
                     sous_total_amu += total_article
                     pbr_total_amu += min(prix_unitaire, pbr_article) * quantite
                 
+                # 🔥 CALCUL DE LA CAC POUR LA PHARMACIE
+                if prise_cac:
+                    if est_assure and assurance_principale_active:
+                        if prise_amu:
+                            baseAMU = min(prix_unitaire, pbr_article)
+                            priseAMU = (baseAMU * taux_assurance * quantite) / 100
+                            reste = total_article - priseAMU
+                            if reste > 0:
+                                baseCAC += reste
+                        else:
+                            baseCAC += total_article
+                    else:
+                        baseCAC += total_article
+                
                 articles.append({
                     'nom': p.get('nom', 'Produit'),
                     'quantite': quantite,
@@ -1791,14 +1883,22 @@ def recu(vente_id, type):
                     'prise_en_charge_amu': prise_amu,
                     'prise_en_charge_cac': prise_cac
                 })
+            
+            # 🔥 Appliquer le taux CAC pour la pharmacie
+            if baseCAC > 0 and taux_assurance2 > 0:
+                prise_en_charge2 = (baseCAC * taux_assurance2) / 100
+            else:
+                prise_en_charge2 = 0
+
+
         else:  # actes
             actes_data = v.get('actes', [])
             if isinstance(actes_data, str):
                 actes_data = json.loads(actes_data)
             
-            # ⭐ Calculer le sous-total des articles avec prise_en_charge_amu = True
             sous_total_amu = 0
             pbr_total_amu = 0
+            baseCAC = 0
             
             for a in actes_data:
                 prix_unitaire = float(a.get('prix', 0))
@@ -1813,6 +1913,20 @@ def recu(vente_id, type):
                     sous_total_amu += total_article
                     pbr_total_amu += min(prix_unitaire, pbr_article) * quantite
                 
+                # 🔥🔥🔥 CALCUL DE LA CAC 🔥🔥🔥
+                if prise_cac:
+                    if est_assure and assurance_principale_active:
+                        if prise_amu:
+                            baseAMU = min(prix_unitaire, pbr_article)
+                            priseAMU = (baseAMU * taux_assurance * quantite) / 100
+                            reste = total_article - priseAMU
+                            if reste > 0:
+                                baseCAC += reste
+                        else:
+                            baseCAC += total_article
+                    else:
+                        baseCAC += total_article
+                
                 articles.append({
                     'nom': a.get('nom', 'Acte'),
                     'quantite': quantite,
@@ -1822,33 +1936,60 @@ def recu(vente_id, type):
                     'prise_en_charge_amu': prise_amu,
                     'prise_en_charge_cac': prise_cac
                 })
+            
+            # 🔥 Appliquer le taux CAC
+            if baseCAC > 0 and taux_assurance2 > 0:
+                prise_en_charge2 = (baseCAC * taux_assurance2) / 100
+            else:
+                prise_en_charge2 = 0
+
         
-        # ⭐⭐⭐ RECALCUL DE LA PRISE EN CHARGE ⭐⭐⭐
-        if est_assure:
-            # Patient assuré → Utiliser le PBR
+        # ⭐⭐⭐ RECALCUL DE LA PRISE EN CHARGE AMU ⭐⭐⭐
+        prise_en_charge = 0
+        if est_assure and assurance_principale_active:
+            # Patient assuré ET assurance active → Utiliser le PBR
             base = pbr_total_amu
             if sous_total_amu < pbr_total_amu:
                 base = sous_total_amu
             if base > 0 and taux_assurance > 0:
                 prise_en_charge = (base * taux_assurance) / 100
-            else:
-                prise_en_charge = 0
             print(f"📊 Patient assuré - Base PBR: {base}, Prise en charge: {prise_en_charge}")
         else:
-            # ⭐ Patient NON assuré → Utiliser le prix clinique (sous-total)
-            # L'aide hospitalière s'applique sur le sous-total des articles avec prise_en_charge_amu = True
-            if sous_total_amu > 0 and taux_assurance > 0:
-                prise_en_charge = (sous_total_amu * taux_assurance) / 100
-            else:
-                prise_en_charge = 0
-            print(f"📊 Patient non assuré - Base clinique: {sous_total_amu}, Aide: {prise_en_charge}")
+            # Patient non assuré ou assurance désactivée → pas d'AMU
+            prise_en_charge = 0
+            print(f"📊 Patient non assuré ou assurance désactivée - Pas d'AMU")
         
-        # ⭐ Calcul du net à payer
-        net_a_payer = sous_total - prise_en_charge - prise_en_charge2
+        # 🔥🔥🔥 RECALCUL DE L'AIDE HOSPITALIÈRE (3 cas) 🔥🔥🔥
+        aide_hospitaliere_calculee = 0
+        
+        if taux_aide > 0:
+            # Déterminer la base pour l'aide (3 cas)
+            if est_assure and assurance_principale_active:
+                # Cas 1: Patient assuré → Aide sur le RESTE après AMU + CAC
+                base_aide = sous_total - prise_en_charge - prise_en_charge2
+                print(f"📊 Cas 1 - Patient assuré, base aide = reste après AMU+CAC: {base_aide}")
+            elif assurance2_appliquee and not est_assure:
+                # Cas 2: Patient NON assuré avec CAC → Aide sur le RESTE après CAC
+                base_aide = sous_total - prise_en_charge2
+                print(f"📊 Cas 2 - Patient non assuré avec CAC, base aide = reste après CAC: {base_aide}")
+            else:
+                # Cas 3: Patient NON assuré sans CAC → Aide sur le SOUS-TOTAL
+                base_aide = sous_total
+                print(f"📊 Cas 3 - Patient non assuré sans CAC, base aide = sous-total: {base_aide}")
+            
+            if base_aide > 0 and taux_aide > 0:
+                aide_hospitaliere_calculee = (base_aide * taux_aide) / 100
+                print(f"📊 Aide hospitalière recalculée: {aide_hospitaliere_calculee} FCFA (taux {taux_aide}%)")
+        
+        # 🔥🔥🔥 CALCUL DU NET AVEC AIDE HOSPITALIÈRE RECALCULÉE 🔥🔥🔥
+        net_a_payer = sous_total - prise_en_charge - prise_en_charge2 - aide_hospitaliere_calculee
         if net_a_payer < 0:
             net_a_payer = 0
         
-        print(f"📊 Sous-total: {sous_total}, Prise en charge: {prise_en_charge}, Net: {net_a_payer}")
+        print(f"📊 Sous-total: {sous_total}, AMU: {prise_en_charge}, CAC: {prise_en_charge2}, Aide recalculée: {aide_hospitaliere_calculee}, Net: {net_a_payer}")
+        
+        # ⭐ Mettre à jour aide_hospitaliere avec la valeur recalculée pour le template
+        aide_hospitaliere = aide_hospitaliere_calculee
     
     # Gestion des assurances
     assurance_text = type_assurance
@@ -1870,8 +2011,8 @@ def recu(vente_id, type):
                          sous_total=sous_total,
                          base_remboursement=base_remboursement,
                          taux_assurance=taux_assurance,
-                         prise_en_charge=prise_en_charge,  # ⭐ Recalculée
-                         net_a_payer=net_a_payer,          # ⭐ Recalculée
+                         prise_en_charge=prise_en_charge,
+                         net_a_payer=net_a_payer,
                          patient_nom=patient_nom,
                          type_assurance=assurance_text,
                          numero_assure=numero_assure,
@@ -1893,7 +2034,10 @@ def recu(vente_id, type):
                          montant_donne=montant_donne,
                          rendu=rendu,
                          reste_a_payer=reste_a_payer,
-                         numero_facture=numero_facture)
+                         numero_facture=numero_facture,
+                         assurance_principale_active=assurance_principale_active,
+                         taux_aide=taux_aide,
+                         aide_hospitaliere=aide_hospitaliere)
 
 @app.route('/recu_structure/<int:vente_id>/<string:type>')
 @login_required
@@ -4099,6 +4243,12 @@ def api_vente_pharma():
         # 🔥 Récupérer les infos de modification de taux
         taux_temp_modifie = data.get('taux_temp_modifie', False)
         taux_original = data.get('taux_original', 0)
+
+        # 🔥🔥🔥 RÉCUPÉRER L'AIDE HOSPITALIÈRE 🔥🔥🔥
+        assurance_principale_active = data.get('assurance_principale_active', True)
+        taux_aide = float(data.get('taux_aide', 0))
+        aide_hospitaliere = float(data.get('aide_hospitaliere', 0))
+
         
         # 🔥 Récupérer les produits avec leurs infos de prise en charge
         produits_data = data.get('produits', [])
@@ -4131,6 +4281,7 @@ def api_vente_pharma():
         print(f"💰 Reste à payer: {reste_a_payer} FCFA")
         
         # ========== 1. ENREGISTRER LA VENTE DANS NEON ==========
+        # 🔥 MODIFIER LA REQUÊTE SQL POUR AJOUTER LE CHAMP
         result = db.execute_query("""
             INSERT INTO ventes (
                 patient_id, 
@@ -4155,9 +4306,12 @@ def api_vente_pharma():
                 base_remboursement,
                 reste_a_payer,
                 taux_temp_modifie,
-                taux_original
+                taux_original,
+                assurance_principale_active,
+                taux_aide,
+                aide_hospitaliere
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, 'validee', %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, 'validee', %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             patient_id,
@@ -4180,7 +4334,10 @@ def api_vente_pharma():
             base_remboursement,
             reste_a_payer,
             taux_temp_modifie,
-            taux_original
+            taux_original,
+            assurance_principale_active,  # 🔥 NOUVEAU
+            taux_aide,                    # 🔥 NOUVEAU
+            aide_hospitaliere             # 🔥 NOUVEAU
         ))
         
         if not result or len(result) == 0:
@@ -4223,35 +4380,6 @@ def api_vente_pharma():
         else:
             print(f"ℹ️ montant_effectif = 0, pas de recette patient")
         
-        # ========== 3. AJOUTER LA RECETTE ASSURANCE COMPLÉMENTAIRE ==========
-        if assurance2_nom and taux_assurance2 > 0 and prise_en_charge2 > 0:
-            recette_assurance2 = db.execute_query("""
-                INSERT INTO recettes (
-                    structure_id, 
-                    montant, 
-                    source, 
-                    source_id, 
-                    source_type, 
-                    description, 
-                    created_by_nom,
-                    date_recette
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                RETURNING id
-            """, (
-                structure_id,
-                prise_en_charge2,
-                'assurance',
-                vente_id,
-                'vente_pharma',
-                f'Prise en charge {assurance2_nom} pour vente pharmacie #{vente_id} - ' + data.get('patient_nom', 'Patient'),
-                vendeur
-            ))
-            
-            if recette_assurance2 and len(recette_assurance2) > 0:
-                print(f"✅ Recette assurance {assurance2_nom} ajoutée: {prise_en_charge2} FCFA")
-            else:
-                print("⚠️ Erreur lors de l'insertion de la recette assurance")
         
         # ========== 4. METTRE À JOUR LE STOCK DANS GOOGLE SHEETS ==========
         try:
@@ -4325,6 +4453,20 @@ def api_vente_pharma():
         
         # ========== 6. RETOUR API AVEC TOUTES LES INFOS ==========
         print(f"✅ Vente pharmacie #{vente_id} terminée avec succès!")
+
+        # ⭐⭐⭐ TRAITEMENT AUTOMATIQUE COMMENTÉ TEMPORAIREMENT ⭐⭐⭐
+        # try:
+        #     import threading
+        #     thread = threading.Thread(
+        #         target=traiter_vente_auto,
+        #         args=(vente_id, structure_id)
+        #     )
+        #     thread.daemon = True
+        #     thread.start()
+        #     print(f"⏳ Traitement automatique de la vente pharma #{vente_id} lancé en arrière-plan")
+        # except Exception as e:
+        #     print(f"⚠️ Erreur lancement traitement auto pharma: {e}")
+
         return jsonify({
             'success': True, 
             'vente_id': vente_id,
@@ -4339,6 +4481,72 @@ def api_vente_pharma():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+# app.py - Après la route pharma
+
+def traiter_vente_auto(vente_id, structure_id):
+    """
+    Traite automatiquement une vente (valable pour actes ET pharmacie)
+    """
+    from sqlalchemy import text
+    import json
+    from datetime import date
+    from utils.categorisation import categoriser_acte
+    
+    with app.app_context():
+        try:
+            print(f"🚀 Traitement automatique de la vente #{vente_id}")
+            
+            # ⭐ Récupérer la vente
+            vente = Vente.query.get(vente_id)
+            if not vente:
+                print(f"❌ Vente #{vente_id} non trouvée")
+                return
+            
+            # ⭐ Pour la pharmacie, les produits sont déjà catégorisés (compte 712)
+            # On les marque simplement comme traités
+            if vente.type == 'pharmacie':
+                vente.traite_comptable = True
+                vente.ecriture_generee = True
+                db.session.commit()
+                print(f"✅ Vente pharmacie #{vente_id} traitée")
+                return
+            
+            # ⭐ Pour les actes : catégoriser
+            if not vente.traite_comptable:
+                actes = vente.actes if isinstance(vente.actes, list) else []
+                
+                if actes:
+                    actes_categorises = []
+                    for acte in actes:
+                        if isinstance(acte, dict):
+                            nom = acte.get('nom', '')
+                            info = categoriser_acte(nom)
+                            acte['categorie'] = info['categorie']
+                            acte['compte'] = info['compte']
+                            acte['code'] = info['code']
+                            actes_categorises.append(acte)
+                    
+                    vente.categorie_actes = actes_categorises
+                    print(f"✅ Vente #{vente_id} catégorisée ({len(actes_categorises)} actes)")
+                
+                vente.traite_comptable = True
+                db.session.commit()
+            
+            # ⭐ Marquer comme générée
+            if not vente.ecriture_generee:
+                vente.ecriture_generee = True
+                db.session.commit()
+                print(f"✅ Vente #{vente_id} marquée comme générée")
+            
+            print(f"✅ Vente #{vente_id} traitée avec succès")
+            
+        except Exception as e:
+            print(f"❌ Erreur traitement auto vente #{vente_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            db.session.rollback()
+
 
 @app.route('/api/produits/<int:id>/stock', methods=['GET'])
 @login_required
@@ -4577,6 +4785,12 @@ def api_add_acte_vente():
         # 🔥 Récupérer les infos de modification de taux
         taux_temp_modifie = data.get('taux_temp_modifie', False)
         taux_original = data.get('taux_original', 0)
+
+        # 🔥🔥🔥 RÉCUPÉRER L'AIDE HOSPITALIÈRE 🔥🔥🔥
+        assurance_principale_active = data.get('assurance_principale_active', True)
+        taux_aide = float(data.get('taux_aide', 0))
+        aide_hospitaliere = float(data.get('aide_hospitaliere', 0))
+
         
         # 🔥 Récupérer les actes avec leurs infos de prise en charge
         actes_data = data.get('actes', [])
@@ -4608,6 +4822,7 @@ def api_add_acte_vente():
         print(f"💰 Reste à payer: {reste_a_payer} FCFA")
         
         # ========== 1. ENREGISTRER LA VENTE DANS NEON ==========
+        # 🔥 MODIFIER LA REQUÊTE SQL POUR AJOUTER LE CHAMP
         result = db.execute_query("""
             INSERT INTO ventes (
                 patient_id, 
@@ -4631,9 +4846,12 @@ def api_add_acte_vente():
                 base_remboursement,
                 reste_a_payer,
                 taux_temp_modifie,
-                taux_original
+                taux_original,
+                assurance_principale_active,
+                taux_aide,
+                aide_hospitaliere
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             patient_id,
@@ -4651,12 +4869,15 @@ def api_add_acte_vente():
             assurance2_nom,
             taux_assurance2,
             prise_en_charge2,
-            montant_donne,      # ✅ Stocké pour traçabilité
-            rendu,              # ✅ Stocké pour traçabilité
+            montant_donne,
+            rendu,
             base_remboursement,
             reste_a_payer,
             taux_temp_modifie,
-            taux_original
+            taux_original,
+            assurance_principale_active,  # 🔥 NOUVEAU
+            taux_aide,                    # 🔥 NOUVEAU
+            aide_hospitaliere             # 🔥 NOUVEAU
         ))
         
         if not result or len(result) == 0:
@@ -4666,10 +4887,8 @@ def api_add_acte_vente():
         vente_id = result[0]['id']
         print(f"✅ Vente actes enregistrée dans Neon avec ID: {vente_id}")
         
-        # ========== 2. AJOUTER LA RECETTE PATIENT (MONTANT DONNÉ) ==========
-        # 🔥 CORRECTION : Utiliser montant_effectif = montant_donne - rendu
+        # ========== 2. AJOUTER LA RECETTE PATIENT ==========
         montant_effectif = montant_donne - rendu
-
         if montant_effectif > 0:
             recette_result = db.execute_query("""
                 INSERT INTO recettes (
@@ -4690,52 +4909,16 @@ def api_add_acte_vente():
                 'patients',
                 vente_id,
                 'vente_acte',
-                f'Vente actes #{vente_id} - {data.get("patient_nom", "Patient")} - Encaissé: {montant_effectif} FCFA (Donné: {montant_donne}, Rendu: {rendu})',
-        user_name
+                f'Vente actes #{vente_id} - {data.get("patient_nom", "Patient")} - Encaissé: {montant_effectif} FCFA',
+                user_name
             ))
             
             if recette_result and len(recette_result) > 0:
                 print(f"✅ Recette patient ajoutée: {montant_effectif} FCFA")
-            else:
-                print("⚠️ Erreur lors de l'insertion de la recette patient")
-        else:
-            print(f"ℹ️ montant_effectif = 0, pas de recette patient")
         
-        # ========== 3. AJOUTER LA RECETTE ASSURANCE COMPLÉMENTAIRE ==========
-        if assurance2_nom and taux_assurance2 > 0 and prise_en_charge2 > 0:
-            recette_assurance2 = db.execute_query("""
-                INSERT INTO recettes (
-                    structure_id, 
-                    montant, 
-                    source, 
-                    source_id, 
-                    source_type, 
-                    description, 
-                    created_by_nom,
-                    date_recette
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                RETURNING id
-            """, (
-                structure_id,
-                prise_en_charge2,
-                'assurance',
-                vente_id,
-                'vente_acte',
-                f'Prise en charge {assurance2_nom} pour vente actes #{vente_id} - ' + data.get('patient_nom', 'Patient'),
-                user_name
-            ))
-            
-            if recette_assurance2 and len(recette_assurance2) > 0:
-                print(f"✅ Recette assurance {assurance2_nom} ajoutée: {prise_en_charge2} FCFA")
-            else:
-                print("⚠️ Erreur lors de l'insertion de la recette assurance")
         
         # ========== 4. METTRE À JOUR LE SOLDE DE CAISSE ==========
         try:
-            # ⚠️ ATTENTION : Le solde total inclut TOUTES les recettes
-            # Pour avoir le solde réel, il faut prendre le montant_donne uniquement
-            # (Les assurances seront payées plus tard par la structure)
             recettes_total = db.execute_query("""
                 SELECT COALESCE(SUM(montant), 0) as total 
                 FROM recettes 
@@ -4766,9 +4949,23 @@ def api_add_acte_vente():
         except Exception as e:
             print(f"⚠️ Erreur mise à jour solde: {e}")
         
+        # ⭐⭐⭐ NOUVEAU : TRAITEMENT AUTOMATIQUE DE LA VENTE ⭐⭐⭐
+        #try:
+            # ⭐ Lancer le traitement en arrière-plan
+            #import threading
+            #thread = threading.Thread(
+            #    target=traiter_vente_auto,
+            #    args=(vente_id, structure_id)
+            #)
+            #thread.daemon = True  # Le thread s'arrête si l'app s'arrête
+            #thread.start()
+            #print(f"⏳ Traitement automatique de la vente #{vente_id} lancé en arrière-plan")
+        #except Exception as e:
+            #print(f"⚠️ Erreur lancement traitement auto: {e}")
+            # La vente est déjà enregistrée, on continue
+        
         print(f"✅ Vente actes #{vente_id} terminée avec succès!")
         
-        # 🔥 Retourner les infos pour le frontend
         return jsonify({
             'success': True, 
             'vente_id': vente_id,
@@ -4782,6 +4979,44 @@ def api_add_acte_vente():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============================================================
+# ⭐ FONCTION DE TRAITEMENT AUTOMATIQUE (en dehors de la route)
+# ============================================================
+
+def traiter_vente_auto(vente_id, structure_id):
+    """
+    Traite automatiquement une vente :
+    1. Catégorisation des actes
+    2. Mise à jour du groupe de ventes du jour
+    """
+    with app.app_context():
+        try:
+            print(f"🚀 Traitement automatique de la vente #{vente_id}")
+            
+            # ⭐ 1. Récupérer la vente
+            vente = Vente.query.get(vente_id)
+            if not vente:
+                print(f"❌ Vente #{vente_id} non trouvée")
+                return
+            
+            # ⭐ 2. Catégoriser les actes (si pas déjà fait)
+            if not vente.traite_comptable:
+                from scripts.traiter_ventes import traiter_une_vente
+                traiter_une_vente(vente)
+                print(f"✅ Vente #{vente_id} catégorisée")
+            
+            # ⭐ 3. Mettre à jour ou créer l'écriture groupée
+            from scripts.generer_ecritures_groupes import mettre_a_jour_ecriture_groupee
+            mettre_a_jour_ecriture_groupee(vente_id)
+            
+            print(f"✅ Vente #{vente_id} traitée et intégrée au groupe")
+            
+        except Exception as e:
+            print(f"❌ Erreur traitement auto vente #{vente_id}: {e}")
+            import traceback
+            traceback.print_exc()
 
 @app.route('/api/ventes/all')
 @login_required
@@ -4815,7 +5050,10 @@ def api_get_all_ventes():
                 v.taux_original,
                 p.type_assurance,    -- 🔥 Assurance principale du patient
                 p.assurance2_nom as patient_assurance2_nom,  -- 🔥 Assurance complémentaire du patient
-                p.taux_assurance2 as patient_taux_assurance2  -- 🔥 Taux de l'assurance complémentaire
+                p.taux_assurance2 as patient_taux_assurance2,  -- 🔥 Taux de l'assurance complémentaire
+                v.taux_aide,           -- 🔥 NOUVEAU
+                v.aide_hospitaliere,     -- 🔥 NOUVEAU
+                v.prise_en_charge
             FROM ventes v
             LEFT JOIN patients p ON v.patient_id = p.id
             WHERE v.structure_id = %s 
@@ -4906,6 +5144,11 @@ def api_get_all_ventes():
                         assurances = json.loads(assurances)
                     except:
                         assurances = None
+
+                taux_aide = float(v.get('taux_aide', 0)) if v.get('taux_aide') is not None else 0
+                aide_hospitaliere = float(v.get('aide_hospitaliere', 0)) if v.get('aide_hospitaliere') is not None else 0
+
+                prise_en_charge = float(v.get('prise_en_charge', 0)) if v.get('prise_en_charge') is not None else 0
                 
                 result.append({
                     'ID': v.get('id'),
@@ -4931,7 +5174,10 @@ def api_get_all_ventes():
                     'reste_a_payer': reste_a_payer,
                     'base_remboursement': base_remboursement,
                     'taux_temp_modifie': taux_temp_modifie,
-                    'taux_original': taux_original
+                    'taux_original': taux_original,
+                    'taux_aide': taux_aide,
+                    'prise_en_charge': prise_en_charge,
+                    'aide_hospitaliere': aide_hospitaliere   # 🔥 NOUVEAU
                 })
             else:
                 # Format tuple

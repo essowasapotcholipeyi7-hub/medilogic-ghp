@@ -33,6 +33,15 @@
         transform: translateY(-3px);
         box-shadow: 0 10px 30px rgba(0,0,0,0.08);
     }
+/* Dans le bloc extra_css ou dans un fichier CSS */
+.d-flex.flex-wrap.gap-1 {
+    gap: 4px !important;
+}
+
+.d-flex.flex-wrap.gap-1 .btn {
+    font-size: 11px;
+    padding: 4px 10px;
+}
 </style>
 {% endblock %}
 
@@ -46,10 +55,16 @@
         <div class="card">
             <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                 <h5><i class="fas fa-calculator"></i> Comptabilité</h5>
-                <button class="btn btn-light btn-sm" onclick="location.reload()">
-                    <i class="fas fa-sync-alt"></i> Rafraîchir
-                </button>
+                <div>
+                    <button class="btn btn-light btn-sm me-2" onclick="initComptes()" title="Initialiser le plan comptable standard">
+                        <i class="fas fa-database"></i> Init comptes
+                    </button>
+                    <button class="btn btn-light btn-sm" onclick="location.reload()">
+                        <i class="fas fa-sync-alt"></i> Rafraîchir
+                    </button>
+                </div>
             </div>
+
             <div class="card-body">
 
                 <!-- Onglets Comptabilité -->
@@ -77,6 +92,11 @@
                     <li class="nav-item">
                         <button class="nav-link" id="rapports-tab" data-bs-toggle="tab" data-bs-target="#rapports" type="button" role="tab">
                             <i class="fas fa-file-alt"></i> Rapports
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="rapprochement-tab" data-bs-toggle="tab" data-bs-target="#rapprochement" type="button" role="tab">
+                            <i class="fas fa-handshake"></i> Rapprochement bancaire
                         </button>
                     </li>
                 </ul>
@@ -198,9 +218,8 @@
                         </div>
                     </div>
 
-
                     <!-- ========================================== -->
-                    <!-- ONGLET BUDGET -->
+                    <!-- ONGLET BUDGET - CORRIGÉ -->
                     <!-- ========================================== -->
                     <div class="tab-pane fade" id="budget" role="tabpanel">
                         <h6><i class="fas fa-coins"></i> Budget</h6>
@@ -209,9 +228,7 @@
                             <div class="col-md-3">
                                 <label class="form-label small">Année</label>
                                 <select class="form-control form-control-sm" id="budgetAnnee" onchange="chargerBudget()">
-                                    <option value="2026">2026</option>
-                                    <option value="2027">2027</option>
-                                    <option value="2028">2028</option>
+                                    <!-- Généré par JavaScript -->
                                 </select>
                             </div>
                             <div class="col-md-3">
@@ -222,6 +239,9 @@
                             </div>
                             <div class="col-md-6 text-end">
                                 <span class="badge bg-success" id="totalBudget">0 FCFA</span>
+                                <button class="btn btn-danger btn-sm ms-2" onclick="cloturerAnnee()">
+                                    <i class="fas fa-lock"></i> Clôturer l'année
+                                </button>
                             </div>
                         </div>
 
@@ -310,9 +330,18 @@
                                     <tr><td colspan="6" class="text-center">Chargement...</td></tr>
                                 </tbody>
                             </table>
+
+<!-- Dans l'onglet Écritures, après le tableau -->
+<div class="row mt-3">
+    <div class="col-12">
+        <nav>
+            <ul class="pagination justify-content-center" id="paginationEcritures"></ul>
+        </nav>
+    </div>
+</div>
+
                         </div>
                     </div>
-
 
                     <!-- ========================================== -->
                     <!-- ONGLET RAPPORTS -->
@@ -335,6 +364,8 @@
                                     <option value="journal">Journal</option>
                                     <option value="grand_livre">Grand livre</option>
                                     <option value="balance">Balance</option>
+                                    <option value="resultat">Compte de résultat</option>
+                                    <option value="bilan">Bilan</option>
                                 </select>
                             </div>
                             <div class="col-md-3 text-end">
@@ -364,11 +395,129 @@
                         </div>
                     </div>
 
+<!-- ========================================== -->
+<!-- ONGLET RAPPROCHEMENT BANCAIRE - ALTERNATIVE -->
+<!-- ========================================== -->
+<div class="tab-pane fade" id="rapprochement" role="tabpanel">
+    <h6><i class="fas fa-handshake"></i> Rapprochement bancaire</h6>
+    
+    <div class="alert alert-info mb-3">
+        <i class="fas fa-info-circle"></i>
+        <strong>Comment ça fonctionne ?</strong>
+        <ol class="mb-0">
+            <li>Saisissez les lignes de votre relevé bancaire</li>
+            <li>Cliquez sur "Rapprocher" pour associer automatiquement les écritures comptables</li>
+            <li>Vérifiez les écarts éventuels</li>
+        </ol>
+    </div>
+    
+    <!-- Ligne 1 : Champs de saisie -->
+    <div class="row mb-2">
+        <div class="col-md-3">
+            <label class="form-label small">Date du relevé</label>
+            <input type="date" class="form-control form-control-sm" id="releveDate">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Solde initial</label>
+            <input type="number" class="form-control form-control-sm" id="releveSoldeInitial" step="100" 
+                   value="0" onchange="calculerSoldeReleve()">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Solde final</label>
+            <input type="text" class="form-control form-control-sm" id="releveSoldeFinal" readonly 
+                   style="font-weight:bold; background:#f8f9fa;">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small">Écart</label>
+            <input type="text" class="form-control form-control-sm" id="releveEcart" readonly 
+                   style="font-weight:bold; background:#f8f9fa;">
+        </div>
+    </div>
+    
+    <!-- Ligne 2 : Boutons d'action -->
+    <div class="row mb-4">
+        <div class="col-14">
+            <div class="btn-group" role="group" aria-label="Actions du relevé">
+                <button class="btn btn-success btn-sm" onclick="ajouterLigneReleve()" title="Ajouter une ligne au relevé">
+                    <i class="fas fa-plus"></i> Ajouter une ligne
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="sauvegarderReleve()" title="Enregistrer le relevé">
+                    <i class="fas fa-save"></i> Enregistrer
+                </button>
+                <button class="btn btn-info btn-sm" onclick="rapprocherReleve()" title="Rapprocher avec les écritures comptables">
+                    <i class="fas fa-handshake"></i> Rapprocher
+                </button>
+                <button class="btn btn-success btn-sm" onclick="validerReleve()" title="Valider le relevé">
+                    <i class="fas fa-check"></i> Valider
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="table-responsive">
+        <table class="table table-hover table-sm table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:12%">Date</th>
+                    <th style="width:27%">Libellé</th>
+                    <th style="width:13%">Référence</th>
+                    <th style="width:13%">Débit</th>
+                    <th style="width:13%">Crédit</th>
+                    <th style="width:12%">Solde</th>
+                    <th style="width:5%">Rap.</th>
+                    <th style="width:5%">Action</th>
+                </tr>
+            </thead>
+            <tbody id="releveBody">
+                <tr><td colspan="8" class="text-center text-muted">Ajoutez des lignes avec le bouton "Ajouter une ligne"</td></tr>
+            </tbody>
+            <tfoot class="table-light">
+                <tr class="fw-bold">
+                    <td colspan="3" class="text-end">TOTAUX</td>
+                    <td id="releveTotalDebit" class="text-end">0 FCFA</td>
+                    <td id="releveTotalCredit" class="text-end">0 FCFA</td>
+                    <td colspan="3"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    
+    <!-- Liste des relevés existants -->
+    <div class="card mt-3">
+        <div class="card-header bg-light">
+            <i class="fas fa-history"></i> Historique des relevés
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Solde initial</th>
+                            <th>Solde final</th>
+                            <th>Lignes</th>
+                            <th>Rapprochées</th>
+                            <th>Statut</th>
+                            <th>Créé par</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historiqueRelevesBody">
+                        <tr><td colspan="8" class="text-center text-muted">Aucun relevé</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+
                 </div><!-- Fin tab-content -->
             </div><!-- Fin card-body -->
         </div><!-- Fin card -->
     </div><!-- Fin col-md-9 -->
 </div><!-- Fin row -->
+
 
 <!-- ============================================================ -->
 <!-- MODALS -->
@@ -544,12 +693,12 @@
 </div>
 
 <!-- Modal Budget -->
-<div class="modal fade" id="budgetModal" tabindex="-1">
+<div class="modal fade" id="budgetModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
                 <h5 class="modal-title">Modifier budget</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="budgetCompteId">
@@ -590,7 +739,7 @@
 </div>
 
 <!-- ============================================================ -->
-<!-- SCRIPT -->
+<!-- SCRIPT - CORRIGÉ -->
 <!-- ============================================================ -->
 <script>
 // ============================================================
@@ -604,6 +753,260 @@ let validationModal = null;
 let detailModal = null;
 let budgetModal = null;
 
+
+// ============================================================
+// FONCTION DE FORMATAGE DES DATES
+// ============================================================
+
+function formaterDate(dateStr) {
+    /**
+     * Convertit une date de n'importe quel format vers YYYY-MM-DD
+     * Formats acceptés :
+     *   - 2026-07-23 (YYYY-MM-DD)
+     *   - 23/07/2026 (DD/MM/YYYY)
+     *   - 23-07-2026 (DD-MM-YYYY)
+     *   - 2026/07/23 (YYYY/MM/DD)
+     */
+    
+    if (!dateStr || dateStr === '') {
+        return null;
+    }
+    
+    // Nettoyer la chaîne (enlever les espaces)
+    dateStr = dateStr.trim();
+    
+    // Essayer les différents formats
+    const formats = [
+        {
+            regex: /^(\d{4})-(\d{2})-(\d{2})$/,  // YYYY-MM-DD
+            parse: (m) => `${m[1]}-${m[2]}-${m[3]}`
+        },
+        {
+            regex: /^(\d{2})\/(\d{2})\/(\d{4})$/,  // DD/MM/YYYY
+            parse: (m) => `${m[3]}-${m[2]}-${m[1]}`
+        },
+        {
+            regex: /^(\d{2})-(\d{2})-(\d{4})$/,  // DD-MM-YYYY
+            parse: (m) => `${m[3]}-${m[2]}-${m[1]}`
+        },
+        {
+            regex: /^(\d{4})\/(\d{2})\/(\d{2})$/,  // YYYY/MM/DD
+            parse: (m) => `${m[1]}-${m[2]}-${m[3]}`
+        }
+    ];
+    
+    // Tester chaque format
+    for (let format of formats) {
+        const match = dateStr.match(format.regex);
+        if (match) {
+            const result = format.parse(match);
+            // Vérifier que la date est valide
+            if (estDateValide(result)) {
+                return result;
+            }
+        }
+    }
+    
+    // Si aucun format ne correspond, essayer avec new Date()
+    try {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+            return d.toISOString().split('T')[0];
+        }
+    } catch (e) {
+        // Ignorer
+    }
+    
+    console.warn(`⚠️ Format de date non reconnu: "${dateStr}"`);
+    return null;
+}
+
+function estDateValide(dateStr) {
+    /**
+     * Vérifie si une date au format YYYY-MM-DD est valide
+     */
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return false;
+    
+    const year = parseInt(parts[0]);
+    const month = parseInt(parts[1]);
+    const day = parseInt(parts[2]);
+    
+    if (isNaN(year) || isNaN(month) || isNaN(day)) return false;
+    if (month < 1 || month > 12) return false;
+    if (day < 1 || day > 31) return false;
+    
+    // Vérifier le nombre de jours dans le mois
+    const daysInMonth = new Date(year, month, 0).getDate();
+    if (day > daysInMonth) return false;
+    
+    return true;
+}
+
+// ============================================================
+// FONCTION POUR FORMATER UNE DATE DANS LE BON FORMAT
+// ============================================================
+
+function formaterDatePourAffichage(dateStr) {
+    /**
+     * Convertit une date pour l'affichage (DD/MM/YYYY)
+     */
+    if (!dateStr) return '-';
+    
+    const formatted = formaterDate(dateStr);
+    if (!formatted) return dateStr;
+    
+    const parts = formatted.split('-');
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+// ============================================================
+// FONCTION POUR FORMETER UN TABLEAU DE DONNÉES
+// ============================================================
+
+function formaterDatesDansDonnees(data, champsDate) {
+    /**
+     * Parcourt un tableau d'objets et formate les dates
+     * @param {Array} data - Tableau de données
+     * @param {Array} champsDate - Liste des noms de champs contenant des dates
+     * @returns {Array} - Données avec dates formatées
+     */
+    
+    if (!data || !Array.isArray(data)) return data;
+    
+    return data.map(item => {
+        const newItem = { ...item };
+        champsDate.forEach(champ => {
+            if (newItem[champ]) {
+                const formatted = formaterDate(newItem[champ]);
+                if (formatted) {
+                    newItem[champ] = formatted;
+                }
+            }
+        });
+        return newItem;
+    });
+}
+
+// ============================================================
+// EXEMPLE D'UTILISATION
+// ============================================================
+
+function traiterFichierImported(data) {
+    /**
+     * Fonction à appeler quand tu importes un fichier
+     */
+    
+    // Liste des champs qui contiennent des dates
+    const champsDate = [
+        'date', 
+        'date_ecriture', 
+        'date_operation',
+        'date_releve',
+        'date_validation',
+        'created_at',
+        'updated_at'
+    ];
+    
+    // Formater les dates
+    const dataFormatee = formaterDatesDansDonnees(data, champsDate);
+    
+    return dataFormatee;
+}
+
+// ============================================================
+// IMPORT DE FICHIER AVEC FORMATAGE AUTO DES DATES
+// ============================================================
+
+function importerFichierAvecDates(file) {
+    /**
+     * Importe un fichier (CSV, Excel, JSON) et formate les dates
+     */
+    
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                let data;
+                const content = e.target.result;
+                
+                // Détecter le type de fichier
+                if (file.name.endsWith('.csv')) {
+                    data = parserCSV(content);
+                } else if (file.name.endsWith('.json')) {
+                    data = JSON.parse(content);
+                } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                    // Pour Excel, il faudrait utiliser SheetJS (xlsx)
+                    alert('⚠️ Pour les fichiers Excel, utilisez la bibliothèque SheetJS');
+                    resolve(null);
+                    return;
+                } else {
+                    alert('❌ Format de fichier non supporté');
+                    resolve(null);
+                    return;
+                }
+                
+                // Formater les dates
+                const champsDate = detecterChampsDate(data);
+                const dataFormatee = formaterDatesDansDonnees(data, champsDate);
+                
+                resolve(dataFormatee);
+                
+            } catch (error) {
+                reject(error);
+            }
+        };
+        
+        reader.readAsText(file);
+    });
+}
+
+function parserCSV(csvText) {
+    /**
+     * Parse un fichier CSV en tableau d'objets
+     */
+    const lines = csvText.split('\n').filter(line => line.trim() !== '');
+    if (lines.length === 0) return [];
+    
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    const data = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const obj = {};
+        headers.forEach((h, idx) => {
+            obj[h] = values[idx] || '';
+        });
+        data.push(obj);
+    }
+    
+    return data;
+}
+
+function detecterChampsDate(data) {
+    /**
+     * Détecte automatiquement les champs qui contiennent des dates
+     */
+    if (!data || data.length === 0) return [];
+    
+    const champsDate = [];
+    const sample = data[0];
+    const motsCles = ['date', 'jour', 'mois', 'annee', 'time', 'created', 'updated', 'validation'];
+    
+    Object.keys(sample).forEach(champ => {
+        const champLower = champ.toLowerCase();
+        if (motsCles.some(mot => champLower.includes(mot))) {
+            // Vérifier si la valeur ressemble à une date
+            const valeur = sample[champ];
+            if (valeur && formaterDate(valeur)) {
+                champsDate.push(champ);
+            }
+        }
+    });
+    
+    return champsDate;
+}
 // ============================================================
 // TABLEAU DE BORD
 // ============================================================
@@ -652,25 +1055,54 @@ function chargerDernieresEcritures() {
 }
 
 // ============================================================
-// PLAN COMPTABLE
+// PLAN COMPTABLE - AVEC CACHE
 // ============================================================
-function chargerComptes() {
+
+let comptesCache = null;
+let comptesCacheTime = null;
+
+function chargerComptes(force = false) {
+    const tbody = document.getElementById('comptesBody');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">⏳ Chargement...</td></tr>';
+    
+    // ⭐ Utiliser le cache si disponible et valide (5 minutes)
+    if (!force && comptesCache && comptesCacheTime) {
+        const now = new Date();
+        if ((now - comptesCacheTime) < 5 * 60 * 1000) {
+            console.log('💾 Utilisation du cache des comptes');
+            tousComptes = comptesCache;
+            document.getElementById('totalComptes').textContent = tousComptes.length + ' compte(s)';
+            afficherComptes();
+            chargerComptesSelect();
+            return;
+        }
+    }
+    
+    console.log('📊 Chargement des comptes depuis le serveur...');
+    
     fetch('/comptabilite/api/comptes')
         .then(r => r.json())
         .then(data => {
             tousComptes = data || [];
+            comptesCache = tousComptes;
+            comptesCacheTime = new Date();
             document.getElementById('totalComptes').textContent = tousComptes.length + ' compte(s)';
             afficherComptes();
             chargerComptesSelect();
         })
-        .catch(error => console.error('Erreur chargement comptes:', error));
+        .catch(error => {
+            console.error('Erreur chargement comptes:', error);
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">❌ Erreur de chargement</td></tr>';
+        });
 }
 
+// ⭐ MODIFIER afficherComptes() pour utiliser les données en mémoire
 function afficherComptes() {
     const tbody = document.getElementById('comptesBody');
     const search = document.getElementById('searchCompte').value.toLowerCase().trim();
     const type = document.getElementById('filtreTypeCompte').value;
     
+    // ⭐ Filtrer en mémoire
     let filtres = tousComptes;
     if (search) {
         filtres = filtres.filter(c => (c.numero + ' ' + c.nom).toLowerCase().includes(search));
@@ -704,8 +1136,16 @@ function afficherComptes() {
     });
 }
 
+// ⭐ OPTIMISER les appels de filtrage
+function filtrerComptes() {
+    // ⭐ Utiliser le cache en mémoire, pas de requête serveur
+    if (tousComptes.length > 0) {
+        afficherComptes();
+    } else {
+        chargerComptes();
+    }
+}
 function chargerComptesSelect() {
-    // Pour les selects dans les lignes d'écriture
     const selects = document.querySelectorAll('#lignesBody .compte-select');
     selects.forEach(select => {
         const currentValue = select.value;
@@ -715,6 +1155,30 @@ function chargerComptesSelect() {
             select.innerHTML += `<option value="${c.id}" ${selected}>${c.numero} - ${c.nom}</option>`;
         });
     });
+}
+
+// ============================================================
+// INITIALISATION PLAN COMPTABLE STANDARD
+// ============================================================
+function initComptes() {
+    if (!confirm('⚠️ Cette action va créer les comptes standards.\n\nLes comptes déjà existants ne seront pas modifiés.\n\nContinuer ?')) {
+        return;
+    }
+    
+    fetch('/comptabilite/api/init-comptes', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ Plan comptable initialisé avec succès !');
+            chargerComptes();
+        } else {
+            alert('❌ Erreur: ' + (data.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('❌ Erreur: ' + error));
 }
 
 // ============================================================
@@ -862,34 +1326,288 @@ function supprimerCompte(id) {
         .catch(error => alert('Erreur: ' + error));
 }
 
-function filtrerComptes() { afficherComptes(); }
+// ============================================================
+// BUDGET - CORRIGÉ
+// ============================================================
+
+function genererAnnees() {
+    const select = document.getElementById('budgetAnnee');
+    const anneeActuelle = new Date().getFullYear();
+    
+    select.innerHTML = '';
+    
+    // De 2000 à 2100
+    for (let annee = 2000; annee <= 2100; annee++) {
+        const option = document.createElement('option');
+        option.value = annee;
+        option.textContent = annee;
+        if (annee === anneeActuelle) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    }
+}
+
+function chargerBudget() {
+    const tbody = document.getElementById('budgetBody');
+    const annee = document.getElementById('budgetAnnee').value;
+    const compteId = document.getElementById('budgetCompte').value;
+    
+    tbody.innerHTML = '<tr><td colspan="15" class="text-center">Chargement...</td></tr>';
+    
+    let url = `/comptabilite/api/budget?annee=${annee}`;
+    if (compteId) {
+        url += `&compte_id=${compteId}`;
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            tbody.innerHTML = '';
+            
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="15" class="text-center">Aucun compte trouvé. Créez d\'abord des comptes dans le plan comptable.</td></tr>';
+                document.getElementById('totalBudget').textContent = '0 FCFA';
+                return;
+            }
+            
+            let grandTotal = 0;
+            
+            data.forEach(item => {
+                const row = tbody.insertRow();
+                let totalLigne = 0;
+                
+                row.innerHTML = `<td><strong>${item.compte_numero} - ${item.compte_nom}</strong></td>`;
+                
+                if (item.mois_data) {
+                    for (let m = 1; m <= 12; m++) {
+                        const moisData = item.mois_data.find(d => d.mois === m);
+                        const montant = moisData ? moisData.montant_prevu : 0;
+                        totalLigne += montant;
+                        row.innerHTML += `<td class="text-end">${montant > 0 ? montant.toLocaleString() : '-'}</td>`;
+                    }
+                } else {
+                    for (let m = 1; m <= 12; m++) {
+                        row.innerHTML += `<td class="text-end text-muted">-</td>`;
+                    }
+                }
+                
+                grandTotal += totalLigne;
+                
+                row.innerHTML += `
+                    <td class="text-end fw-bold">${totalLigne > 0 ? totalLigne.toLocaleString() : '0'} F</td>
+                    <td>
+                        <button class="btn btn-sm btn-warning" onclick="ouvrirBudget(${item.compte_id}, '${item.compte_nom}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    </td>
+                `;
+            });
+            
+            document.getElementById('totalBudget').textContent = grandTotal.toLocaleString() + ' FCFA';
+        })
+        .catch(error => {
+            console.error('❌ Erreur:', error);
+            tbody.innerHTML = '<tr><td colspan="15" class="text-center text-danger">Erreur de chargement</td></tr>';
+        });
+}
+
+function chargerComptesBudget() {
+    const select = document.getElementById('budgetCompte');
+    if (!select) return;
+    
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">Chargement...</option>';
+    
+    fetch('/comptabilite/api/comptes')
+        .then(r => r.json())
+        .then(comptes => {
+            select.innerHTML = '<option value="">Tous les comptes</option>';
+            comptes.forEach(c => {
+                const selected = c.id == currentValue ? 'selected' : '';
+                select.innerHTML += `<option value="${c.id}" ${selected}>${c.numero} - ${c.nom}</option>`;
+            });
+            if (currentValue) {
+                select.value = currentValue;
+            }
+        })
+        .catch(error => {
+            console.error('Erreur chargement comptes:', error);
+            select.innerHTML = '<option value="">Erreur de chargement</option>';
+        });
+}
+
+function ouvrirBudget(compteId, compteNom) {
+    try {
+        document.getElementById('budgetCompteId').value = compteId;
+        document.getElementById('budgetMois').value = 1;
+        document.getElementById('budgetPrevu').value = 0;
+        document.getElementById('budgetCommentaire').value = '';
+        document.querySelector('#budgetModal .modal-title').textContent = 'Budget - ' + compteNom;
+        
+        if (budgetModal) {
+            budgetModal.show();
+        } else {
+            const modal = new bootstrap.Modal(document.getElementById('budgetModal'));
+            modal.show();
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        alert('Erreur lors de l\'ouverture du modal');
+    }
+}
+
+function sauvegarderBudget() {
+    const compteId = document.getElementById('budgetCompteId').value;
+    const mois = document.getElementById('budgetMois').value;
+    const annee = document.getElementById('budgetAnnee').value;
+    const montantPrevu = parseFloat(document.getElementById('budgetPrevu').value) || 0;
+    const commentaire = document.getElementById('budgetCommentaire').value;
+    
+    if (!compteId) {
+        alert('Erreur: compte non sélectionné');
+        return;
+    }
+    
+    const data = {
+        compte_id: parseInt(compteId),
+        mois: parseInt(mois),
+        annee: parseInt(annee),
+        montant_prevu: montantPrevu,
+        commentaire: commentaire
+    };
+    
+    fetch('/comptabilite/api/budget', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert('Budget enregistré avec succès !');
+            bootstrap.Modal.getInstance(document.getElementById('budgetModal')).hide();
+            chargerBudget();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+function cloturerAnnee() {
+    const annee = document.getElementById('budgetAnnee').value;
+    
+    if (!annee) {
+        alert('Veuillez sélectionner une année');
+        return;
+    }
+    
+    if (!confirm(`⚠️ Êtes-vous sûr de vouloir clôturer l'année ${annee} ?\n\nCette action est irréversible. Toutes les écritures de l'année seront verrouillées.`)) {
+        return;
+    }
+    
+    fetch('/comptabilite/api/cloture', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ annee: parseInt(annee) })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`✅ ${data.message}`);
+            chargerBudget();
+        } else {
+            alert('❌ Erreur: ' + (data.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => {
+        alert('❌ Erreur: ' + error);
+    });
+}
 
 // ============================================================
 // ÉCRITURES
 // ============================================================
-function chargerEcritures() {
-    fetch('/comptabilite/api/ecritures')
+let pageEcritures = 1;
+let totalEcritures = 0;
+
+function chargerEcritures(page = 1) {
+    pageEcritures = page;
+    const tbody = document.getElementById('ecrituresBody');
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center">⏳ Chargement...</td></tr>';
+    
+    // ⭐ Ne charger que 20 écritures par page
+    let url = `/comptabilite/api/ecritures?page=${page}&per_page=20`;
+    
+    const search = document.getElementById('searchEcriture')?.value || '';
+    const statut = document.getElementById('filtreStatutEcriture')?.value || '';
+    const dateDebut = document.getElementById('filtreDateDebutEcriture')?.value || '';
+    const dateFin = document.getElementById('filtreDateFinEcriture')?.value || '';
+    
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (statut) url += `&statut=${statut}`;
+    if (dateDebut) url += `&date_debut=${dateDebut}`;
+    if (dateFin) url += `&date_fin=${dateFin}`;
+    
+    console.log(`📊 Chargement des écritures page ${page}...`);
+    
+    fetch(url)
         .then(r => r.json())
         .then(data => {
-            toutesEcritures = data || [];
-            document.getElementById('totalEcritures').textContent = toutesEcritures.length + ' écriture(s)';
+            toutesEcritures = data.data || [];
+            totalEcritures = data.total || 0;
+            document.getElementById('totalEcritures').textContent = totalEcritures + ' écriture(s)';
             afficherEcritures();
+            updatePaginationEcritures(data.total, data.page, data.total_pages);
         })
-        .catch(error => console.error('Erreur chargement ecritures:', error));
+        .catch(error => {
+            console.error('Erreur chargement ecritures:', error);
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">❌ Erreur de chargement</td></tr>';
+        });
 }
 
+// ⭐ Pagination
+function updatePaginationEcritures(total, currentPage, totalPages) {
+    const pagination = document.getElementById('paginationEcritures');
+    if (!pagination) {
+        console.warn('⚠️ Élément paginationEcritures non trouvé');
+        return;
+    }
+    
+    if (totalPages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
+    
+    let html = `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="chargerEcritures(${currentPage - 1}); return false;">«</a>
+                </li>`;
+    
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + 4);
+    
+    for (let i = startPage; i <= endPage; i++) {
+        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="chargerEcritures(${i}); return false;">${i}</a>
+                 </li>`;
+    }
+    
+    html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="chargerEcritures(${currentPage + 1}); return false;">»</a>
+             </li>`;
+    pagination.innerHTML = html;
+}
+
+// ⭐ MODIFIER la fonction filtrerEcritures
+function filtrerEcritures() {
+    chargerEcritures(1);
+}
+
+// ⭐ MODIFIER la fonction afficherEcritures pour utiliser les données paginées
 function afficherEcritures() {
     const tbody = document.getElementById('ecrituresBody');
-    const search = document.getElementById('searchEcriture').value.toLowerCase().trim();
-    const statut = document.getElementById('filtreStatutEcriture').value;
-    const dateDebut = document.getElementById('filtreDateDebutEcriture').value;
-    const dateFin = document.getElementById('filtreDateFinEcriture').value;
-    
-    let filtres = toutesEcritures;
-    if (search) filtres = filtres.filter(e => (e.libelle || '').toLowerCase().includes(search));
-    if (statut) filtres = filtres.filter(e => e.statut === statut);
-    if (dateDebut) filtres = filtres.filter(e => e.date_ecriture >= dateDebut);
-    if (dateFin) filtres = filtres.filter(e => e.date_ecriture <= dateFin);
+    const filtres = toutesEcritures; // Déjà filtré par l'API
     
     tbody.innerHTML = '';
     if (filtres.length === 0) {
@@ -919,6 +1637,10 @@ function afficherEcritures() {
         `;
     });
 }
+
+// ============================================================
+// ÉCRITURES - MODALS
+// ============================================================
 
 function ouvrirNouvelleEcriture() {
     try {
@@ -1088,8 +1810,6 @@ function voirEcriture(id) {
         alert('Erreur lors de l\'ouverture du modal');
     }
 }
-
-function filtrerEcritures() { afficherEcritures(); }
 
 // ============================================================
 // LIGNES ÉCRITURES
@@ -1283,160 +2003,16 @@ function confirmerValidation() {
 }
 
 // ============================================================
-// BUDGET
-// ============================================================
-function chargerBudget() {
-    const tbody = document.getElementById('budgetBody');
-    const annee = document.getElementById('budgetAnnee').value;
-    const compteId = document.getElementById('budgetCompte').value;
-    
-    tbody.innerHTML = '<tr><td colspan="15" class="text-center">Chargement...</td></tr>';
-    
-    let url = `/comptabilite/api/budget?annee=${annee}`;
-    if (compteId) {
-        url += `&compte_id=${compteId}`;
-    }
-    
-    fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            tbody.innerHTML = '';
-            
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="15" class="text-center">Aucun compte trouvé. Créez d\'abord des comptes dans le plan comptable.</td></tr>';
-                document.getElementById('totalBudget').textContent = '0 FCFA';
-                return;
-            }
-            
-            let grandTotal = 0;
-            const moisNoms = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
-            
-            data.forEach(item => {
-                const row = tbody.insertRow();
-                let totalLigne = 0;
-                
-                row.innerHTML = `<td><strong>${item.compte_numero} - ${item.compte_nom}</strong></td>`;
-                
-                if (item.mois_data) {
-                    for (let m = 1; m <= 12; m++) {
-                        const moisData = item.mois_data.find(d => d.mois === m);
-                        const montant = moisData ? moisData.montant_prevu : 0;
-                        totalLigne += montant;
-                        row.innerHTML += `<td class="text-end">${montant > 0 ? montant.toLocaleString() : '-'}</td>`;
-                    }
-                } else {
-                    for (let m = 1; m <= 12; m++) {
-                        row.innerHTML += `<td class="text-end text-muted">-</td>`;
-                    }
-                }
-                
-                grandTotal += totalLigne;
-                
-                row.innerHTML += `
-                    <td class="text-end fw-bold">${totalLigne > 0 ? totalLigne.toLocaleString() : '0'} F</td>
-                    <td>
-                        <button class="btn btn-sm btn-warning" onclick="ouvrirBudget(${item.compte_id}, '${item.compte_nom}')">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                    </td>
-                `;
-            });
-            
-            document.getElementById('totalBudget').textContent = grandTotal.toLocaleString() + ' FCFA';
-        })
-        .catch(error => {
-            console.error('❌ Erreur:', error);
-            tbody.innerHTML = '<tr><td colspan="15" class="text-center text-danger">Erreur de chargement</td></tr>';
-        });
-}
-
-function chargerComptesBudget() {
-    const select = document.getElementById('budgetCompte');
-    if (!select) return;
-    
-    const currentValue = select.value;
-    select.innerHTML = '<option value="">Chargement...</option>';
-    
-    fetch('/comptabilite/api/comptes')
-        .then(r => r.json())
-        .then(comptes => {
-            select.innerHTML = '<option value="">Tous les comptes</option>';
-            comptes.forEach(c => {
-                const selected = c.id == currentValue ? 'selected' : '';
-                select.innerHTML += `<option value="${c.id}" ${selected}>${c.numero} - ${c.nom}</option>`;
-            });
-            if (currentValue) {
-                select.value = currentValue;
-            }
-        })
-        .catch(error => {
-            console.error('Erreur chargement comptes:', error);
-            select.innerHTML = '<option value="">Erreur de chargement</option>';
-        });
-}
-
-function ouvrirBudget(compteId, compteNom) {
-    try {
-        document.getElementById('budgetCompteId').value = compteId;
-        document.getElementById('budgetMois').value = 1;
-        document.getElementById('budgetPrevu').value = 0;
-        document.getElementById('budgetCommentaire').value = '';
-        document.querySelector('#budgetModal .modal-title').textContent = 'Budget - ' + compteNom;
-        
-        if (budgetModal) {
-            budgetModal.show();
-        } else {
-            const modal = new bootstrap.Modal(document.getElementById('budgetModal'));
-            modal.show();
-        }
-    } catch (error) {
-        console.error('Erreur:', error);
-        alert('Erreur lors de l\'ouverture du modal');
-    }
-}
-
-function sauvegarderBudget() {
-    const compteId = document.getElementById('budgetCompteId').value;
-    const mois = document.getElementById('budgetMois').value;
-    const annee = document.getElementById('budgetAnnee').value;
-    const montantPrevu = parseFloat(document.getElementById('budgetPrevu').value) || 0;
-    const commentaire = document.getElementById('budgetCommentaire').value;
-    
-    if (!compteId) {
-        alert('Erreur: compte non sélectionné');
-        return;
-    }
-    
-    const data = {
-        compte_id: parseInt(compteId),
-        mois: parseInt(mois),
-        annee: parseInt(annee),
-        montant_prevu: montantPrevu,
-        commentaire: commentaire
-    };
-    
-    fetch('/comptabilite/api/budget', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            alert('Budget enregistré avec succès !');
-            bootstrap.Modal.getInstance(document.getElementById('budgetModal')).hide();
-            chargerBudget();
-        } else {
-            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
-        }
-    })
-    .catch(error => alert('Erreur: ' + error));
-}
-
-// ============================================================
 // RAPPORTS
 // ============================================================
-function chargerJournal() {
+// ============================================================
+// RAPPORTS - AVEC CACHE ET CHARGEMENT DIFFÉRÉ
+// ============================================================
+
+let rapportCache = {};
+let rapportCacheTime = {};
+
+function chargerJournal(force = false) {
     const tbody = document.getElementById('rapportBody');
     const thead = document.getElementById('rapportHeader');
     const tfoot = document.getElementById('rapportFooter');
@@ -1444,140 +2020,483 @@ function chargerJournal() {
     const dateDebut = document.getElementById('rapportDateDebut').value;
     const dateFin = document.getElementById('rapportDateFin').value;
     
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center">Chargement...</td></tr>';
+    // ⭐ Vérifier le cache (5 minutes)
+    const cacheKey = `${type}_${dateDebut}_${dateFin}`;
+    if (!force && rapportCache[cacheKey] && rapportCacheTime[cacheKey]) {
+        const now = new Date();
+        if ((now - rapportCacheTime[cacheKey]) < 5 * 60 * 1000) {
+            console.log('💾 Utilisation du cache pour le rapport', type);
+            afficherRapport(rapportCache[cacheKey], type);
+            return;
+        }
+    }
     
+    // ⭐ Afficher le chargement
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center">⏳ Chargement du rapport...</td></tr>';
+    
+    // ⭐ Construire l'URL
     let url = `/comptabilite/api/rapports/${type}`;
     const params = [];
     if (dateDebut) params.push('date_debut=' + dateDebut);
     if (dateFin) params.push('date_fin=' + dateFin);
     if (params.length) url += '?' + params.join('&');
     
+    console.log('📊 Chargement du rapport:', url);
+    
     fetch(url)
         .then(r => r.json())
         .then(data => {
-            let totalDebit = 0, totalCredit = 0;
-            let html = '';
-            
-            if (!data || data.length === 0) {
-                let colspan = type === 'balance' ? 4 : 6;
-                tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center">Aucune donnée</td></tr>`;
-                
-                if (type === 'balance') {
-                    thead.innerHTML = '<th>Compte</th><th>Total Débit</th><th>Total Crédit</th><th>Solde</th>';
-                    tfoot.innerHTML = `
-                        <tr class="fw-bold">
-                            <td colspan="3" class="text-end">TOTAUX :</td>
-                            <td id="rapportTotalSolde" class="text-end">0 FCFA</td>
-                        </tr>
-                    `;
-                } else {
-                    thead.innerHTML = '<th>Date</th><th>Pièce</th><th>Libellé</th><th>Compte</th><th>Débit</th><th>Crédit</th>';
-                    tfoot.innerHTML = `
-                        <tr class="fw-bold">
-                            <td colspan="4" class="text-end">TOTAUX :</td>
-                            <td id="rapportTotalDebit" class="text-end">0 FCFA</td>
-                            <td id="rapportTotalCredit" class="text-end">0 FCFA</td>
-                        </tr>
-                    `;
-                }
-                return;
+            // ⭐ Mettre en cache
+            rapportCache[cacheKey] = data;
+            rapportCacheTime[cacheKey] = new Date();
+            afficherRapport(data, type);
+        })
+        .catch(error => {
+            console.error('Erreur chargement rapport:', error);
+            let colspan = type === 'balance' ? 4 : 6;
+            tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-danger">❌ Erreur de chargement</td></tr>`;
+        });
+}
+
+// ⭐ FONCTION POUR AFFICHER LE RAPPORT (séparée pour clarté)
+function afficherRapport(data, type) {
+    const tbody = document.getElementById('rapportBody');
+    const thead = document.getElementById('rapportHeader');
+    const tfoot = document.getElementById('rapportFooter');
+    
+    let totalDebit = 0, totalCredit = 0;
+    let html = '';
+    
+    if (!data || data.length === 0) {
+        let colspan = type === 'balance' ? 4 : 6;
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center">Aucune donnée</td></tr>`;
+        
+        if (type === 'balance') {
+            thead.innerHTML = '<th>Compte</th><th>Total Débit</th><th>Total Crédit</th><th>Solde</th>';
+            tfoot.innerHTML = `
+                <tr class="fw-bold">
+                    <td colspan="3" class="text-end">TOTAUX :</td>
+                    <td id="rapportTotalSolde" class="text-end">0 FCFA</td>
+                </tr>
+            `;
+        } else if (type === 'resultat') {
+            thead.innerHTML = '<th>Compte</th><th>Montant</th><th>Catégorie</th>';
+            tfoot.innerHTML = '';
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center">Aucune donnée</td></tr>';
+        } else if (type === 'bilan') {
+            thead.innerHTML = '<th>Compte</th><th>Montant</th><th>Catégorie</th>';
+            tfoot.innerHTML = '';
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center">Aucune donnée</td></tr>';
+        } else {
+            thead.innerHTML = '<th>Date</th><th>Pièce</th><th>Libellé</th><th>Compte</th><th>Débit</th><th>Crédit</th>';
+            tfoot.innerHTML = `
+                <tr class="fw-bold">
+                    <td colspan="4" class="text-end">TOTAUX :</td>
+                    <td id="rapportTotalDebit" class="text-end">0 FCFA</td>
+                    <td id="rapportTotalCredit" class="text-end">0 FCFA</td>
+                </tr>
+            `;
+        }
+        return;
+    }
+    
+    // ========================================
+    // JOURNAL
+    // ========================================
+    if (type === 'journal') {
+        thead.innerHTML = '<th>Date</th><th>Pièce</th><th>Libellé</th><th>Compte</th><th>Débit</th><th>Crédit</th>';
+        
+        data.forEach(item => {
+            const debit = item.debit || 0;
+            const credit = item.credit || 0;
+            totalDebit += debit;
+            totalCredit += credit;
+            html += `<tr>
+                <td>${item.date || ''}</td>
+                <td>${item.piece || '-'}</td>
+                <td>${item.libelle || ''}</td>
+                <td>${item.compte_numero || ''} - ${item.compte_nom || ''}</td>
+                <td class="text-end">${debit > 0 ? debit.toLocaleString() + ' F' : '-'}</td>
+                <td class="text-end">${credit > 0 ? credit.toLocaleString() + ' F' : '-'}</td>
+            </tr>`;
+        });
+        
+        tfoot.innerHTML = `
+            <tr class="fw-bold">
+                <td colspan="4" class="text-end">TOTAUX :</td>
+                <td id="rapportTotalDebit" class="text-end">${totalDebit.toLocaleString()} FCFA</td>
+                <td id="rapportTotalCredit" class="text-end">${totalCredit.toLocaleString()} FCFA</td>
+            </tr>
+        `;
+    }
+    
+    // ========================================
+    // GRAND LIVRE
+    // ========================================
+    else if (type === 'grand_livre') {
+        thead.innerHTML = '<th>Date</th><th>Compte</th><th>Libellé</th><th>Débit</th><th>Crédit</th><th>Solde</th>';
+        
+        let solde_cumul = 0;
+        data.forEach(item => {
+            const debit = item.debit || 0;
+            const credit = item.credit || 0;
+            solde_cumul += debit - credit;
+            totalDebit += debit;
+            totalCredit += credit;
+            const soldeClass = solde_cumul >= 0 ? 'text-success' : 'text-danger';
+            html += `<tr>
+                <td>${item.date || ''}</td>
+                <td>${item.compte_numero || ''} - ${item.compte_nom || ''}</td>
+                <td>${item.libelle || ''}</td>
+                <td class="text-end">${debit > 0 ? debit.toLocaleString() + ' F' : '-'}</td>
+                <td class="text-end">${credit > 0 ? credit.toLocaleString() + ' F' : '-'}</td>
+                <td class="text-end fw-bold ${soldeClass}">${solde_cumul.toLocaleString()} F</td>
+            </tr>`;
+        });
+        
+        const soldeFinal = totalDebit - totalCredit;
+        const soldeClass = soldeFinal >= 0 ? 'text-success' : 'text-danger';
+        tfoot.innerHTML = `
+            <tr class="fw-bold">
+                <td colspan="3" class="text-end">TOTAUX :</td>
+                <td id="rapportTotalDebit" class="text-end">${totalDebit.toLocaleString()} FCFA</td>
+                <td id="rapportTotalCredit" class="text-end">${totalCredit.toLocaleString()} FCFA</td>
+                <td id="rapportTotalSolde" class="text-end ${soldeClass}">${soldeFinal.toLocaleString()} FCFA</td>
+            </tr>
+        `;
+    }
+    
+    // ========================================
+    // BALANCE
+    // ========================================
+    else if (type === 'balance') {
+        thead.innerHTML = '<th>Compte</th><th>Total Débit</th><th>Total Crédit</th><th>Solde</th>';
+        
+        data.forEach(item => {
+            const totalDebitCompte = item.total_debit || 0;
+            const totalCreditCompte = item.total_credit || 0;
+            const solde = item.solde || 0;
+            totalDebit += totalDebitCompte;
+            totalCredit += totalCreditCompte;
+            const soldeClass = solde >= 0 ? 'text-success' : 'text-danger';
+            html += `<tr>
+                <td><strong>${item.compte_numero || ''} - ${item.compte_nom || ''}</strong></td>
+                <td class="text-end">${totalDebitCompte.toLocaleString()} F</td>
+                <td class="text-end">${totalCreditCompte.toLocaleString()} F</td>
+                <td class="text-end ${soldeClass} fw-bold">${solde.toLocaleString()} F</td>
+            </tr>`;
+        });
+        
+        const soldeGeneral = totalDebit - totalCredit;
+        const soldeClass = soldeGeneral >= 0 ? 'text-success' : 'text-danger';
+        tfoot.innerHTML = `
+            <tr class="fw-bold">
+                <td class="text-end">TOTAUX :</td>
+                <td id="rapportTotalDebit" class="text-end">${totalDebit.toLocaleString()} FCFA</td>
+                <td id="rapportTotalCredit" class="text-end">${totalCredit.toLocaleString()} FCFA</td>
+                <td id="rapportTotalSolde" class="text-end ${soldeClass}">${soldeGeneral.toLocaleString()} FCFA</td>
+            </tr>
+        `;
+    }
+    
+    // ========================================
+    // COMPTE DE RÉSULTAT
+    // ========================================
+    else if (type === 'resultat') {
+        thead.innerHTML = '<th>Compte</th><th>Montant</th><th>Catégorie</th>';
+        
+        let totalProduits = 0;
+        let totalCharges = 0;
+        
+        // Produits
+        if (data.produits && data.produits.length > 0) {
+            html += `<tr class="table-success"><td colspan="3"><strong>📈 PRODUITS (Revenus)</strong></td></tr>`;
+            data.produits.forEach(p => {
+                totalProduits += p.montant;
+                html += `<tr>
+                    <td>${p.numero} - ${p.nom}</td>
+                    <td class="text-end">${p.montant.toLocaleString()} FCFA</td>
+                    <td><span class="badge bg-success">Produit</span></td>
+                </tr>`;
+            });
+            html += `<tr class="fw-bold table-success"><td>TOTAL PRODUITS</td><td class="text-end">${totalProduits.toLocaleString()} FCFA</td><td></td></tr>`;
+        }
+        
+        // Charges
+        if (data.charges && data.charges.length > 0) {
+            html += `<tr><td colspan="3" style="padding:5px;"></td></tr>`;
+            html += `<tr class="table-danger"><td colspan="3"><strong>📉 CHARGES (Dépenses)</strong></td></tr>`;
+            data.charges.forEach(c => {
+                totalCharges += c.montant;
+                html += `<tr>
+                    <td>${c.numero} - ${c.nom}</td>
+                    <td class="text-end">${c.montant.toLocaleString()} FCFA</td>
+                    <td><span class="badge bg-danger">Charge</span></td>
+                </tr>`;
+            });
+            html += `<tr class="fw-bold table-danger"><td>TOTAL CHARGES</td><td class="text-end">${totalCharges.toLocaleString()} FCFA</td><td></td></tr>`;
+        }
+        
+        // Résultat
+        const resultat = totalProduits - totalCharges;
+        const resultatClass = resultat >= 0 ? 'text-success' : 'text-danger';
+        const resultatIcon = resultat >= 0 ? '✅' : '❌';
+        const resultatText = resultat >= 0 ? 'Bénéfice' : 'Perte';
+        const badgeClass = resultat >= 0 ? 'bg-success' : 'bg-danger';
+        
+        html += `<tr><td colspan="3" style="padding:5px;"></td></tr>`;
+        html += `
+            <tr class="fw-bold table-info">
+                <td>${resultatIcon} RÉSULTAT NET (Produits - Charges)</td>
+                <td class="text-end ${resultatClass}">${resultat.toLocaleString()} FCFA</td>
+                <td><span class="badge ${badgeClass}">${resultatText}</span></td>
+            </tr>
+        `;
+        
+        tfoot.innerHTML = '';
+    }
+    
+    // ========================================
+    // BILAN
+    // ========================================
+    else if (type === 'bilan') {
+        thead.innerHTML = '<th>Compte</th><th>Montant</th><th>Catégorie</th>';
+        
+        let totalActif = 0;
+        let totalPassif = 0;
+        let totalCapitaux = 0;
+        
+        // Actifs
+        if (data.actifs && data.actifs.length > 0) {
+            html += `<tr class="table-primary"><td colspan="3"><strong>🏦 ACTIFS (Ce que possède la structure)</strong></td></tr>`;
+            data.actifs.forEach(a => {
+                totalActif += a.montant;
+                html += `<tr>
+                    <td>${a.numero} - ${a.nom}</td>
+                    <td class="text-end">${a.montant.toLocaleString()} FCFA</td>
+                    <td><span class="badge bg-primary">Actif</span></td>
+                </tr>`;
+            });
+            html += `<tr class="fw-bold table-primary"><td>TOTAL ACTIFS</td><td class="text-end">${totalActif.toLocaleString()} FCFA</td><td></td></tr>`;
+        }
+        
+        // Passifs
+        if (data.passifs && data.passifs.length > 0) {
+            html += `<tr><td colspan="3" style="padding:5px;"></td></tr>`;
+            html += `<tr class="table-warning"><td colspan="3"><strong>📋 PASSIFS (Dettes de la structure)</strong></td></tr>`;
+            data.passifs.forEach(p => {
+                totalPassif += p.montant;
+                html += `<tr>
+                    <td>${p.numero} - ${p.nom}</td>
+                    <td class="text-end">${p.montant.toLocaleString()} FCFA</td>
+                    <td><span class="badge bg-warning">Passif</span></td>
+                </tr>`;
+            });
+            html += `<tr class="fw-bold table-warning"><td>TOTAL PASSIFS</td><td class="text-end">${totalPassif.toLocaleString()} FCFA</td><td></td></tr>`;
+        }
+        
+        // Capitaux propres
+        if (data.capitaux_propres && data.capitaux_propres.length > 0) {
+            html += `<tr><td colspan="3" style="padding:5px;"></td></tr>`;
+            html += `<tr class="table-info"><td colspan="3"><strong>💰 CAPITAUX PROPRES</strong></td></tr>`;
+            data.capitaux_propres.forEach(c => {
+                totalCapitaux += c.montant;
+                html += `<tr>
+                    <td>${c.numero} - ${c.nom}</td>
+                    <td class="text-end">${c.montant.toLocaleString()} FCFA</td>
+                    <td><span class="badge bg-info">Capitaux propres</span></td>
+                </tr>`;
+            });
+            html += `<tr class="fw-bold table-info"><td>TOTAL CAPITAUX PROPRES</td><td class="text-end">${totalCapitaux.toLocaleString()} FCFA</td><td></td></tr>`;
+        }
+        
+        // Équilibre
+        const totalPassifCapitaux = totalPassif + totalCapitaux;
+        const estEquilibre = Math.abs(totalActif - totalPassifCapitaux) < 1;
+        const eqClass = estEquilibre ? 'text-success' : 'text-danger';
+        const eqIcon = estEquilibre ? '✅' : '❌';
+        
+        html += `<tr><td colspan="3" style="padding:5px;"></td></tr>`;
+        html += `
+            <tr class="fw-bold table-secondary">
+                <td>${eqIcon} ÉQUILIBRE BILAN</td>
+                <td class="text-end ${eqClass}">
+                    Actif = Passif + Capitaux propres
+                    <br>
+                    ${totalActif.toLocaleString()} = ${totalPassifCapitaux.toLocaleString()} FCFA
+                </td>
+                <td><span class="badge ${estEquilibre ? 'bg-success' : 'bg-danger'}">${estEquilibre ? '✅ Équilibré' : '❌ Déséquilibré'}</span></td>
+            </tr>
+        `;
+        
+        tfoot.innerHTML = '';
+    }
+    
+    // ========================================
+    // AFFICHER LE RÉSULTAT
+    // ========================================
+    tbody.innerHTML = html;
+}
+
+
+// ============================================================
+// RAPPORTS SPÉCIAUX - CORRIGÉ
+// ============================================================
+
+function chargerRapportSpecial(type, dateDebut, dateFin) {
+    const tbody = document.getElementById('rapportBody');
+    const thead = document.getElementById('rapportHeader');
+    const tfoot = document.getElementById('rapportFooter');
+    
+    // ⭐ Utiliser les bonnes routes
+    let url = `/comptabilite/api/rapports/${type}`;  // /resultat ou /bilan
+    const params = [];
+    if (dateDebut) params.push('date_debut=' + dateDebut);
+    if (dateFin) params.push('date_fin=' + dateFin);
+    if (params.length) url += '?' + params.join('&');
+    
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center">Chargement...</td></tr>';
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            if (type === 'resultat') {
+                afficherCompteResultat(data);
+            } else if (type === 'bilan') {
+                afficherBilan(data);
             }
-            
-            if (type === 'journal') {
-                thead.innerHTML = '<th>Date</th><th>Pièce</th><th>Libellé</th><th>Compte</th><th>Débit</th><th>Crédit</th>';
-                
-                data.forEach(item => {
-                    const debit = item.debit || 0;
-                    const credit = item.credit || 0;
-                    totalDebit += debit;
-                    totalCredit += credit;
-                    html += `<tr>
-                        <td>${item.date || ''}</td>
-                        <td>${item.piece || '-'}</td>
-                        <td>${item.libelle || ''}</td>
-                        <td>${item.compte_numero || ''} - ${item.compte_nom || ''}</td>
-                        <td class="text-end">${debit > 0 ? debit.toLocaleString() + ' F' : '-'}</td>
-                        <td class="text-end">${credit > 0 ? credit.toLocaleString() + ' F' : '-'}</td>
-                    </tr>`;
-                });
-                
-                tfoot.innerHTML = `
-                    <tr class="fw-bold">
-                        <td colspan="4" class="text-end">TOTAUX :</td>
-                        <td id="rapportTotalDebit" class="text-end">${totalDebit.toLocaleString()} FCFA</td>
-                        <td id="rapportTotalCredit" class="text-end">${totalCredit.toLocaleString()} FCFA</td>
-                    </tr>
-                `;
-                
-            } else if (type === 'grand_livre') {
-                thead.innerHTML = '<th>Date</th><th>Compte</th><th>Libellé</th><th>Débit</th><th>Crédit</th><th>Solde</th>';
-                
-                let solde_cumul = 0;
-                data.forEach(item => {
-                    const debit = item.debit || 0;
-                    const credit = item.credit || 0;
-                    solde_cumul += debit - credit;
-                    totalDebit += debit;
-                    totalCredit += credit;
-                    const soldeClass = solde_cumul >= 0 ? 'text-success' : 'text-danger';
-                    html += `<tr>
-                        <td>${item.date || ''}</td>
-                        <td>${item.compte_numero || ''} - ${item.compte_nom || ''}</td>
-                        <td>${item.libelle || ''}</td>
-                        <td class="text-end">${debit > 0 ? debit.toLocaleString() + ' F' : '-'}</td>
-                        <td class="text-end">${credit > 0 ? credit.toLocaleString() + ' F' : '-'}</td>
-                        <td class="text-end fw-bold ${soldeClass}">${solde_cumul.toLocaleString()} F</td>
-                    </tr>`;
-                });
-                
-                const soldeFinal = totalDebit - totalCredit;
-                const soldeClass = soldeFinal >= 0 ? 'text-success' : 'text-danger';
-                tfoot.innerHTML = `
-                    <tr class="fw-bold">
-                        <td colspan="3" class="text-end">TOTAUX :</td>
-                        <td id="rapportTotalDebit" class="text-end">${totalDebit.toLocaleString()} FCFA</td>
-                        <td id="rapportTotalCredit" class="text-end">${totalCredit.toLocaleString()} FCFA</td>
-                        <td id="rapportTotalSolde" class="text-end ${soldeClass}">${soldeFinal.toLocaleString()} FCFA</td>
-                    </tr>
-                `;
-                
-            } else if (type === 'balance') {
-                thead.innerHTML = '<th>Compte</th><th>Total Débit</th><th>Total Crédit</th><th>Solde</th>';
-                
-                data.forEach(item => {
-                    const totalDebitCompte = item.total_debit || 0;
-                    const totalCreditCompte = item.total_credit || 0;
-                    const solde = item.solde || 0;
-                    totalDebit += totalDebitCompte;
-                    totalCredit += totalCreditCompte;
-                    const soldeClass = solde >= 0 ? 'text-success' : 'text-danger';
-                    html += `<tr>
-                        <td><strong>${item.compte_numero || ''} - ${item.compte_nom || ''}</strong></td>
-                        <td class="text-end">${totalDebitCompte.toLocaleString()} F</td>
-                        <td class="text-end">${totalCreditCompte.toLocaleString()} F</td>
-                        <td class="text-end ${soldeClass} fw-bold">${solde.toLocaleString()} F</td>
-                    </tr>`;
-                });
-                
-                const soldeGeneral = totalDebit - totalCredit;
-                const soldeClass = soldeGeneral >= 0 ? 'text-success' : 'text-danger';
-                tfoot.innerHTML = `
-                    <tr class="fw-bold">
-                        <td class="text-end">TOTAUX :</td>
-                        <td id="rapportTotalDebit" class="text-end">${totalDebit.toLocaleString()} FCFA</td>
-                        <td id="rapportTotalCredit" class="text-end">${totalCredit.toLocaleString()} FCFA</td>
-                        <td id="rapportTotalSolde" class="text-end ${soldeClass}">${soldeGeneral.toLocaleString()} FCFA</td>
-                    </tr>
-                `;
-            }
-            
-            tbody.innerHTML = html;
         })
         .catch(error => {
             console.error('Erreur:', error);
-            let colspan = type === 'balance' ? 4 : 6;
-            tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-danger">Erreur de chargement</td></tr>`;
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Erreur de chargement</td></tr>';
         });
+}
+
+function afficherCompteResultat(data) {
+    const tbody = document.getElementById('rapportBody');
+    const thead = document.getElementById('rapportHeader');
+    const tfoot = document.getElementById('rapportFooter');
+    
+    thead.innerHTML = '<th>Compte</th><th>Montant</th><th>Catégorie</th><th></th>';
+    
+    let html = '';
+    
+    // Produits
+    if (data.produits && data.produits.length > 0) {
+        html += `<tr class="table-success"><td colspan="3"><strong>📈 PRODUITS (Revenus)</strong></td><td></td></tr>`;
+        data.produits.forEach(p => {
+            html += `<tr>
+                <td>${p.numero} - ${p.nom}</td>
+                <td class="text-end">${(p.montant || 0).toLocaleString()} FCFA</td>
+                <td><span class="badge bg-success">Produit</span></td>
+                <td></td>
+            </tr>`;
+        });
+        html += `<tr class="fw-bold"><td>TOTAL PRODUITS</td><td class="text-end">${(data.total_produits || 0).toLocaleString()} FCFA</td><td></td><td></td></tr>`;
+    }
+    
+    // Charges
+    if (data.charges && data.charges.length > 0) {
+        html += `<tr class="table-danger"><td colspan="3"><strong>📉 CHARGES (Dépenses)</strong></td><td></td></tr>`;
+        data.charges.forEach(c => {
+            html += `<tr>
+                <td>${c.numero} - ${c.nom}</td>
+                <td class="text-end">${(c.montant || 0).toLocaleString()} FCFA</td>
+                <td><span class="badge bg-danger">Charge</span></td>
+                <td></td>
+            </tr>`;
+        });
+        html += `<tr class="fw-bold"><td>TOTAL CHARGES</td><td class="text-end">${(data.total_charges || 0).toLocaleString()} FCFA</td><td></td><td></td></tr>`;
+    }
+    
+    // Résultat
+    const resultat = data.resultat || 0;
+    const resultatClass = resultat >= 0 ? 'text-success' : 'text-danger';
+    const resultatIcon = resultat >= 0 ? '✅' : '❌';
+    const resultatText = resultat >= 0 ? 'Bénéfice' : 'Perte';
+    html += `
+        <tr class="fw-bold table-info">
+            <td>${resultatIcon} RÉSULTAT (Produits - Charges)</td>
+            <td class="text-end ${resultatClass}">${resultat.toLocaleString()} FCFA</td>
+            <td><span class="badge ${resultat >= 0 ? 'bg-success' : 'bg-danger'}">${resultatText}</span></td>
+            <td></td>
+        </tr>
+    `;
+    
+    tbody.innerHTML = html;
+    tfoot.innerHTML = '';
+}
+
+function afficherBilan(data) {
+    const tbody = document.getElementById('rapportBody');
+    const thead = document.getElementById('rapportHeader');
+    const tfoot = document.getElementById('rapportFooter');
+    
+    thead.innerHTML = '<th>Compte</th><th>Montant</th><th>Catégorie</th><th></th>';
+    
+    let html = '';
+    
+    // Actifs
+    if (data.actifs && data.actifs.length > 0) {
+        html += `<tr class="table-primary"><td colspan="3"><strong>🏦 ACTIFS</strong></td><td></td></tr>`;
+        data.actifs.forEach(a => {
+            html += `<tr>
+                <td>${a.numero} - ${a.nom}</td>
+                <td class="text-end">${(a.montant || 0).toLocaleString()} FCFA</td>
+                <td><span class="badge bg-primary">Actif</span></td>
+                <td></td>
+            </tr>`;
+        });
+        html += `<tr class="fw-bold"><td>TOTAL ACTIFS</td><td class="text-end">${(data.total_actif || 0).toLocaleString()} FCFA</td><td></td><td></td></tr>`;
+    }
+    
+    // Passifs
+    if (data.passifs && data.passifs.length > 0) {
+        html += `<tr class="table-warning"><td colspan="3"><strong>📋 PASSIFS (Dettes)</strong></td><td></td></tr>`;
+        data.passifs.forEach(p => {
+            html += `<tr>
+                <td>${p.numero} - ${p.nom}</td>
+                <td class="text-end">${(p.montant || 0).toLocaleString()} FCFA</td>
+                <td><span class="badge bg-warning">Passif</span></td>
+                <td></td>
+            </tr>`;
+        });
+        html += `<tr class="fw-bold"><td>TOTAL PASSIFS</td><td class="text-end">${(data.total_passif || 0).toLocaleString()} FCFA</td><td></td><td></td></tr>`;
+    }
+    
+    // Capitaux propres
+    if (data.capitaux_propres && data.capitaux_propres.length > 0) {
+        html += `<tr class="table-info"><td colspan="3"><strong>💰 CAPITAUX PROPRES</strong></td><td></td></tr>`;
+        data.capitaux_propres.forEach(c => {
+            html += `<tr>
+                <td>${c.numero} - ${c.nom}</td>
+                <td class="text-end">${(c.montant || 0).toLocaleString()} FCFA</td>
+                <td><span class="badge bg-info">Capitaux propres</span></td>
+                <td></td>
+            </tr>`;
+        });
+        html += `<tr class="fw-bold"><td>TOTAL CAPITAUX PROPRES</td><td class="text-end">${(data.total_capitaux || 0).toLocaleString()} FCFA</td><td></td><td></td></tr>`;
+    }
+    
+    // Équilibre
+    const totalActif = data.total_actif || 0;
+    const totalPassifCapitaux = (data.total_passif || 0) + (data.total_capitaux || 0);
+    const estEquilibre = Math.abs(totalActif - totalPassifCapitaux) < 1;
+    const eqClass = estEquilibre ? 'text-success' : 'text-danger';
+    const eqIcon = estEquilibre ? '✅' : '❌';
+    html += `
+        <tr class="fw-bold table-secondary">
+            <td>${eqIcon} ÉQUILIBRE (Actif = Passif + Capitaux propres)</td>
+            <td class="text-end ${eqClass}">
+                ${totalActif.toLocaleString()} = ${totalPassifCapitaux.toLocaleString()} FCFA
+            </td>
+            <td><span class="badge ${estEquilibre ? 'bg-success' : 'bg-danger'}">${estEquilibre ? 'Équilibré' : 'Déséquilibré'}</span></td>
+            <td></td>
+        </tr>
+    `;
+    
+    tbody.innerHTML = html;
+    tfoot.innerHTML = '';
 }
 
 function exporterCSVRapport() {
@@ -1591,6 +2510,10 @@ function exporterCSVRapport() {
         csv = "Date;Compte;Libellé;Débit;Crédit;Solde\n";
     } else if (type === 'balance') {
         csv = "Compte;Total Débit;Total Crédit;Solde\n";
+    } else if (type === 'resultat') {
+        csv = "Compte;Montant;Catégorie\n";
+    } else if (type === 'bilan') {
+        csv = "Compte;Montant;Catégorie\n";
     }
     
     rows.forEach(row => {
@@ -1629,25 +2552,328 @@ function exporterCSVRapport() {
 }
 
 // ============================================================
-// INITIALISATION
+// RAPPROCHEMENT BANCAIRE
+// ============================================================
+
+let lignesReleve = [];
+let releveId = null;
+
+function ajouterLigneReleve(date = '', libelle = '', reference = '', debit = 0, credit = 0) {
+    const tbody = document.getElementById('releveBody');
+    
+    if (tbody.querySelector('tr.text-muted')) {
+        tbody.innerHTML = '';
+    }
+    
+    const row = tbody.insertRow();
+    const index = lignesReleve.length;
+    
+    row.innerHTML = `
+        <td><input type="date" class="form-control form-control-sm" value="${date}" onchange="majLigneReleve(${index}, 'date', this.value)"></td>
+        <td><input type="text" class="form-control form-control-sm" value="${libelle}" placeholder="Libellé" onchange="majLigneReleve(${index}, 'libelle', this.value)"></td>
+        <td><input type="text" class="form-control form-control-sm" value="${reference}" placeholder="Réf" onchange="majLigneReleve(${index}, 'reference', this.value)"></td>
+        <td><input type="number" class="form-control form-control-sm text-end" value="${debit || ''}" step="100" onchange="majLigneReleve(${index}, 'debit', this.value)" oninput="majLigneReleve(${index}, 'debit', this.value)"></td>
+        <td><input type="number" class="form-control form-control-sm text-end" value="${credit || ''}" step="100" onchange="majLigneReleve(${index}, 'credit', this.value)" oninput="majLigneReleve(${index}, 'credit', this.value)"></td>
+        <td class="text-end fw-bold" id="soldeLigne_${index}">0 FCFA</td>
+        <td class="text-center"><span class="badge bg-secondary">Non</span></td>
+        <td><button class="btn btn-sm btn-danger" onclick="supprimerLigneReleve(${index})"><i class="fas fa-times"></i></button></td>
+    `;
+    
+    lignesReleve.push({ date, libelle, reference, debit: parseFloat(debit) || 0, credit: parseFloat(credit) || 0 });
+    calculerSoldeReleve();
+}
+
+function majLigneReleve(index, champ, valeur) {
+    if (champ === 'debit' || champ === 'credit') {
+        lignesReleve[index][champ] = parseFloat(valeur) || 0;
+    } else {
+        lignesReleve[index][champ] = valeur;
+    }
+    calculerSoldeReleve();
+}
+
+function supprimerLigneReleve(index) {
+    if (!confirm('Supprimer cette ligne ?')) return;
+    lignesReleve.splice(index, 1);
+    rafraichirReleve();
+}
+
+function rafraichirReleve() {
+    const tbody = document.getElementById('releveBody');
+    tbody.innerHTML = '';
+    if (lignesReleve.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Ajoutez des lignes avec le bouton "+"</td></tr>';
+        document.getElementById('releveSoldeFinal').value = '';
+        document.getElementById('releveEcart').value = '';
+        return;
+    }
+    lignesReleve.forEach((l, i) => {
+        ajouterLigneReleve(l.date, l.libelle, l.reference, l.debit, l.credit);
+    });
+}
+
+function calculerSoldeReleve() {
+    let solde = parseFloat(document.getElementById('releveSoldeInitial').value) || 0;
+    let totalDebit = 0;
+    let totalCredit = 0;
+    
+    lignesReleve.forEach((l, i) => {
+        const debit = parseFloat(l.debit) || 0;
+        const credit = parseFloat(l.credit) || 0;
+        solde = solde + credit - debit;
+        totalDebit += debit;
+        totalCredit += credit;
+        
+        const soldeCell = document.getElementById(`soldeLigne_${i}`);
+        if (soldeCell) {
+            soldeCell.textContent = solde.toLocaleString() + ' FCFA';
+        }
+    });
+    
+    document.getElementById('releveTotalDebit').textContent = totalDebit.toLocaleString() + ' FCFA';
+    document.getElementById('releveTotalCredit').textContent = totalCredit.toLocaleString() + ' FCFA';
+    document.getElementById('releveSoldeFinal').value = solde.toLocaleString() + ' FCFA';
+    
+    // Calculer l'écart avec le solde final saisi
+    const soldeFinalSaisi = parseFloat(document.getElementById('releveSoldeFinal').value.replace(/[^0-9]/g, '')) || 0;
+    if (soldeFinalSaisi > 0) {
+        const ecart = solde - soldeFinalSaisi;
+        const ecartEl = document.getElementById('releveEcart');
+        if (ecart === 0) {
+            ecartEl.value = '✅ Équilibré';
+            ecartEl.style.color = '#28a745';
+        } else {
+            ecartEl.value = `⚠️ Écart: ${ecart.toLocaleString()} FCFA`;
+            ecartEl.style.color = '#dc3545';
+        }
+    }
+}
+
+function sauvegarderReleve() {
+    const dateReleve = document.getElementById('releveDate').value;
+    const soldeInitial = parseFloat(document.getElementById('releveSoldeInitial').value) || 0;
+    
+    if (!dateReleve) {
+        alert('Veuillez sélectionner une date');
+        return;
+    }
+    
+    if (lignesReleve.length === 0) {
+        alert('Ajoutez au moins une ligne');
+        return;
+    }
+    
+    const data = {
+        date_releve: dateReleve,
+        solde_initial: soldeInitial,
+        lignes: lignesReleve.map(l => ({
+            date_operation: l.date || dateReleve,
+            libelle: l.libelle || 'Opération',
+            reference: l.reference || '',
+            debit: l.debit || 0,
+            credit: l.credit || 0
+        }))
+    };
+    
+    const btn = document.querySelector('.btn-primary');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enregistrement...';
+    
+    fetch('/comptabilite/api/rapprochement/releves', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert('✅ Relevé enregistré avec succès !');
+            releveId = result.id;
+            document.getElementById('releveSoldeFinal').value = result.solde_final.toLocaleString() + ' FCFA';
+            chargerHistoriqueReleves();
+        } else {
+            alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => {
+        alert('❌ Erreur: ' + error);
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Enregistrer';
+    });
+}
+
+function rapprocherReleve() {
+    if (!releveId) {
+        alert('Enregistrez d\'abord le relevé');
+        return;
+    }
+    
+    if (!confirm('Rapprocher automatiquement les lignes avec les écritures comptables ?')) return;
+    
+    const btn = document.querySelector('.btn-info');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rapprochement...';
+    
+    fetch(`/comptabilite/api/rapprochement/releves/${releveId}/rapprocher`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert(`✅ ${result.nb_rapproche} lignes rapprochées sur ${result.total_lignes}`);
+            chargerHistoriqueReleves();
+            chargerLignesReleve(releveId);
+        } else {
+            alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => {
+        alert('❌ Erreur: ' + error);
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-handshake"></i> Rapprocher';
+    });
+}
+
+function validerReleve() {
+    if (!releveId) {
+        alert('Enregistrez d\'abord le relevé');
+        return;
+    }
+    
+    if (!confirm('Valider ce relevé bancaire ?')) return;
+    
+    fetch(`/comptabilite/api/rapprochement/releves/${releveId}/valider`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert('✅ Relevé validé avec succès !');
+            chargerHistoriqueReleves();
+        } else {
+            alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => {
+        alert('❌ Erreur: ' + error);
+    });
+}
+
+function chargerHistoriqueReleves() {
+    fetch('/comptabilite/api/rapprochement/releves')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('historiqueRelevesBody');
+            tbody.innerHTML = '';
+            
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Aucun relevé</td></tr>';
+                return;
+            }
+            
+            const badges = {
+                'brouillon': 'bg-secondary',
+                'en_attente': 'bg-warning',
+                'valide': 'bg-success'
+            };
+            
+            data.forEach(r => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${r.date_releve}</td>
+                    <td>${(r.solde_initial || 0).toLocaleString()} F</td>
+                    <td>${(r.solde_final || 0).toLocaleString()} F</td>
+                    <td>${r.nb_lignes || 0}</td>
+                    <td>${r.nb_rapproche || 0}/${r.nb_lignes || 0}</td>
+                    <td><span class="badge ${badges[r.statut] || 'bg-secondary'}">${r.statut}</span></td>
+                    <td>${r.created_by || '-'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-info" onclick="chargerLignesReleve(${r.id})">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        ${r.statut === 'valide' ? '' : `<button class="btn btn-sm btn-primary" onclick="releveId=${r.id}; chargerLignesReleve(${r.id})">
+                            <i class="fas fa-edit"></i>
+                        </button>`}
+                    </td>
+                `;
+            });
+        })
+        .catch(error => console.error('Erreur:', error));
+}
+
+function chargerLignesReleve(id) {
+    releveId = id;
+    fetch(`/comptabilite/api/rapprochement/releves/${id}/lignes`)
+        .then(r => r.json())
+        .then(data => {
+            lignesReleve = data.map(l => ({
+                date: l.date_operation,
+                libelle: l.libelle,
+                reference: l.reference,
+                debit: l.debit,
+                credit: l.credit
+            }));
+            rafraichirReleve();
+            
+            if (data.length > 0) {
+                document.getElementById('releveDate').value = data[0].date_operation;
+            }
+        })
+        .catch(error => console.error('Erreur:', error));
+}
+
+// ============================================================
+// INITIALISATION - VERSION OPTIMISÉE (LAZY LOADING)
 // ============================================================
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Démarrage de la comptabilité...');
+    
+    // ⭐ 1. INITIALISER LES MODALS (rapide)
     initModals();
     
+    // ⭐ 2. CHARGER D'ABORD CE QUI EST IMMÉDIATEMENT VISIBLE
+    // (Tableau de bord + Budget)
     chargerDashboard();
-    chargerDernieresEcritures();
-    chargerComptes();
-    chargerEcritures();
-    chargerBudget();
-    chargerComptesBudget();
+    genererAnnees();
     
-    const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    document.getElementById('rapportDateDebut').value = firstDay.toISOString().split('T')[0];
-    document.getElementById('rapportDateFin').value = now.toISOString().split('T')[0];
-    document.getElementById('budgetAnnee').value = now.getFullYear();
-    chargerJournal();
+    // ⭐ 3. CHARGER LE BUDGET (important pour l'onglet actif)
+    setTimeout(() => {
+        chargerBudget();
+        chargerComptesBudget();
+    }, 200);
     
+    // ⭐ 4. CHARGER LES DONNÉES EN ARRIÈRE-PLAN (quand la page est prête)
+    setTimeout(() => {
+        console.log('📊 Chargement des données en arrière-plan...');
+        chargerComptes();
+        chargerDernieresEcritures();
+        chargerHistoriqueReleves();
+    }, 500);
+    
+    // ⭐ 5. CHARGER LES ÉCRITURES (les plus lourdes) EN DERNIER
+    setTimeout(() => {
+        console.log('📝 Chargement des écritures...');
+        chargerEcritures(1); // ⭐ Utiliser la pagination
+    }, 800);
+    
+    // ⭐ 6. INITIALISER LES DATES DES RAPPORTS
+    setTimeout(() => {
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        const dateDebut = document.getElementById('rapportDateDebut');
+        const dateFin = document.getElementById('rapportDateFin');
+        if (dateDebut) dateDebut.value = firstDay.toISOString().split('T')[0];
+        if (dateFin) dateFin.value = now.toISOString().split('T')[0];
+        chargerJournal();
+    }, 1000);
+    
+    // ⭐ 7. ÉCOUTEURS (toujours actifs)
     document.addEventListener('input', function(e) {
         if (e.target.classList.contains('debit-input') || e.target.classList.contains('credit-input')) {
             calculerTotaux();
