@@ -2544,7 +2544,7 @@ def admin_structure():
 @app.route('/api/admin/actes', methods=['POST'])
 @login_required
 def api_add_acte():
-    """Ajouter ou modifier un acte dans Neon"""
+    """Ajouter ou modifier un acte dans Google Sheets"""
     try:
         data = request.json
         structure_id = session.get('structure_id')
@@ -2552,66 +2552,112 @@ def api_add_acte():
         if not structure_id:
             return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
         
+        sheet_name = f"struct_{structure_id}_actes"
+        
+        try:
+            worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+        except:
+            # Créer la feuille avec les en-têtes
+            worksheet = sheets_helper.spreadsheet.add_worksheet(
+                title=sheet_name,
+                rows=1000,
+                cols=20
+            )
+            headers = ['ID', 'nom', 'prix', 'pbr', 'description', 'structure_id',
+                       'prise_en_charge_amu', 'commentaire_amu', 
+                       'prise_en_charge_cac', 'commentaire_cac']
+            worksheet.append_row(headers)
+        
         acte_id = data.get('id')
         
         if acte_id:
-            # 🔥 MODIFICATION dans Neon
-            db.execute_query("""
-                UPDATE actes 
-                SET nom = %s, prix = %s, description = %s, code = %s
-                WHERE id = %s AND structure_id = %s
-            """, (
-                data.get('nom'),
-                data.get('prix'),
-                data.get('description', ''),
-                data.get('code', ''),
-                acte_id,
-                structure_id
-            ))
-            print(f"✅ Acte {acte_id} modifié dans Neon")
-        else:
-            # 🔥 AJOUT dans Neon
-            result = db.execute_query("""
-                INSERT INTO actes (structure_id, code, nom, prix, description)
-                VALUES (%s, %s, %s, %s, %s)
-                RETURNING id
-            """, (
-                structure_id,
-                data.get('code', ''),
-                data.get('nom'),
-                data.get('prix'),
-                data.get('description', '')
-            ))
+            # 🔥 MODIFICATION
+            values = worksheet.get_all_values()
+            row_num = None
+            for i, row in enumerate(values, start=1):
+                if i == 1: continue
+                if row and row[0] == str(acte_id):
+                    row_num = i
+                    break
             
-            if result and len(result) > 0:
-                new_id = result[0]['id'] if isinstance(result[0], dict) else result[0][0]
-                print(f"✅ Nouvel acte ajouté dans Neon avec ID: {new_id}")
+            if row_num:
+                worksheet.update_cell(row_num, 2, data.get('nom', ''))
+                worksheet.update_cell(row_num, 3, data.get('prix', 0))
+                worksheet.update_cell(row_num, 4, data.get('pbr', data.get('prix', 0)))
+                worksheet.update_cell(row_num, 5, data.get('description', ''))
+                worksheet.update_cell(row_num, 6, structure_id)
+                worksheet.update_cell(row_num, 7, data.get('prise_en_charge_amu', True))
+                worksheet.update_cell(row_num, 8, data.get('commentaire_amu', ''))
+                worksheet.update_cell(row_num, 9, data.get('prise_en_charge_cac', True))
+                worksheet.update_cell(row_num, 10, data.get('commentaire_cac', ''))
+                print(f"✅ Acte {acte_id} modifié dans Sheets")
+                return jsonify({'success': True, 'message': 'Acte modifié avec succès'})
             else:
-                return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
+                return jsonify({'success': False, 'error': 'Acte non trouvé'}), 404
         
-        return jsonify({'success': True})
+        else:
+            # 🔥 AJOUT
+            all_records = worksheet.get_all_records()
+            if all_records:
+                ids = [r.get('ID', 0) for r in all_records if r.get('ID')]
+                new_id = max(ids) + 1 if ids else 1
+            else:
+                new_id = 1
+            
+            new_row = [
+                new_id,
+                data.get('nom', ''),
+                data.get('prix', 0),
+                data.get('pbr', data.get('prix', 0)),
+                data.get('description', ''),
+                structure_id,
+                data.get('prise_en_charge_amu', True),
+                data.get('commentaire_amu', ''),
+                data.get('prise_en_charge_cac', True),
+                data.get('commentaire_cac', '')
+            ]
+            worksheet.append_row(new_row)
+            print(f"✅ Nouvel acte ajouté dans Sheets avec ID: {new_id}")
+            
+            return jsonify({
+                'success': True, 
+                'message': 'Acte ajouté avec succès',
+                'id': new_id
+            })
         
     except Exception as e:
         print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/admin/actes/<int:acte_id>', methods=['DELETE'])
 @login_required
 def api_delete_acte(acte_id):
-    """Supprimer un acte dans Neon"""
+    """Supprimer un acte dans Google Sheets"""
     try:
         structure_id = session.get('structure_id')
         
-        db.execute_query("""
-            DELETE FROM actes 
-            WHERE id = %s AND structure_id = %s
-        """, (acte_id, structure_id))
+        if not structure_id:
+            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
         
-        print(f"✅ Acte {acte_id} supprimé de Neon")
-        return jsonify({'success': True})
+        sheet_name = f"struct_{structure_id}_actes"
+        worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+        
+        values = worksheet.get_all_values()
+        for i, row in enumerate(values, start=1):
+            if i == 1: continue
+            if row and row[0] == str(acte_id):
+                worksheet.delete_rows(i)
+                print(f"✅ Acte {acte_id} supprimé de Sheets")
+                return jsonify({'success': True, 'message': 'Acte supprimé avec succès'})
+        
+        return jsonify({'success': False, 'error': f'Acte {acte_id} non trouvé'}), 404
         
     except Exception as e:
         print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/admin/produits/<int:produit_id>', methods=['DELETE'])
