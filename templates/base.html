@@ -1110,7 +1110,23 @@
     top: 0;
     z-index: 1000;
 }
+body {
+    background: url("{{ url_for('static', filename='images/background.jpg') }}") no-repeat center center fixed !important;
+    background-size: cover !important;
+    min-height: 100vh;
+}
 
+body::after {
+    content: 'SSoftOneV10';
+    position: fixed;
+    bottom: 30px;
+    right: 35px;
+    font-size: 32px;
+    font-weight: 800;
+    color: rgba(102, 126, 234, 0.20);
+    z-index: 9999;
+    pointer-events: none;
+}
     </style>
     {% block extra_css %}{% endblock %}
 </head>
