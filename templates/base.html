@@ -641,33 +641,513 @@
     padding: 3px 8px;
     border-radius: 20px;
 }
+/* Structure Brand - Version corrigée */
+.structure-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 4px 16px 4px 12px;
+    border-radius: 50px;
+    border: 2px solid #dc3545;
+    box-shadow: 0 2px 15px rgba(220, 53, 69, 0.12);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.structure-brand .structure-logo {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(220, 53, 69, 0.2);
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+}
+
+.structure-brand .structure-name {
+    font-weight: 700;
+    font-size: 14px;
+    color: #dc3545;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    background: linear-gradient(135deg, #dc3545, #a71d2a);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.structure-brand .structure-badge {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: white;
+    background: linear-gradient(135deg, #dc3545, #a71d2a);
+    padding: 2px 8px;
+    border-radius: 50px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.structure-brand .structure-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, #dc3545, #c82333);
+    border-radius: 50%;
+    color: white;
+    font-size: 14px;
+    flex-shrink: 0;
+    transition: transform 0.3s ease;
+}
+
+/* Version mobile */
+@media (max-width: 768px) {
+    .structure-brand {
+        padding: 3px 12px 3px 8px;
+        gap: 6px;
+        border-width: 1.5px;
+    }
+    
+    .structure-brand .structure-logo {
+        width: 26px !important;
+        height: 26px !important;
+    }
+    
+    .structure-brand .structure-name {
+        font-size: 12px;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .structure-brand .structure-badge {
+        font-size: 7px;
+        padding: 1px 6px;
+    }
+    
+    .structure-brand .structure-icon {
+        width: 26px;
+        height: 26px;
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 576px) {
+    .structure-brand .structure-name {
+        max-width: 80px;
+        font-size: 11px;
+    }
+    
+    .structure-brand .structure-badge {
+        display: none;
+    }
+    
+    .structure-brand .structure-logo {
+        width: 22px !important;
+        height: 22px !important;
+    }
+}
+
+.structure-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    max-width: 400px; /* Limite la largeur */
+    margin: 0 auto;
+}
+
+.structure-brand {
+    max-width: 100%;
+    white-space: nowrap;
+}
+
+
+/* ============================================
+   NAVIGATION HORIZONTALE AVEC COULEURS
+   ============================================ */
+
+.top-nav {
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    padding: 0 20px;
+    position: sticky;
+    top: 72px;
+    z-index: 999;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+}
+
+.top-nav .nav-group {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    height: 50px;
+}
+
+.top-nav .nav-item {
+    position: relative;
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+/* ===== COULEURS PAR GROUPE ===== */
+
+/* GROUPE 1 : ACCUEIL - Bleu */
+.nav-item-accueil .nav-link-top {
+    color: #3b82f6;
+}
+.nav-item-accueil .nav-link-top:hover,
+.nav-item-accueil .nav-link-top.active {
+    color: #2563eb;
+    border-bottom-color: #3b82f6;
+}
+.nav-item-accueil .mega-menu .menu-item:hover {
+    color: #3b82f6;
+    border-left-color: #3b82f6;
+}
+.nav-item-accueil .mega-menu .menu-item:hover i {
+    color: #3b82f6;
+}
+
+/* GROUPE 2 : PATIENTS - Vert */
+.nav-item-patients .nav-link-top {
+    color: #22c55e;
+}
+.nav-item-patients .nav-link-top:hover,
+.nav-item-patients .nav-link-top.active {
+    color: #16a34a;
+    border-bottom-color: #22c55e;
+}
+.nav-item-patients .mega-menu .menu-item:hover {
+    color: #22c55e;
+    border-left-color: #22c55e;
+}
+.nav-item-patients .mega-menu .menu-item:hover i {
+    color: #22c55e;
+}
+
+/* GROUPE 3 : SOINS - Violet */
+.nav-item-soins .nav-link-top {
+    color: #8b5cf6;
+}
+.nav-item-soins .nav-link-top:hover,
+.nav-item-soins .nav-link-top.active {
+    color: #7c3aed;
+    border-bottom-color: #8b5cf6;
+}
+.nav-item-soins .mega-menu .menu-item:hover {
+    color: #8b5cf6;
+    border-left-color: #8b5cf6;
+}
+.nav-item-soins .mega-menu .menu-item:hover i {
+    color: #8b5cf6;
+}
+
+/* GROUPE 4 : PHARMACIE - Orange */
+.nav-item-pharmacie .nav-link-top {
+    color: #f59e0b;
+}
+.nav-item-pharmacie .nav-link-top:hover,
+.nav-item-pharmacie .nav-link-top.active {
+    color: #d97706;
+    border-bottom-color: #f59e0b;
+}
+.nav-item-pharmacie .mega-menu .menu-item:hover {
+    color: #f59e0b;
+    border-left-color: #f59e0b;
+}
+.nav-item-pharmacie .mega-menu .menu-item:hover i {
+    color: #f59e0b;
+}
+
+/* GROUPE 5 : FINANCES - Rose */
+.nav-item-finances .nav-link-top {
+    color: #ec4899;
+}
+.nav-item-finances .nav-link-top:hover,
+.nav-item-finances .nav-link-top.active {
+    color: #db2777;
+    border-bottom-color: #ec4899;
+}
+.nav-item-finances .mega-menu .menu-item:hover {
+    color: #ec4899;
+    border-left-color: #ec4899;
+}
+.nav-item-finances .mega-menu .menu-item:hover i {
+    color: #ec4899;
+}
+
+/* GROUPE 6 : HISTORIQUE - Cyan */
+.nav-item-historique .nav-link-top {
+    color: #06b6d4;
+}
+.nav-item-historique .nav-link-top:hover,
+.nav-item-historique .nav-link-top.active {
+    color: #0891b2;
+    border-bottom-color: #06b6d4;
+}
+.nav-item-historique .mega-menu .menu-item:hover {
+    color: #06b6d4;
+    border-left-color: #06b6d4;
+}
+.nav-item-historique .mega-menu .menu-item:hover i {
+    color: #06b6d4;
+}
+
+/* GROUPE 7 : RÉFÉRENTIELS - Indigo */
+.nav-item-referentiels .nav-link-top {
+    color: #6366f1;
+}
+.nav-item-referentiels .nav-link-top:hover,
+.nav-item-referentiels .nav-link-top.active {
+    color: #4f46e5;
+    border-bottom-color: #6366f1;
+}
+.nav-item-referentiels .mega-menu .menu-item:hover {
+    color: #6366f1;
+    border-left-color: #6366f1;
+}
+.nav-item-referentiels .mega-menu .menu-item:hover i {
+    color: #6366f1;
+}
+
+/* GROUPE 8 : ADMINISTRATION - Rouge */
+.nav-item-administration .nav-link-top {
+    color: #ef4444;
+}
+.nav-item-administration .nav-link-top:hover,
+.nav-item-administration .nav-link-top.active {
+    color: #dc2626;
+    border-bottom-color: #ef4444;
+}
+.nav-item-administration .mega-menu .menu-item:hover {
+    color: #ef4444;
+    border-left-color: #ef4444;
+}
+.nav-item-administration .mega-menu .menu-item:hover i {
+    color: #ef4444;
+}
+
+/* ===== STYLES COMMUNS ===== */
+
+.top-nav .nav-link-top {
+    padding: 0 18px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.25s ease;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+}
+
+.top-nav .nav-link-top:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.top-nav .nav-link-top .arrow {
+    margin-left: 6px;
+    font-size: 10px;
+    transition: transform 0.25s ease;
+}
+
+.top-nav .nav-item:hover .nav-link-top .arrow {
+    transform: rotate(180deg);
+}
+
+.top-nav .nav-item.open .nav-link-top .arrow {
+    transform: rotate(180deg);
+}
+/* ===== MEGA MENU - Version améliorée ===== */
+
+/* Hover pour desktop */
+@media (hover: hover) {
+    .top-nav .nav-item:hover .mega-menu {
+        opacity: 1 !important;
+        visibility: visible !important;
+        transform: translateY(0) !important;
+    }
+}
+
+/* Click pour mobile et plein écran */
+.top-nav .nav-item.open .mega-menu {
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: translateY(0) !important;
+}
+
+/* ===== MEGA MENU ===== */
+.top-nav .mega-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 220px;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.12);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    padding: 8px 0;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1000;
+}
+
+.top-nav .nav-item:hover .mega-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.top-nav .mega-menu .menu-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 20px;
+    color: #4a5568;
+    font-size: 13px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    border-left: 3px solid transparent;
+    gap: 10px;
+}
+
+.top-nav .mega-menu .menu-item:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.top-nav .mega-menu .menu-item i {
+    width: 18px;
+    text-align: center;
+    font-size: 14px;
+    color: #a0aec0;
+    transition: color 0.2s ease;
+}
+
+.top-nav .mega-menu .menu-divider {
+    height: 1px;
+    background: rgba(0, 0, 0, 0.06);
+    margin: 6px 16px;
+}
+
+/* ===== MEGA MENU LARGE (2 colonnes) ===== */
+.top-nav .mega-menu.large {
+    min-width: 420px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 12px;
+}
+
+.top-nav .mega-menu.large .menu-item {
+    border-left: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 992px) {
+    .top-nav {
+        display: none;
+    }
+}
+
+/* ===== SCROLLBAR ===== */
+.top-nav .mega-menu::-webkit-scrollbar {
+    width: 4px;
+}
+.top-nav .mega-menu::-webkit-scrollbar-thumb {
+    background: #667eea;
+    border-radius: 10px;
+}
+.top-nav .mega-menu::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* Bouton plein écran */
+#fullscreenBtn {
+    transition: all 0.3s ease;
+}
+
+#fullscreenBtn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+#fullscreenBtn:active {
+    transform: scale(0.95);
+}
+
+/* Mode plein écran - ajustements */
+:-webkit-full-screen .top-nav {
+    top: 0;
+    z-index: 1000;
+}
+
+:-moz-full-screen .top-nav {
+    top: 0;
+    z-index: 1000;
+}
+
+:fullscreen .top-nav {
+    top: 0;
+    z-index: 1000;
+}
+
+
     </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
 
-<!-- Navbar moderne -->
 <nav class="navbar navbar-expand-lg">
     <div class="container">
         <a class="navbar-brand" href="{{ url_for('dashboard' if session.user_id else 'index') }}">
             SSoftOne<span style="color: #667eea;">-V10</span>
         </a>
         
-        <!-- NOM DE LA STRUCTURE EN ROUGE ÉLÉGANT -->
-        {% if session.user_id and session.structure_nom %}
-        <div class="structure-container mx-auto">
-            <div class="structure-brand">
-                <span class="structure-icon">
-                    <i class="fas fa-building"></i>
-                </span>
-                <span class="structure-name">{{ session.structure_nom }}</span>
-                <span class="structure-badge">****</span>
-            </div>
-        </div>
+<!-- NOM DE LA STRUCTURE AVEC LOGO -->
+{% if session.user_id and session.structure_nom %}
+<div class="structure-container mx-auto">
+    <div class="structure-brand">
+        {% if session.structure_logo and session.structure_logo|trim != '' %}
+        <img src="{{ session.structure_logo }}" alt="Logo" class="structure-logo" 
+             onerror="this.style.display='none'; this.parentElement.querySelector('.structure-icon').style.display='flex';">
+        <span class="structure-icon" style="display:none;">
+            <i class="fas fa-building"></i>
+        </span>
+        {% else %}
+        <span class="structure-icon">
+            <i class="fas fa-building"></i>
+        </span>
         {% endif %}
+        <span class="structure-name">{{ session.structure_nom }}</span>
+        <span class="structure-badge">****</span>
+    </div>
+</div>
+{% endif %}
         
         {% if session.user_id %}
         <div class="ms-auto d-flex align-items-center gap-3">
+
+
             <!-- Horloge temps réel -->
             <div class="d-none d-md-block" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 8px 18px; border-radius: 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
                 <div id="horloge" class="d-flex align-items-center gap-2">
@@ -684,6 +1164,26 @@
                     <span id="heureMobile" style="font-size: 12px; font-weight: 600; color: #667eea;"></span>
                 </div>
             </div>
+
+<!-- BOUTON PLEIN ÉCRAN AVEC TEXTE -->
+<div class="d-none d-md-block">
+    <button id="fullscreenBtn" class="btn btn-light rounded-pill d-flex align-items-center gap-2" 
+            style="padding: 8px 16px; border: none; background: rgba(255,255,255,0.8); box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: all 0.3s ease;"
+            onclick="toggleFullScreen()" title="Plein écran (F11)">
+        <i class="fas fa-expand" id="fullscreenIcon"></i>
+        <span id="fullscreenText" style="font-size: 12px; font-weight: 500; color: #4a5568;">Plein écran</span>
+    </button>
+</div>
+
+<!-- Version mobile avec texte court -->
+<div class="d-md-none">
+    <button id="fullscreenBtnMobile" class="btn btn-light rounded-pill d-flex align-items-center gap-1" 
+            style="padding: 5px 12px; border: none; background: rgba(255,255,255,0.8);"
+            onclick="toggleFullScreen()" title="Plein écran">
+        <i class="fas fa-expand" id="fullscreenIconMobile" style="font-size: 14px;"></i>
+        <span id="fullscreenTextMobile" style="font-size: 10px; font-weight: 500; color: #4a5568;">Plein</span>
+    </button>
+</div>
             
             <div class="dropdown">
                 <button class="btn btn-light rounded-pill dropdown-toggle" type="button" data-bs-toggle="dropdown">
@@ -695,12 +1195,151 @@
                     <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item" href="{{ url_for('rendez_vous') }}"><i class="fas fa-calendar-alt"></i> Rendez-vous</a></li>
                     <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Déconnexion</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="toggleFullscreenMode(); return false;"><i class="fas fa-expand" id="fullscreenModeIcon"></i> <span id="fullscreenModeText">Mode plein écran</span></a></li>
                 </ul>
             </div>
         </div>
         {% endif %}
     </div>
 </nav>
+
+
+<!-- ============================================
+     BARRE DE NAVIGATION HORIZONTALE (TOP NAV)
+     ============================================ -->
+{% if session.user_id %}
+<div class="top-nav d-none d-lg-block">
+    <ul class="nav-group">
+        
+        <!-- GROUPE 1 : ACCUEIL - BLEU -->
+        <li class="nav-item nav-item-accueil">
+            <a class="nav-link-top" href="{{ url_for('dashboard') }}">
+                <i class="fas fa-tachometer-alt me-1"></i> Accueil
+            </a>
+        </li>
+
+<!-- GROUPE 2 : PATIENTS - VERT -->
+<li class="nav-item nav-item-patients">
+    <a class="nav-link-top" href="#" onclick="return false;">
+        Patients <i class="fas fa-chevron-down arrow"></i>
+    </a>
+    <div class="mega-menu">
+        <a class="menu-item" href="{{ url_for('patients') }}">
+            <i class="fas fa-users"></i> Liste des patients
+        </a>
+        <a class="menu-item" href="{{ url_for('rendez_vous') }}">
+            <i class="fas fa-calendar-alt"></i> Rendez-vous
+        </a>
+        <a class="menu-item" href="{{ url_for('rappels_rendez_vous') }}">
+            <i class="fas fa-bell"></i> Rappels
+        </a>
+    </div>
+</li>
+
+<!-- GROUPE 3 : SOINS - VIOLET -->
+<li class="nav-item nav-item-soins">
+    <a class="nav-link-top" href="#" onclick="return false;">
+        Soins <i class="fas fa-chevron-down arrow"></i>
+    </a>
+    <div class="mega-menu large">
+        <a class="menu-item" href="{{ url_for('consultation') }}">
+            <i class="fas fa-stethoscope"></i> Consultation
+        </a>
+        <a class="menu-item" href="{{ url_for('actes_vente') }}">
+            <i class="fas fa-vial"></i> LABO/RADIO/Actes
+        </a>
+        <a class="menu-item" href="{{ url_for('prescriptions_recues') }}">
+            <i class="fas fa-prescription-bottle"></i> Prescriptions reçues
+        </a>
+    </div>
+</li>
+
+<!-- GROUPE 4 : PHARMACIE - ORANGE -->
+<li class="nav-item nav-item-pharmacie">
+    <a class="nav-link-top" href="#" onclick="return false;">
+        Pharmacie <i class="fas fa-chevron-down arrow"></i>
+    </a>
+    <div class="mega-menu">
+        <a class="menu-item" href="{{ url_for('pharma_vente') }}">
+            <i class="fas fa-pills"></i> Vente pharmacie
+        </a>
+        <a class="menu-item" href="{{ url_for('gestion_stock') }}">
+            <i class="fas fa-boxes"></i> Gestion des stocks
+        </a>
+    </div>
+</li>
+        <!-- GROUPE 5 : FINANCES - ROSE -->
+        <li class="nav-item nav-item-finances">
+            <span class="nav-link-top">
+                Finances <i class="fas fa-chevron-down arrow"></i>
+            </span>
+            <div class="mega-menu">
+                <a class="menu-item" href="{{ url_for('factures') }}">
+                    <i class="fas fa-file-invoice"></i> Factures clients
+                </a>
+                <a class="menu-item" href="{{ url_for('proformas') }}">
+                    <i class="fas fa-file-invoice"></i> Factures Proforma
+                </a>
+                {% if session.is_admin %}
+                <a class="menu-item" href="{{ url_for('admin_finances') }}">
+                    <i class="fas fa-coins"></i> Finances
+                </a>
+                <a class="menu-item" href="{{ url_for('statistiques_ventes') }}">
+                    <i class="fas fa-chart-bar"></i> Statistiques
+                </a>
+                {% endif %}
+            </div>
+        </li>
+
+        <!-- GROUPE 6 : HISTORIQUE - CYAN -->
+        <li class="nav-item nav-item-historique">
+            <a class="nav-link-top" href="{{ url_for('historique_ventes') }}">
+                <i class="fas fa-history me-1"></i> Historique
+            </a>
+        </li>
+
+        <!-- GROUPE 7 : RÉFÉRENTIELS - INDIGO -->
+        <li class="nav-item nav-item-referentiels">
+            <span class="nav-link-top">
+                Référentiels <i class="fas fa-chevron-down arrow"></i>
+            </span>
+            <div class="mega-menu">
+                <a class="menu-item" href="https://referentiels.amu.tg/#/providers" target="_blank">
+                    <i class="fas fa-hospital"></i> AMU-CNSS
+                </a>
+                <a class="menu-item" href="https://prestaplus.inam.tg/Vue/index.php" target="_blank">
+                    <i class="fas fa-file-invoice"></i> AMU-INAM
+                </a>
+            </div>
+        </li>
+
+        <!-- GROUPE 8 : ADMINISTRATION - ROUGE -->
+        {% if session.is_admin %}
+        <li class="nav-item nav-item-administration">
+            <span class="nav-link-top">
+                Administration <i class="fas fa-chevron-down arrow"></i>
+            </span>
+            <div class="mega-menu">
+                <a class="menu-item" href="{{ url_for('admin_structure') }}">
+                    <i class="fas fa-cog"></i> Administration
+                </a>
+                <a class="menu-item" href="{{ url_for('rh.gestion_rh') }}">
+                    <i class="fas fa-users-cog"></i> GRH
+                </a>
+                <a class="menu-item" href="{{ url_for('comptabilite.index') }}">
+                    <i class="fas fa-calculator"></i> Comptabilité
+                </a>
+                <a class="menu-item" href="{{ url_for('historique_annulations') }}">
+                    <i class="fas fa-ban"></i> Annulations
+                </a>
+            </div>
+        </li>
+        {% endif %}
+
+    </ul>
+</div>
+{% endif %}
+
 
 <!-- BANDEAU PATIENT SÉLECTIONNÉ -->
 {% if session.user_id %}
@@ -727,7 +1366,9 @@
 </div>
 
 <script>
-// Horloge temps réel
+// ============================================
+// HORLOGE TEMPS RÉEL
+// ============================================
 function updateHorloge() {
     const maintenant = new Date();
     const jours = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
@@ -775,7 +1416,6 @@ localStorage.setItem('structureLogo', '{{ session.structure_logo }}');
 localStorage.setItem('structureEmail', '{{ session.structure_email }}');
 {% endif %}
     
-// Récupérer le nom de la structure
 function getStructureNom(callback) {
     let nom = localStorage.getItem('structureNom');
     if (nom) {
@@ -792,34 +1432,23 @@ function getStructureNom(callback) {
         .catch(() => callback('Notre établissement'));
 }
     
-// Charger les infos de la structure au démarrage
 function chargerInfosStructure() {
     fetch('/api/structure/infos')
         .then(response => response.json())
         .then(data => {
-            if (data.nom) {
-                localStorage.setItem('structureNom', data.nom);
-            }
-            if (data.telephone) {
-                localStorage.setItem('structureTelephone', data.telephone);
-            }
-            if (data.logo_url) {
-                localStorage.setItem('structureLogo', data.logo_url);
-            }
-            if (data.email) {
-                localStorage.setItem('structureEmail', data.email);
-            }
+            if (data.nom) localStorage.setItem('structureNom', data.nom);
+            if (data.telephone) localStorage.setItem('structureTelephone', data.telephone);
+            if (data.logo_url) localStorage.setItem('structureLogo', data.logo_url);
+            if (data.email) localStorage.setItem('structureEmail', data.email);
             console.log('Infos structure chargées:', data);
         })
         .catch(err => console.error('Erreur chargement infos structure:', err));
 }
 
-// Appeler au chargement de la page
 if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
     chargerInfosStructure();
 }    
     
-// Chargement du patient sélectionné
 function loadSelectedPatient() {
     let patientId = sessionStorage.getItem('selectedPatientId');
     let patientName = sessionStorage.getItem('selectedPatientName');
@@ -840,15 +1469,10 @@ function loadSelectedPatient() {
         if (nameSpan) nameSpan.innerText = patientName || 'Patient';
         
         let assuranceText = 'Non assuré';
-        if (assurance === 'amu_cnss') {
-            assuranceText = 'AMU-CNSS';
-        } else if (assurance === 'amu_inam') {
-            assuranceText = 'AMU-INAM';
-        } else if (assurance === 'autre') {
-            assuranceText = 'Autre assurance';
-        } else if (assurance && assurance !== 'non_assure' && assurance !== 'null') {
-            assuranceText = assurance;
-        }
+        if (assurance === 'amu_cnss') assuranceText = 'AMU-CNSS';
+        else if (assurance === 'amu_inam') assuranceText = 'AMU-INAM';
+        else if (assurance === 'autre') assuranceText = 'Autre assurance';
+        else if (assurance && assurance !== 'non_assure' && assurance !== 'null') assuranceText = assurance;
         
         let assuranceSpan = document.getElementById('currentPatientAssurance');
         if (assuranceSpan) assuranceSpan.innerText = assuranceText;
@@ -875,9 +1499,6 @@ function clearSelectedPatient() {
     location.reload();
 }
     
-document.addEventListener('DOMContentLoaded', loadSelectedPatient);
-    
-// Loader functions améliorées
 function showLoader(message) {
     message = message || 'Chargement en cours...';
     let loader = document.getElementById('loaderOverlay');
@@ -898,18 +1519,322 @@ function hideLoader() {
     if (loader) loader.style.display = 'none';
 }
     
-// Afficher le loader avant de quitter la page
 window.addEventListener('beforeunload', function() {
     showLoader();
 });
     
-// Intercepter les clics sur les liens
 document.addEventListener('click', function(e) {
     const link = e.target.closest('a');
     if (link && link.href && !link.target && link.hostname === window.location.hostname) {
         if (!link.href.includes('javascript:') && !link.href.includes('#')) {
             showLoader('Navigation en cours...');
         }
+    }
+});
+
+// ============================================
+// CHARGEMENT PATIENT ET LOGO
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    loadSelectedPatient();
+    
+    // Logo via API
+    fetch('/api/structure/infos')
+        .then(response => response.json())
+        .then(data => {
+            if (data.logo_url) {
+                const brand = document.querySelector('.structure-brand');
+                if (brand) {
+                    const icon = brand.querySelector('.structure-icon');
+                    if (icon) icon.style.display = 'none';
+                    
+                    // Vérifier si une image existe déjà
+                    let img = brand.querySelector('.structure-logo');
+                    if (!img) {
+                        img = document.createElement('img');
+                        img.className = 'structure-logo';
+                        brand.insertBefore(img, brand.firstChild);
+                    }
+                    img.src = data.logo_url;
+                    img.alt = 'Logo';
+                    img.onerror = function() {
+                        this.style.display = 'none';
+                        if (icon) icon.style.display = 'flex';
+                    };
+                }
+            }
+        })
+        .catch(err => console.error('Erreur chargement logo:', err));
+});
+
+// ============================================
+// TOP NAV - GESTION DES MENUS
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    const navItems = document.querySelectorAll('.top-nav .nav-item');
+    
+    navItems.forEach(function(item) {
+        const link = item.querySelector('.nav-link-top');
+        const menu = item.querySelector('.mega-menu');
+        
+        if (menu && link) {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const isOpen = item.classList.contains('open');
+                
+                document.querySelectorAll('.top-nav .nav-item.open').forEach(function(el) {
+                    if (el !== item) el.classList.remove('open');
+                });
+                
+                if (isOpen) {
+                    item.classList.remove('open');
+                } else {
+                    item.classList.add('open');
+                }
+            });
+        }
+    });
+    
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.top-nav .nav-item')) {
+            document.querySelectorAll('.top-nav .nav-item.open').forEach(function(el) {
+                el.classList.remove('open');
+            });
+        }
+    });
+});
+
+// ============================================
+// PLEIN ÉCRAN - SOLUTION DÉFINITIVE
+// ============================================
+
+// Fonction pour activer le plein écran
+function activerPleinEcran() {
+    const el = document.documentElement;
+    if (el.requestFullscreen) {
+        el.requestFullscreen().catch(function(err) {
+            console.log('Erreur plein écran:', err);
+        });
+    } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+    }
+}
+
+// Fonction pour quitter le plein écran
+function quitterPleinEcran() {
+    if (document.exitFullscreen) {
+        document.exitFullscreen().catch(function(err) {
+            console.log('Erreur sortie plein écran:', err);
+        });
+    } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+    }
+}
+
+// Toggle plein écran
+function toggleFullScreen() {
+    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!isFullscreen) {
+        activerPleinEcran();
+    } else {
+        quitterPleinEcran();
+    }
+}
+
+// ============================================
+// RESTAURATION AUTOMATIQUE APRÈS NAVIGATION
+// ============================================
+
+// Sauvegarder l'état avant la navigation
+document.addEventListener('click', function(e) {
+    const link = e.target.closest('a');
+    if (link && link.href && !link.target && link.hostname === window.location.hostname) {
+        const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+        if (isFullscreen) {
+            localStorage.setItem('fullscreenBeforeNav', 'true');
+            sessionStorage.setItem('fullscreenBeforeNav', 'true');
+        }
+    }
+});
+
+// RESTAURER AUTOMATIQUEMENT APRÈS CHARGEMENT
+document.addEventListener('DOMContentLoaded', function() {
+    const shouldRestore = localStorage.getItem('fullscreenBeforeNav');
+    
+    if (shouldRestore === 'true') {
+        localStorage.removeItem('fullscreenBeforeNav');
+        sessionStorage.removeItem('fullscreenBeforeNav');
+        
+        // Attendre que la page soit complètement chargée
+        setTimeout(function() {
+            activerPleinEcran();
+            
+            // Vérifier après 1 seconde si c'est ok
+            setTimeout(function() {
+                const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+                if (!isFullscreen) {
+                    // Si pas en plein écran, essayer à nouveau avec une notification
+                    showFullscreenRestoreNotification();
+                }
+            }, 1000);
+        }, 500);
+    }
+});
+
+// ============================================
+// NOTIFICATION DE RESTAURATION
+// ============================================
+
+function showFullscreenRestoreNotification() {
+    if (document.getElementById('fullscreenRestoreBtn')) return;
+    
+    const notification = document.createElement('div');
+    notification.id = 'fullscreenRestoreBtn';
+    notification.style.cssText = `
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        padding: 16px 24px;
+        border-radius: 16px;
+        box-shadow: 0 10px 40px rgba(102, 126, 234, 0.5);
+        z-index: 999999;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        animation: slideInRight 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        border: none;
+        transition: all 0.3s ease;
+    `;
+    notification.innerHTML = `
+        <i class="fas fa-expand" style="font-size: 18px;"></i>
+        <span>Revenir en plein écran</span>
+        <button onclick="this.parentElement.remove()" style="background: rgba(255,255,255,0.2); border: none; color: white; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center;">✕</button>
+    `;
+    
+    notification.addEventListener('click', function(e) {
+        if (e.target.closest('button')) return;
+        activerPleinEcran();
+        this.remove();
+        localStorage.removeItem('fullscreenBeforeNav');
+    });
+    
+    document.body.appendChild(notification);
+    
+    // Supprimer après 20 secondes
+    setTimeout(function() {
+        if (notification && notification.parentElement) {
+            notification.remove();
+        }
+    }, 20000);
+}
+
+// ============================================
+// MODE PLEIN ÉCRAN PERMANENT
+// ============================================
+
+let fullscreenMode = localStorage.getItem('fullscreenMode') === 'true';
+
+function toggleFullscreenMode() {
+    fullscreenMode = !fullscreenMode;
+    localStorage.setItem('fullscreenMode', fullscreenMode ? 'true' : 'false');
+    
+    if (fullscreenMode) {
+        activerPleinEcran();
+        localStorage.setItem('fullscreenBeforeNav', 'true');
+    } else {
+        quitterPleinEcran();
+        localStorage.removeItem('fullscreenBeforeNav');
+    }
+    
+    updateFullscreenModeUI();
+}
+
+function updateFullscreenModeUI() {
+    const icon = document.getElementById('fullscreenModeIcon');
+    const text = document.getElementById('fullscreenModeText');
+    if (fullscreenMode) {
+        if (icon) icon.className = 'fas fa-compress';
+        if (text) text.textContent = 'Quitter mode plein écran';
+    } else {
+        if (icon) icon.className = 'fas fa-expand';
+        if (text) text.textContent = 'Mode plein écran permanent';
+    }
+}
+
+// Mise à jour de l'interface
+function updateFullscreenUI() {
+    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+    
+    const icon = document.getElementById('fullscreenIcon');
+    const text = document.getElementById('fullscreenText');
+    const btn = document.getElementById('fullscreenBtn');
+    
+    if (isFullscreen) {
+        if (icon) icon.className = 'fas fa-compress';
+        if (text) text.textContent = 'Quitter';
+        if (btn) {
+            btn.style.background = 'rgba(220, 53, 69, 0.1)';
+            btn.style.color = '#dc3545';
+        }
+    } else {
+        if (icon) icon.className = 'fas fa-expand';
+        if (text) text.textContent = 'Plein écran';
+        if (btn) {
+            btn.style.background = 'rgba(255,255,255,0.8)';
+            btn.style.color = '#4a5568';
+        }
+    }
+}
+
+// Événements plein écran
+document.addEventListener('fullscreenchange', function() {
+    updateFullscreenUI();
+    document.querySelectorAll('.top-nav .nav-item.open').forEach(function(el) {
+        el.classList.remove('open');
+    });
+});
+
+document.addEventListener('webkitfullscreenchange', function() {
+    updateFullscreenUI();
+    document.querySelectorAll('.top-nav .nav-item.open').forEach(function(el) {
+        el.classList.remove('open');
+    });
+});
+
+// Raccourci F11
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'F11') {
+        e.preventDefault();
+        toggleFullScreen();
+    }
+});
+
+// Style animation
+const styleToast = document.createElement('style');
+styleToast.textContent = `
+    @keyframes slideInRight {
+        from { opacity: 0; transform: translateX(100px) scale(0.9); }
+        to { opacity: 1; transform: translateX(0) scale(1); }
+    }
+`;
+document.head.appendChild(styleToast);
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    updateFullscreenUI();
+    updateFullscreenModeUI();
+    
+    if (fullscreenMode) {
+        setTimeout(function() {
+            activerPleinEcran();
+        }, 300);
     }
 });
 </script>
