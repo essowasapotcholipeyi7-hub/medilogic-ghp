@@ -15,8 +15,21 @@
         }
         
         body {
-            background: linear-gradient(135deg, #e3f2fd 0%, #e8f0fe 100%) !important;
+            background: url("{{ url_for('static', filename='images/background.jpg') }}") no-repeat center center fixed !important;
+            background-size: cover !important;
             min-height: 100vh;
+        }
+
+        body::after {
+            content: 'SSoftOneV10';
+            position: fixed;
+            bottom: 30px;
+            right: 35px;
+            font-size: 32px;
+            font-weight: 800;
+            color: rgba(102, 126, 234, 0.20);
+            z-index: 9999;
+            pointer-events: none;
         }
         
         .main-content {
@@ -55,27 +68,31 @@
         }
         
         /* ============================================
-           STRUCTURE BRAND - ROUGE ÉLÉGANT
+           STRUCTURE BRAND - UNIQUE VERSION
            ============================================ */
         .structure-container {
             display: flex;
             align-items: center;
             justify-content: center;
             flex: 1;
+            max-width: 400px;
+            margin: 0 auto;
         }
         
         .structure-brand {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             background: rgba(255, 255, 255, 0.9);
-            padding: 6px 20px 6px 16px;
+            padding: 4px 16px 4px 12px;
             border-radius: 50px;
             border: 2px solid #dc3545;
             box-shadow: 0 2px 15px rgba(220, 53, 69, 0.12);
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            max-width: 100%;
+            white-space: nowrap;
         }
         
         .structure-brand::before {
@@ -91,6 +108,22 @@
         
         .structure-brand:hover::before {
             left: 100%;
+        }
+        
+        .structure-brand .structure-logo {
+            width: 32px !important;
+            height: 32px !important;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid rgba(220, 53, 69, 0.2);
+            flex-shrink: 0;
+            transition: all 0.3s ease;
+        }
+        
+        .structure-brand:hover .structure-logo {
+            transform: scale(1.08) rotate(-3deg);
+            border-color: #dc3545;
+            box-shadow: 0 0 20px rgba(220, 53, 69, 0.15);
         }
         
         .structure-brand .structure-icon {
@@ -113,7 +146,7 @@
         
         .structure-brand .structure-name {
             font-weight: 700;
-            font-size: 16px;
+            font-size: 14px;
             color: #dc3545;
             letter-spacing: 0.3px;
             white-space: nowrap;
@@ -124,34 +157,32 @@
         }
         
         .structure-brand .structure-badge {
-            font-size: 9px;
+            font-size: 8px;
             font-weight: 700;
             letter-spacing: 1.5px;
             color: white;
             background: linear-gradient(135deg, #dc3545, #a71d2a);
-            padding: 2px 10px;
+            padding: 2px 8px;
             border-radius: 50px;
             text-transform: uppercase;
-            -webkit-text-fill-color: white;
             flex-shrink: 0;
         }
         
         /* Version mobile */
         @media (max-width: 768px) {
             .structure-brand {
-                padding: 4px 14px 4px 12px;
+                padding: 3px 12px 3px 8px;
                 gap: 6px;
                 border-width: 1.5px;
             }
             
-            .structure-brand .structure-icon {
-                width: 26px;
-                height: 26px;
-                font-size: 11px;
+            .structure-brand .structure-logo {
+                width: 26px !important;
+                height: 26px !important;
             }
             
             .structure-brand .structure-name {
-                font-size: 13px;
+                font-size: 12px;
                 max-width: 120px;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -160,18 +191,29 @@
             
             .structure-brand .structure-badge {
                 font-size: 7px;
-                padding: 1px 8px;
+                padding: 1px 6px;
+            }
+            
+            .structure-brand .structure-icon {
+                width: 26px;
+                height: 26px;
+                font-size: 11px;
             }
         }
         
         @media (max-width: 576px) {
             .structure-brand .structure-name {
                 max-width: 80px;
-                font-size: 12px;
+                font-size: 11px;
             }
             
             .structure-brand .structure-badge {
                 display: none;
+            }
+            
+            .structure-brand .structure-logo {
+                width: 22px !important;
+                height: 22px !important;
             }
         }
         
@@ -292,40 +334,47 @@
             backdrop-filter: blur(10px);
         }
         
-        .sidebar h5 {
-            color: rgba(255,255,255,0.6);
-            font-size: 0.7rem;
-            letter-spacing: 2px;
+        .sidebar .menu-title {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.65rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
             margin-bottom: 20px;
             padding-bottom: 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
         }
-        
+
         .sidebar .nav-link {
-            color: rgba(255,255,255,0.7);
-            padding: 12px 16px;
-            margin: 6px 0;
-            border-radius: 14px;
-            transition: all 0.3s ease;
-            font-weight: 500;
+            color: rgba(255, 255, 255, 0.65);
+            padding: 10px 16px;
+            margin: 4px 0;
+            border-radius: 10px;
+            transition: all 0.25s ease;
+            font-weight: 400;
+            font-size: 14px;
+            letter-spacing: 0.2px;
+            position: relative;
         }
-        
+
         .sidebar .nav-link:hover {
-            background: rgba(255,255,255,0.1);
-            color: white;
-            transform: translateX(5px);
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+            transform: translateX(4px);
         }
-        
+
         .sidebar .nav-link.active {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            color: #ffffff;
+            font-weight: 500;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.25);
         }
-        
-        .sidebar .nav-link i {
-            margin-right: 12px;
-            width: 22px;
-            text-align: center;
+
+        .sidebar .nav-link {
+            color: rgba(255, 255, 255, 0.65);
+        }
+
+        .sidebar .nav-link:hover {
+            color: #ffffff !important;
         }
         
         /* Dropdown dans sidebar */
@@ -540,236 +589,7 @@
         }
 
 /* ============================================
-   SIDEBAR AMÉLIORÉ - SANS ICÔNES
-   ============================================ */
-
-.sidebar .menu-title {
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 0.65rem;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    margin-bottom: 20px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.sidebar .nav-link {
-    color: rgba(255, 255, 255, 0.55);
-    padding: 10px 16px;
-    margin: 4px 0;
-    border-radius: 10px;
-    transition: all 0.25s ease;
-    font-weight: 400;
-    font-size: 14px;
-    letter-spacing: 0.2px;
-    position: relative;
-}
-
-.sidebar .nav-link:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: #ffffff;
-    transform: translateX(4px);
-}
-
-.sidebar .nav-link.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: #ffffff;
-    font-weight: 500;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.25);
-}
-
-/* Couleurs spécifiques pour chaque section */
-.sidebar .nav-link[href*="dashboard"] { color: #4fc3f7; }
-.sidebar .nav-link[href*="patients"] { color: #81c784; }
-.sidebar .nav-link[href*="prescriptions"] { color: #ff8a65; }
-.sidebar .nav-link[href*="actes_vente"] { color: #ce93d8; }
-.sidebar .nav-link[href*="pharma_vente"] { color: #ffd54f; }
-.sidebar .nav-link[href*="factures"] { color: #4dd0e1; }
-.sidebar .nav-link[href*="historique"] { color: #90a4ae; }
-.sidebar .nav-link[href*="rendez_vous"] { color: #aed581; }
-.sidebar .nav-link[href*="rappels"] { color: #ffab91; }
-.sidebar .nav-link[href*="proformas"] { color: #ffcc02; }
-.sidebar .nav-link[href*="consultation"] { color: #80cbc4; }
-.sidebar .nav-link[href*="gestion_stock"] { color: #b39ddb; }
-.sidebar .nav-link[href*="admin_finances"] { color: #ef9a9a; }
-.sidebar .nav-link[href*="statistiques"] { color: #90caf9; }
-.sidebar .nav-link[href*="annulations"] { color: #ef9a9a; }
-.sidebar .nav-link[href*="gestion_rh"] { color: #a1887f; }
-.sidebar .nav-link[href*="comptabilite"] { color: #bcaaa4; }
-.sidebar .nav-link[href*="admin_structure"] { color: #b0bec5; }
-
-/* Au survol, toutes deviennent blanches */
-.sidebar .nav-link:hover {
-    color: #ffffff !important;
-}
-
-/* Dropdown dans sidebar */
-.sidebar .dropdown-toggle {
-    background: transparent !important;
-    color: rgba(255, 255, 255, 0.55) !important;
-}
-
-.sidebar .dropdown-toggle:hover {
-    color: #ffffff !important;
-}
-
-.sidebar .dropdown-menu {
-    background: rgba(26, 26, 46, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
-    margin-top: 4px;
-    padding: 6px;
-    backdrop-filter: blur(10px);
-}
-
-.sidebar .dropdown-item {
-    color: rgba(255, 255, 255, 0.6);
-    border-radius: 8px;
-    padding: 8px 16px;
-    font-size: 13px;
-    transition: all 0.2s ease;
-}
-
-.sidebar .dropdown-item:hover {
-    background: rgba(102, 126, 234, 0.2);
-    color: #ffffff;
-}
-
-/* Badges dans sidebar */
-.sidebar .badge {
-    font-size: 10px;
-    padding: 3px 8px;
-    border-radius: 20px;
-}
-/* Structure Brand - Version corrigée */
-.structure-brand {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(255, 255, 255, 0.9);
-    padding: 4px 16px 4px 12px;
-    border-radius: 50px;
-    border: 2px solid #dc3545;
-    box-shadow: 0 2px 15px rgba(220, 53, 69, 0.12);
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-}
-
-.structure-brand .structure-logo {
-    width: 32px !important;
-    height: 32px !important;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid rgba(220, 53, 69, 0.2);
-    flex-shrink: 0;
-    transition: all 0.3s ease;
-}
-
-.structure-brand .structure-name {
-    font-weight: 700;
-    font-size: 14px;
-    color: #dc3545;
-    letter-spacing: 0.3px;
-    white-space: nowrap;
-    background: linear-gradient(135deg, #dc3545, #a71d2a);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-.structure-brand .structure-badge {
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 1.5px;
-    color: white;
-    background: linear-gradient(135deg, #dc3545, #a71d2a);
-    padding: 2px 8px;
-    border-radius: 50px;
-    text-transform: uppercase;
-    flex-shrink: 0;
-}
-
-.structure-brand .structure-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: linear-gradient(135deg, #dc3545, #c82333);
-    border-radius: 50%;
-    color: white;
-    font-size: 14px;
-    flex-shrink: 0;
-    transition: transform 0.3s ease;
-}
-
-/* Version mobile */
-@media (max-width: 768px) {
-    .structure-brand {
-        padding: 3px 12px 3px 8px;
-        gap: 6px;
-        border-width: 1.5px;
-    }
-    
-    .structure-brand .structure-logo {
-        width: 26px !important;
-        height: 26px !important;
-    }
-    
-    .structure-brand .structure-name {
-        font-size: 12px;
-        max-width: 120px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-    
-    .structure-brand .structure-badge {
-        font-size: 7px;
-        padding: 1px 6px;
-    }
-    
-    .structure-brand .structure-icon {
-        width: 26px;
-        height: 26px;
-        font-size: 11px;
-    }
-}
-
-@media (max-width: 576px) {
-    .structure-brand .structure-name {
-        max-width: 80px;
-        font-size: 11px;
-    }
-    
-    .structure-brand .structure-badge {
-        display: none;
-    }
-    
-    .structure-brand .structure-logo {
-        width: 22px !important;
-        height: 22px !important;
-    }
-}
-
-.structure-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    max-width: 400px; /* Limite la largeur */
-    margin: 0 auto;
-}
-
-.structure-brand {
-    max-width: 100%;
-    white-space: nowrap;
-}
-
-
-/* ============================================
-   NAVIGATION HORIZONTALE AVEC COULEURS
+   NAVIGATION HORIZONTALE - UNE SEULE COULEUR NOIRE
    ============================================ */
 
 .top-nav {
@@ -800,147 +620,9 @@
     align-items: center;
 }
 
-/* ===== COULEURS PAR GROUPE ===== */
-
-/* GROUPE 1 : ACCUEIL - Bleu */
-.nav-item-accueil .nav-link-top {
-    color: #3b82f6;
-}
-.nav-item-accueil .nav-link-top:hover,
-.nav-item-accueil .nav-link-top.active {
-    color: #2563eb;
-    border-bottom-color: #3b82f6;
-}
-.nav-item-accueil .mega-menu .menu-item:hover {
-    color: #3b82f6;
-    border-left-color: #3b82f6;
-}
-.nav-item-accueil .mega-menu .menu-item:hover i {
-    color: #3b82f6;
-}
-
-/* GROUPE 2 : PATIENTS - Vert */
-.nav-item-patients .nav-link-top {
-    color: #22c55e;
-}
-.nav-item-patients .nav-link-top:hover,
-.nav-item-patients .nav-link-top.active {
-    color: #16a34a;
-    border-bottom-color: #22c55e;
-}
-.nav-item-patients .mega-menu .menu-item:hover {
-    color: #22c55e;
-    border-left-color: #22c55e;
-}
-.nav-item-patients .mega-menu .menu-item:hover i {
-    color: #22c55e;
-}
-
-/* GROUPE 3 : SOINS - Violet */
-.nav-item-soins .nav-link-top {
-    color: #8b5cf6;
-}
-.nav-item-soins .nav-link-top:hover,
-.nav-item-soins .nav-link-top.active {
-    color: #7c3aed;
-    border-bottom-color: #8b5cf6;
-}
-.nav-item-soins .mega-menu .menu-item:hover {
-    color: #8b5cf6;
-    border-left-color: #8b5cf6;
-}
-.nav-item-soins .mega-menu .menu-item:hover i {
-    color: #8b5cf6;
-}
-
-/* GROUPE 4 : PHARMACIE - Orange */
-.nav-item-pharmacie .nav-link-top {
-    color: #f59e0b;
-}
-.nav-item-pharmacie .nav-link-top:hover,
-.nav-item-pharmacie .nav-link-top.active {
-    color: #d97706;
-    border-bottom-color: #f59e0b;
-}
-.nav-item-pharmacie .mega-menu .menu-item:hover {
-    color: #f59e0b;
-    border-left-color: #f59e0b;
-}
-.nav-item-pharmacie .mega-menu .menu-item:hover i {
-    color: #f59e0b;
-}
-
-/* GROUPE 5 : FINANCES - Rose */
-.nav-item-finances .nav-link-top {
-    color: #ec4899;
-}
-.nav-item-finances .nav-link-top:hover,
-.nav-item-finances .nav-link-top.active {
-    color: #db2777;
-    border-bottom-color: #ec4899;
-}
-.nav-item-finances .mega-menu .menu-item:hover {
-    color: #ec4899;
-    border-left-color: #ec4899;
-}
-.nav-item-finances .mega-menu .menu-item:hover i {
-    color: #ec4899;
-}
-
-/* GROUPE 6 : HISTORIQUE - Cyan */
-.nav-item-historique .nav-link-top {
-    color: #06b6d4;
-}
-.nav-item-historique .nav-link-top:hover,
-.nav-item-historique .nav-link-top.active {
-    color: #0891b2;
-    border-bottom-color: #06b6d4;
-}
-.nav-item-historique .mega-menu .menu-item:hover {
-    color: #06b6d4;
-    border-left-color: #06b6d4;
-}
-.nav-item-historique .mega-menu .menu-item:hover i {
-    color: #06b6d4;
-}
-
-/* GROUPE 7 : RÉFÉRENTIELS - Indigo */
-.nav-item-referentiels .nav-link-top {
-    color: #6366f1;
-}
-.nav-item-referentiels .nav-link-top:hover,
-.nav-item-referentiels .nav-link-top.active {
-    color: #4f46e5;
-    border-bottom-color: #6366f1;
-}
-.nav-item-referentiels .mega-menu .menu-item:hover {
-    color: #6366f1;
-    border-left-color: #6366f1;
-}
-.nav-item-referentiels .mega-menu .menu-item:hover i {
-    color: #6366f1;
-}
-
-/* GROUPE 8 : ADMINISTRATION - Rouge */
-.nav-item-administration .nav-link-top {
-    color: #ef4444;
-}
-.nav-item-administration .nav-link-top:hover,
-.nav-item-administration .nav-link-top.active {
-    color: #dc2626;
-    border-bottom-color: #ef4444;
-}
-.nav-item-administration .mega-menu .menu-item:hover {
-    color: #ef4444;
-    border-left-color: #ef4444;
-}
-.nav-item-administration .mega-menu .menu-item:hover i {
-    color: #ef4444;
-}
-
-/* ===== STYLES COMMUNS ===== */
-
+/* ===== TOUS LES GROUPES - NOIR ===== */
 .top-nav .nav-link-top {
+    color: #1a1a2e;
     padding: 0 18px;
     height: 100%;
     display: flex;
@@ -959,7 +641,9 @@
 }
 
 .top-nav .nav-link-top:hover {
-    background: rgba(0, 0, 0, 0.03);
+    color: #1a1a2e;
+    background: rgba(0, 0, 0, 0.04);
+    border-bottom-color: #1a1a2e;
 }
 
 .top-nav .nav-link-top .arrow {
@@ -974,23 +658,6 @@
 
 .top-nav .nav-item.open .nav-link-top .arrow {
     transform: rotate(180deg);
-}
-/* ===== MEGA MENU - Version améliorée ===== */
-
-/* Hover pour desktop */
-@media (hover: hover) {
-    .top-nav .nav-item:hover .mega-menu {
-        opacity: 1 !important;
-        visibility: visible !important;
-        transform: translateY(0) !important;
-    }
-}
-
-/* Click pour mobile et plein écran */
-.top-nav .nav-item.open .mega-menu {
-    opacity: 1 !important;
-    visibility: visible !important;
-    transform: translateY(0) !important;
 }
 
 /* ===== MEGA MENU ===== */
@@ -1018,11 +685,17 @@
     transform: translateY(0);
 }
 
+.top-nav .nav-item.open .mega-menu {
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: translateY(0) !important;
+}
+
 .top-nav .mega-menu .menu-item {
     display: flex;
     align-items: center;
     padding: 10px 20px;
-    color: #4a5568;
+    color: #1a1a2e;
     font-size: 13px;
     text-decoration: none;
     transition: all 0.2s ease;
@@ -1031,15 +704,21 @@
 }
 
 .top-nav .mega-menu .menu-item:hover {
-    background: rgba(0, 0, 0, 0.03);
+    background: rgba(0, 0, 0, 0.05);
+    color: #1a1a2e;
+    border-left-color: #1a1a2e;
 }
 
 .top-nav .mega-menu .menu-item i {
     width: 18px;
     text-align: center;
     font-size: 14px;
-    color: #a0aec0;
+    color: #1a1a2e;
     transition: color 0.2s ease;
+}
+
+.top-nav .mega-menu .menu-item:hover i {
+    color: #1a1a2e;
 }
 
 .top-nav .mega-menu .menu-divider {
@@ -1074,59 +753,49 @@
     width: 4px;
 }
 .top-nav .mega-menu::-webkit-scrollbar-thumb {
-    background: #667eea;
+    background: #1a1a2e;
     border-radius: 10px;
 }
 .top-nav .mega-menu::-webkit-scrollbar-track {
     background: transparent;
 }
 
-/* Bouton plein écran */
-#fullscreenBtn {
-    transition: all 0.3s ease;
-}
+        /* Bouton plein écran */
+        #fullscreenBtn {
+            transition: all 0.3s ease;
+        }
 
-#fullscreenBtn:hover {
-    transform: scale(1.05);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
-}
+        #fullscreenBtn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+        }
 
-#fullscreenBtn:active {
-    transform: scale(0.95);
-}
+        #fullscreenBtn:active {
+            transform: scale(0.95);
+        }
 
-/* Mode plein écran - ajustements */
-:-webkit-full-screen .top-nav {
-    top: 0;
-    z-index: 1000;
-}
+        /* Mode plein écran - ajustements */
+        :-webkit-full-screen .top-nav {
+            top: 0;
+            z-index: 1000;
+        }
 
-:-moz-full-screen .top-nav {
-    top: 0;
-    z-index: 1000;
-}
+        :-moz-full-screen .top-nav {
+            top: 0;
+            z-index: 1000;
+        }
 
-:fullscreen .top-nav {
-    top: 0;
-    z-index: 1000;
-}
-body {
-    background: url("{{ url_for('static', filename='images/background.jpg') }}") no-repeat center center fixed !important;
-    background-size: cover !important;
-    min-height: 100vh;
-}
+        :fullscreen .top-nav {
+            top: 0;
+            z-index: 1000;
+        }
 
-body::after {
-    content: 'SSoftOneV10';
-    position: fixed;
-    bottom: 30px;
-    right: 35px;
-    font-size: 32px;
-    font-weight: 800;
-    color: rgba(102, 126, 234, 0.20);
-    z-index: 9999;
-    pointer-events: none;
-}
+        /* Badges dans sidebar */
+        .sidebar .badge {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 20px;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
