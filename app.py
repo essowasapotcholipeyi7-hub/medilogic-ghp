@@ -1753,30 +1753,47 @@ def recu(vente_id, type):
     reste_a_payer = 0
     numero_facture = None
     
-    # 🔥🔥🔥 CHAMPS POUR L'AIDE HOSPITALIÈRE 🔥🔥🔥
+    # CHAMPS POUR L'AIDE HOSPITALIÈRE
     taux_aide = 0
     aide_hospitaliere = 0
     assurance_principale_active = True
     
-    type_bd = 'pharmacie' if type == 'pharma' else type
+    # 🔥🔥🔥 CORRECTION : Gérer le type 'mixte' 🔥🔥🔥
+    # Si type = 'mixte', on ne filtre pas sur le type de vente
+    if type == 'mixte':
+        vente = db.execute_query("""
+            SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
+                   p.assurance2_nom as patient_assurance2_nom, 
+                   p.taux_assurance2 as patient_taux_assurance2, 
+                   p.numero_assure2,
+                   v.reste_a_payer,
+                   v.base_remboursement,
+                   v.assurance_principale_active,
+                   v.taux_aide,
+                   v.aide_hospitaliere
+            FROM ventes v
+            LEFT JOIN patients p ON v.patient_id = p.id
+            WHERE v.id = %s AND v.structure_id = %s
+        """, (vente_id, structure_id))
+        type_bd = 'mixte'
+    else:
+        type_bd = 'pharmacie' if type == 'pharma' else type
+        vente = db.execute_query("""
+            SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
+                   p.assurance2_nom as patient_assurance2_nom, 
+                   p.taux_assurance2 as patient_taux_assurance2, 
+                   p.numero_assure2,
+                   v.reste_a_payer,
+                   v.base_remboursement,
+                   v.assurance_principale_active,
+                   v.taux_aide,
+                   v.aide_hospitaliere
+            FROM ventes v
+            LEFT JOIN patients p ON v.patient_id = p.id
+            WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
+        """, (vente_id, structure_id, type_bd))
     
     print(f"🔍 Recherche vente {vente_id} (type reçu: {type}, type BD: {type_bd})")
-    
-    # 🔥 Lire depuis NEON - AJOUTER taux_aide et aide_hospitaliere
-    vente = db.execute_query("""
-        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
-               p.assurance2_nom as patient_assurance2_nom, 
-               p.taux_assurance2 as patient_taux_assurance2, 
-               p.numero_assure2,
-               v.reste_a_payer,
-               v.base_remboursement,
-               v.assurance_principale_active,
-               v.taux_aide,
-               v.aide_hospitaliere
-        FROM ventes v
-        LEFT JOIN patients p ON v.patient_id = p.id
-        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
-    """, (vente_id, structure_id, type_bd))
     
     if not vente or len(vente) == 0:
         return f"Vente {vente_id} non trouvée (type: {type_bd})", 404
@@ -1792,39 +1809,29 @@ def recu(vente_id, type):
         mode_paiement = v.get('mode_paiement', 'Espèces')
         taux_assurance = float(v.get('taux_assurance', 0))
         
-        # ⭐ Récupérer les valeurs brutes
         sous_total = float(v.get('sous_total', 0))
         type_assurance = v.get('type_assurance', 'non_assure')
         numero_assure = v.get('numero_assure', '')
         
-        # Récupérer le base_remboursement (PBR total)
         base_remboursement = float(v.get('base_remboursement', 0)) if v.get('base_remboursement') is not None else 0
         
-        # Récupérer les données de l'assurance complémentaire
         assurance2_nom = v.get('assurance2_nom', '')
         taux_assurance2 = float(v.get('taux_assurance2', 0))
         prise_en_charge2 = float(v.get('prise_en_charge2', 0))
         numero_assure2 = v.get('numero_assure2', '')
-
-        assurance2_appliquee = assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and prise_en_charge2 > 0
-
         
-        # Récupérer le montant donné et le rendu
+        assurance2_appliquee = assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and prise_en_charge2 > 0
+        
         montant_donne = float(v.get('montant_donne', 0)) if v.get('montant_donne') is not None else 0
         rendu = float(v.get('rendu', 0)) if v.get('rendu') is not None else 0
-        
-        # Récupérer le reste à payer
         reste_a_payer = float(v.get('reste_a_payer', 0)) if v.get('reste_a_payer') is not None else 0
         
-        # 🔥🔥🔥 RÉCUPÉRER L'AIDE HOSPITALIÈRE 🔥🔥🔥
         assurance_principale_active = v.get('assurance_principale_active', True)
         taux_aide = float(v.get('taux_aide', 0)) if v.get('taux_aide') is not None else 0
         aide_hospitaliere = float(v.get('aide_hospitaliere', 0)) if v.get('aide_hospitaliere') is not None else 0
         
-        # Récupérer le taux original du patient
         patient_taux_original = float(v.get('patient_taux_assurance2', 0))
         
-        # Déterminer si le taux a été modifié
         taux_modifie = False
         taux_original = patient_taux_original
         
@@ -1833,121 +1840,103 @@ def recu(vente_id, type):
                 taux_modifie = True
                 print(f"🔴 TAUX MODIFIÉ DÉTECTÉ: {taux_assurance2}% (original: {patient_taux_original}%)")
         
-        # ⭐⭐ RECALCULER LA PRISE EN CHARGE ICI ⭐⭐
         est_assure = type_assurance in ['amu_cnss', 'amu_inam']
         
-        # 🔥 Récupérer les articles avec leurs infos de prise en charge
-        if type_bd == 'pharmacie' or type_bd == 'pharma':
-            produits_data = v.get('produits', [])
-            if isinstance(produits_data, str):
-                produits_data = json.loads(produits_data)
-            
-            sous_total_amu = 0
-            pbr_total_amu = 0
-            baseCAC = 0
-
-            
-            for p in produits_data:
-                prix_unitaire = float(p.get('prix_reel', p.get('prix', p.get('prix_vente', 0))))
-                quantite = int(p.get('quantite', 1))
-                total_article = prix_unitaire * quantite
-                pbr_article = float(p.get('pbr', prix_unitaire))
-                
-                prise_amu = p.get('prise_en_charge_amu', True)
-                prise_cac = p.get('prise_en_charge_cac', True)
-                
-                if prise_amu:
-                    sous_total_amu += total_article
-                    pbr_total_amu += min(prix_unitaire, pbr_article) * quantite
-                
-                # 🔥 CALCUL DE LA CAC POUR LA PHARMACIE
-                if prise_cac:
-                    if est_assure and assurance_principale_active:
-                        if prise_amu:
-                            baseAMU = min(prix_unitaire, pbr_article)
-                            priseAMU = (baseAMU * taux_assurance * quantite) / 100
-                            reste = total_article - priseAMU
-                            if reste > 0:
-                                baseCAC += reste
-                        else:
-                            baseCAC += total_article
-                    else:
-                        baseCAC += total_article
-                
-                articles.append({
-                    'nom': p.get('nom', 'Produit'),
-                    'quantite': quantite,
-                    'prix_unitaire': prix_unitaire,
-                    'pbr': pbr_article,
-                    'total': total_article,
-                    'prise_en_charge_amu': prise_amu,
-                    'prise_en_charge_cac': prise_cac
-                })
-            
-            # 🔥 Appliquer le taux CAC pour la pharmacie
-            if baseCAC > 0 and taux_assurance2 > 0:
-                prise_en_charge2 = (baseCAC * taux_assurance2) / 100
-            else:
-                prise_en_charge2 = 0
-
-
-        else:  # actes
-            actes_data = v.get('actes', [])
-            if isinstance(actes_data, str):
+        # 🔥🔥🔥 CORRECTION : Récupérer les articles (actes + produits) 🔥🔥🔥
+        # Récupérer les actes
+        actes_data = v.get('actes', [])
+        if isinstance(actes_data, str):
+            try:
                 actes_data = json.loads(actes_data)
+            except:
+                actes_data = []
+        
+        # Récupérer les produits
+        produits_data = v.get('produits', [])
+        if isinstance(produits_data, str):
+            try:
+                produits_data = json.loads(produits_data)
+            except:
+                produits_data = []
+        
+        # 🔥🔥🔥 SI MIXTE : Prendre actes + produits 🔥🔥🔥
+        if type == 'mixte':
+            # Utiliser actes_data + produits_data
+            tous_articles = actes_data + produits_data
+            print(f"📊 MIXTE: {len(actes_data)} actes + {len(produits_data)} produits = {len(tous_articles)} articles")
+        else:
+            # Sinon, prendre uniquement le type demandé
+            if type_bd == 'pharmacie' or type_bd == 'pharma':
+                tous_articles = produits_data
+                print(f"📊 PHARMACIE: {len(produits_data)} produits")
+            else:
+                tous_articles = actes_data
+                print(f"📊 ACTES: {len(actes_data)} actes")
+        
+        # 🔥 Traiter les articles
+        sous_total_amu = 0
+        pbr_total_amu = 0
+        baseCAC = 0
+        articles = []
+        
+        for item in tous_articles:
+            # Déterminer le prix
+            prix_unitaire = float(item.get('prix', item.get('prix_reel', item.get('prix_vente', 0))))
+            if prix_unitaire == 0:
+                prix_unitaire = float(item.get('prix_unitaire', 0))
             
-            sous_total_amu = 0
-            pbr_total_amu = 0
-            baseCAC = 0
+            quantite = int(item.get('quantite', 1))
+            total_article = prix_unitaire * quantite
+            pbr_article = float(item.get('pbr', prix_unitaire))
             
-            for a in actes_data:
-                prix_unitaire = float(a.get('prix', 0))
-                quantite = int(a.get('quantite', 1))
-                total_article = prix_unitaire * quantite
-                pbr_article = float(a.get('pbr', prix_unitaire))
-                
-                prise_amu = a.get('prise_en_charge_amu', True)
-                prise_cac = a.get('prise_en_charge_cac', True)
-                
-                if prise_amu:
-                    sous_total_amu += total_article
-                    pbr_total_amu += min(prix_unitaire, pbr_article) * quantite
-                
-                # 🔥🔥🔥 CALCUL DE LA CAC 🔥🔥🔥
-                if prise_cac:
-                    if est_assure and assurance_principale_active:
-                        if prise_amu:
-                            baseAMU = min(prix_unitaire, pbr_article)
-                            priseAMU = (baseAMU * taux_assurance * quantite) / 100
-                            reste = total_article - priseAMU
-                            if reste > 0:
-                                baseCAC += reste
-                        else:
-                            baseCAC += total_article
+            prise_amu = item.get('prise_en_charge_amu', True)
+            prise_cac = item.get('prise_en_charge_cac', True)
+            
+            # Déterminer le type
+            type_article = item.get('type', 'acte')
+            if 'produit' in str(type_article).lower() or 'pharmacie' in str(type_article).lower():
+                type_article = 'produit'
+            else:
+                type_article = 'acte'
+            
+            if prise_amu:
+                sous_total_amu += total_article
+                pbr_total_amu += min(prix_unitaire, pbr_article) * quantite
+            
+            # 🔥 CALCUL DE LA CAC
+            if prise_cac:
+                if est_assure and assurance_principale_active:
+                    if prise_amu:
+                        baseAMU = min(prix_unitaire, pbr_article)
+                        priseAMU = (baseAMU * taux_assurance * quantite) / 100
+                        reste = total_article - priseAMU
+                        if reste > 0:
+                            baseCAC += reste
                     else:
                         baseCAC += total_article
-                
-                articles.append({
-                    'nom': a.get('nom', 'Acte'),
-                    'quantite': quantite,
-                    'prix_unitaire': prix_unitaire,
-                    'pbr': pbr_article,
-                    'total': total_article,
-                    'prise_en_charge_amu': prise_amu,
-                    'prise_en_charge_cac': prise_cac
-                })
+                else:
+                    baseCAC += total_article
             
-            # 🔥 Appliquer le taux CAC
-            if baseCAC > 0 and taux_assurance2 > 0:
-                prise_en_charge2 = (baseCAC * taux_assurance2) / 100
-            else:
-                prise_en_charge2 = 0
-
+            articles.append({
+                'nom': item.get('nom', 'Article'),
+                'quantite': quantite,
+                'prix_unitaire': prix_unitaire,
+                'pbr': pbr_article,
+                'total': total_article,
+                'prise_en_charge_amu': prise_amu,
+                'prise_en_charge_cac': prise_cac,
+                'type': type_article
+            })
+        
+        # 🔥 Appliquer le taux CAC
+        if baseCAC > 0 and taux_assurance2 > 0:
+            prise_en_charge2 = (baseCAC * taux_assurance2) / 100
+        else:
+            prise_en_charge2 = 0
         
         # ⭐⭐⭐ RECALCUL DE LA PRISE EN CHARGE AMU ⭐⭐⭐
         prise_en_charge = 0
         if est_assure and assurance_principale_active:
-            # Patient assuré ET assurance active → Utiliser le PBR
             base = pbr_total_amu
             if sous_total_amu < pbr_total_amu:
                 base = sous_total_amu
@@ -1955,25 +1944,20 @@ def recu(vente_id, type):
                 prise_en_charge = (base * taux_assurance) / 100
             print(f"📊 Patient assuré - Base PBR: {base}, Prise en charge: {prise_en_charge}")
         else:
-            # Patient non assuré ou assurance désactivée → pas d'AMU
             prise_en_charge = 0
             print(f"📊 Patient non assuré ou assurance désactivée - Pas d'AMU")
         
-        # 🔥🔥🔥 RECALCUL DE L'AIDE HOSPITALIÈRE (3 cas) 🔥🔥🔥
+        # 🔥🔥🔥 RECALCUL DE L'AIDE HOSPITALIÈRE 🔥🔥🔥
         aide_hospitaliere_calculee = 0
         
         if taux_aide > 0:
-            # Déterminer la base pour l'aide (3 cas)
             if est_assure and assurance_principale_active:
-                # Cas 1: Patient assuré → Aide sur le RESTE après AMU + CAC
                 base_aide = sous_total - prise_en_charge - prise_en_charge2
                 print(f"📊 Cas 1 - Patient assuré, base aide = reste après AMU+CAC: {base_aide}")
             elif assurance2_appliquee and not est_assure:
-                # Cas 2: Patient NON assuré avec CAC → Aide sur le RESTE après CAC
                 base_aide = sous_total - prise_en_charge2
                 print(f"📊 Cas 2 - Patient non assuré avec CAC, base aide = reste après CAC: {base_aide}")
             else:
-                # Cas 3: Patient NON assuré sans CAC → Aide sur le SOUS-TOTAL
                 base_aide = sous_total
                 print(f"📊 Cas 3 - Patient non assuré sans CAC, base aide = sous-total: {base_aide}")
             
@@ -1988,7 +1972,6 @@ def recu(vente_id, type):
         
         print(f"📊 Sous-total: {sous_total}, AMU: {prise_en_charge}, CAC: {prise_en_charge2}, Aide recalculée: {aide_hospitaliere_calculee}, Net: {net_a_payer}")
         
-        # ⭐ Mettre à jour aide_hospitaliere avec la valeur recalculée pour le template
         aide_hospitaliere = aide_hospitaliere_calculee
     
     # Gestion des assurances
@@ -2000,7 +1983,6 @@ def recu(vente_id, type):
     elif type_assurance == 'non_assure':
         assurance_text = 'Non assuré'
     
-    # Déterminer si l'assurance complémentaire a été appliquée
     assurance2_appliquee = False
     if assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and prise_en_charge2 > 0:
         assurance2_appliquee = True
@@ -3942,6 +3924,9 @@ def api_produits_search():
                     produit_id = row[0] if len(row) > 0 else None
                     nom = row[1].strip() if len(row) > 1 and row[1] else ''
                     prix_vente = float(row[2]) if len(row) > 2 and row[2] else 0
+                    # 🔥 AJOUTER PBR (colonne D)
+                    pbr = float(row[3]) if len(row) > 3 and row[3] else prix_vente
+                    prix_achat = float(row[4]) if len(row) > 4 and row[4] else 0
                     quantite_stock = int(float(row[5])) if len(row) > 5 and row[5] else 0
                     seuil_alerte = int(float(row[6])) if len(row) > 6 and row[6] else 10
                     unite = row[7] if len(row) > 7 else 'unité'
@@ -3953,9 +3938,12 @@ def api_produits_search():
                                 'id': produit_id,
                                 'nom': nom,
                                 'prix_vente': prix_vente,
+                                'pbr': pbr,  # 🔥 NOUVEAU
+                                'prix_achat': prix_achat,
                                 'quantite_stock': quantite_stock,
                                 'seuil_alerte': seuil_alerte,
-                                'unite': unite
+                                'unite': unite,
+                                'structure_id': struct_id
                             })
                 except Exception as e:
                     continue
@@ -3984,13 +3972,18 @@ def api_produits_search():
             produits_liste = []
             for p in produits:
                 if str(p.get('structure_id')) == str(structure_id):
+                    prix_vente = float(p.get('prix_vente', 0))
+                    pbr = float(p.get('pbr', prix_vente))  # 🔥 AJOUTER PBR
                     produits_liste.append({
                         'id': p.get('ID'),
                         'nom': p.get('nom', ''),
-                        'prix_vente': float(p.get('prix_vente', 0)),
+                        'prix_vente': prix_vente,
+                        'pbr': pbr,  # 🔥 NOUVEAU
+                        'prix_achat': float(p.get('prix_achat', 0)),
                         'quantite_stock': int(p.get('quantite_stock', 0)),
                         'seuil_alerte': int(p.get('seuil_alerte', 10)),
-                        'unite': p.get('unite', 'unité')
+                        'unite': p.get('unite', 'unité'),
+                        'structure_id': p.get('structure_id')
                     })
             
             if search:
@@ -5094,11 +5087,11 @@ def api_get_all_ventes():
                 v.base_remboursement, 
                 v.taux_temp_modifie, 
                 v.taux_original,
-                p.type_assurance,    -- 🔥 Assurance principale du patient
-                p.assurance2_nom as patient_assurance2_nom,  -- 🔥 Assurance complémentaire du patient
-                p.taux_assurance2 as patient_taux_assurance2,  -- 🔥 Taux de l'assurance complémentaire
-                v.taux_aide,           -- 🔥 NOUVEAU
-                v.aide_hospitaliere,     -- 🔥 NOUVEAU
+                p.type_assurance,
+                p.assurance2_nom as patient_assurance2_nom,
+                p.taux_assurance2 as patient_taux_assurance2,
+                v.taux_aide,
+                v.aide_hospitaliere,
                 v.prise_en_charge
             FROM ventes v
             LEFT JOIN patients p ON v.patient_id = p.id
@@ -5113,58 +5106,87 @@ def api_get_all_ventes():
         for v in ventes:
             if isinstance(v, dict):
                 detail = ""
+                articles = []
                 
-                # Pour les actes
-                if v.get('type') == 'actes' and v.get('actes'):
-                    actes_data = v.get('actes')
-                    if isinstance(actes_data, str):
-                        try:
-                            actes_data = json.loads(actes_data)
-                        except:
-                            actes_data = []
-                    if actes_data and len(actes_data) > 0:
-                        articles = []
+                # 🔥🔥🔥 CORRECTION : Gérer TOUS les types 🔥🔥🔥
+                type_vente = v.get('type', 'actes')
+                
+                # Récupérer les actes
+                actes_data = v.get('actes')
+                if isinstance(actes_data, str):
+                    try:
+                        actes_data = json.loads(actes_data)
+                    except:
+                        actes_data = []
+                elif not actes_data:
+                    actes_data = []
+                
+                # Récupérer les produits
+                produits_data = v.get('produits')
+                if isinstance(produits_data, str):
+                    try:
+                        produits_data = json.loads(produits_data)
+                    except:
+                        produits_data = []
+                elif not produits_data:
+                    produits_data = []
+                
+                # 🔥 Cas 1: MIXTE → actes + produits
+                if type_vente == 'mixte':
+                    # Ajouter les actes
+                    for a in actes_data:
+                        nom = a.get('nom', 'Acte')
+                        qte = a.get('quantite', 1)
+                        articles.append(f"{nom} x{qte}")
+                    # Ajouter les produits
+                    for p in produits_data:
+                        nom = p.get('nom', 'Produit')
+                        qte = p.get('quantite', 1)
+                        articles.append(f"{nom} x{qte}")
+                    detail = ", ".join(articles) if articles else "-"
+                
+                # 🔥 Cas 2: ACTES uniquement
+                elif type_vente == 'actes':
+                    for a in actes_data:
+                        nom = a.get('nom', 'Acte')
+                        qte = a.get('quantite', 1)
+                        if qte > 1:
+                            articles.append(f"{nom} x{qte}")
+                        else:
+                            articles.append(nom)
+                    detail = ", ".join(articles) if articles else "-"
+                
+                # 🔥 Cas 3: PHARMACIE uniquement
+                elif type_vente in ['pharma', 'pharmacie']:
+                    for p in produits_data:
+                        nom = p.get('nom', 'Produit')
+                        qte = p.get('quantite', 1)
+                        if qte > 1:
+                            articles.append(f"{nom} x{qte}")
+                        else:
+                            articles.append(nom)
+                    detail = ", ".join(articles) if articles else "-"
+                
+                # 🔥 Cas 4: Autre (fallback)
+                else:
+                    # Essayer de récupérer depuis actes ou produits
+                    if actes_data:
                         for a in actes_data:
                             nom = a.get('nom', 'Acte')
                             qte = a.get('quantite', 1)
-                            if qte > 1:
-                                articles.append(f"{nom} x{qte}")
-                            else:
-                                articles.append(nom)
-                        detail = ", ".join(articles)
-                
-                # Pour la pharmacie
-                elif v.get('type') in ['pharma', 'pharmacie'] and v.get('produits'):
-                    produits_data = v.get('produits')
-                    if isinstance(produits_data, str):
-                        try:
-                            produits_data = json.loads(produits_data)
-                        except:
-                            produits_data = []
-                    if produits_data and len(produits_data) > 0:
-                        articles = []
+                            articles.append(f"{nom} x{qte}")
+                    if produits_data:
                         for p in produits_data:
                             nom = p.get('nom', 'Produit')
                             qte = p.get('quantite', 1)
-                            if qte > 1:
-                                articles.append(f"{nom} x{qte}")
-                            else:
-                                articles.append(nom)
-                        detail = ", ".join(articles)
-                    else:
-                        detail = '-'
+                            articles.append(f"{nom} x{qte}")
+                    detail = ", ".join(articles) if articles else "-"
                 
                 # 🔥 Récupérer les infos des assurances
-                # Assurance principale depuis le patient
                 type_assurance = v.get('type_assurance', 'non_assure')
                 
-                # Déterminer l'assurance principale
-                if type_assurance and type_assurance != '':
-                    assurance_principale = type_assurance
-                else:
-                    assurance_principale = 'non_assure'
+                assurance_principale = type_assurance if type_assurance and type_assurance != '' else 'non_assure'
                 
-                # Assurance complémentaire (depuis la vente ou le patient)
                 assurance2_nom = v.get('assurance2_nom', '')
                 if not assurance2_nom and v.get('patient_assurance2_nom'):
                     assurance2_nom = v.get('patient_assurance2_nom')
@@ -5174,8 +5196,6 @@ def api_get_all_ventes():
                     taux_assurance2 = float(v.get('patient_taux_assurance2', 0))
                 
                 prise_en_charge2 = float(v.get('prise_en_charge2', 0))
-                
-                # 🔥 Récupérer les infos de paiement
                 montant_donne = float(v.get('montant_donne', 0))
                 rendu = float(v.get('rendu', 0))
                 reste_a_payer = float(v.get('reste_a_payer', 0))
@@ -5183,7 +5203,6 @@ def api_get_all_ventes():
                 taux_temp_modifie = v.get('taux_temp_modifie', False)
                 taux_original = float(v.get('taux_original', 0))
                 
-                # Récupérer les assurances depuis le JSONB
                 assurances = v.get('assurances')
                 if isinstance(assurances, str):
                     try:
@@ -5193,28 +5212,24 @@ def api_get_all_ventes():
 
                 taux_aide = float(v.get('taux_aide', 0)) if v.get('taux_aide') is not None else 0
                 aide_hospitaliere = float(v.get('aide_hospitaliere', 0)) if v.get('aide_hospitaliere') is not None else 0
-
                 prise_en_charge = float(v.get('prise_en_charge', 0)) if v.get('prise_en_charge') is not None else 0
                 
                 result.append({
                     'ID': v.get('id'),
                     'patient_nom': v.get('patient_nom', 'Patient'),
-                    'type': v.get('type'),
+                    'type': type_vente,
                     'net_a_payer': float(v.get('net_a_payer', 0)),
                     'taux_assurance': v.get('taux_assurance', 0),
                     'date_vente': str(v.get('date_vente', '')),
-                    'detail': detail if detail else '-',
+                    'detail': detail,
                     'created_by_nom': v.get('created_by_nom', None),
                     'statut': v.get('statut', 'validee'),
-                    # 🔥 ASSURANCE PRINCIPALE
                     'assurance_nom': assurance_principale,
                     'type_assurance': type_assurance,
-                    # 🔥 ASSURANCE COMPLÉMENTAIRE
                     'assurance2_nom': assurance2_nom,
                     'taux_assurance2': float(taux_assurance2 or 0),
                     'prise_en_charge2': float(prise_en_charge2 or 0),
                     'assurances': assurances,
-                    # 🔥 NOUVEAUX CHAMPS
                     'montant_donne': montant_donne,
                     'rendu': rendu,
                     'reste_a_payer': reste_a_payer,
@@ -5223,95 +5238,106 @@ def api_get_all_ventes():
                     'taux_original': taux_original,
                     'taux_aide': taux_aide,
                     'prise_en_charge': prise_en_charge,
-                    'aide_hospitaliere': aide_hospitaliere   # 🔥 NOUVEAU
+                    'aide_hospitaliere': aide_hospitaliere,
+                    # 🔥 Ajouter le nombre d'articles pour l'affichage
+                    'nb_actes': len(actes_data),
+                    'nb_produits': len(produits_data),
+                    'total_articles': len(actes_data) + len(produits_data)
                 })
             else:
-                # Format tuple
+                # Format tuple (pour compatibilité)
                 detail = ""
-                vente_type = v[3] if len(v) > 3 else ''
+                articles = []
+                vente_type = v[2] if len(v) > 2 else ''
                 
-                # Pour les actes (tuple)
-                if vente_type == 'actes' and len(v) > 6 and v[6]:
-                    actes_data = v[6]
-                    if isinstance(actes_data, str):
-                        try:
-                            actes_data = json.loads(actes_data)
-                        except:
-                            actes_data = []
-                    if actes_data and len(actes_data) > 0:
-                        articles = [f"{a.get('nom', 'Acte')} x{a.get('quantite', 1)}" for a in actes_data]
-                        detail = ", ".join(articles)
+                # Récupérer actes et produits depuis le tuple
+                actes_data = v[6] if len(v) > 6 else []
+                if isinstance(actes_data, str):
+                    try:
+                        actes_data = json.loads(actes_data)
+                    except:
+                        actes_data = []
+                elif not actes_data:
+                    actes_data = []
                 
-                # Pour la pharmacie (tuple)
-                elif vente_type in ['pharma', 'pharmacie'] and len(v) > 7 and v[7]:
-                    produits_data = v[7]
-                    if isinstance(produits_data, str):
-                        try:
-                            produits_data = json.loads(produits_data)
-                        except:
-                            produits_data = []
-                    if produits_data and len(produits_data) > 0:
-                        articles = [f"{p.get('nom', 'Produit')} x{p.get('quantite', 1)}" for p in produits_data]
-                        detail = ", ".join(articles)
+                produits_data = v[7] if len(v) > 7 else []
+                if isinstance(produits_data, str):
+                    try:
+                        produits_data = json.loads(produits_data)
+                    except:
+                        produits_data = []
+                elif not produits_data:
+                    produits_data = []
                 
-                # 🔥 Récupérer les infos des assurances (tuple)
-                # v[20] = type_assurance, v[21] = patient_assurance2_nom, v[22] = patient_taux_assurance2
-                type_assurance = v[20] if len(v) > 20 else 'non_assure'
-                
-                if type_assurance and type_assurance != '':
-                    assurance_principale = type_assurance
+                # 🔥 Gérer mixte
+                if vente_type == 'mixte':
+                    for a in actes_data:
+                        articles.append(f"{a.get('nom', 'Acte')} x{a.get('quantite', 1)}")
+                    for p in produits_data:
+                        articles.append(f"{p.get('nom', 'Produit')} x{p.get('quantite', 1)}")
+                    detail = ", ".join(articles) if articles else "-"
+                elif vente_type == 'actes':
+                    for a in actes_data:
+                        articles.append(f"{a.get('nom', 'Acte')} x{a.get('quantite', 1)}")
+                    detail = ", ".join(articles) if articles else "-"
+                elif vente_type in ['pharma', 'pharmacie']:
+                    for p in produits_data:
+                        articles.append(f"{p.get('nom', 'Produit')} x{p.get('quantite', 1)}")
+                    detail = ", ".join(articles) if articles else "-"
                 else:
-                    assurance_principale = 'non_assure'
+                    detail = "-"
                 
-                assurance2_nom = v[13] if len(v) > 13 else ''  # v.assurance2_nom
+                type_assurance = v[20] if len(v) > 20 else 'non_assure'
+                assurance_principale = type_assurance if type_assurance and type_assurance != '' else 'non_assure'
+                
+                assurance2_nom = v[10] if len(v) > 10 else ''
                 if not assurance2_nom and len(v) > 21:
-                    assurance2_nom = v[21]  # patient_assurance2_nom
+                    assurance2_nom = v[21]
                 
-                taux_assurance2 = float(v[14]) if len(v) > 14 else 0  # v.taux_assurance2
+                taux_assurance2 = float(v[11]) if len(v) > 11 else 0
                 if taux_assurance2 == 0 and len(v) > 22:
-                    taux_assurance2 = float(v[22])  # patient_taux_assurance2
+                    taux_assurance2 = float(v[22])
                 
-                prise_en_charge2 = v[15] if len(v) > 15 else 0
-                assurances = v[16] if len(v) > 16 else None
+                prise_en_charge2 = v[12] if len(v) > 12 else 0
+                assurances = v[13] if len(v) > 13 else None
                 if isinstance(assurances, str):
                     try:
                         assurances = json.loads(assurances)
                     except:
                         assurances = None
                 
-                # 🔥 Récupérer les infos de paiement (tuple)
-                montant_donne = float(v[17]) if len(v) > 17 else 0
-                rendu = float(v[18]) if len(v) > 18 else 0
-                reste_a_payer = float(v[19]) if len(v) > 19 else 0
-                base_remboursement = float(v[20]) if len(v) > 20 else 0
-                taux_temp_modifie = v[21] if len(v) > 21 else False
-                taux_original = float(v[22]) if len(v) > 22 else 0
+                montant_donne = float(v[14]) if len(v) > 14 else 0
+                rendu = float(v[15]) if len(v) > 15 else 0
+                reste_a_payer = float(v[16]) if len(v) > 16 else 0
+                base_remboursement = float(v[17]) if len(v) > 17 else 0
+                taux_temp_modifie = v[18] if len(v) > 18 else False
+                taux_original = float(v[19]) if len(v) > 19 else 0
                 
                 result.append({
                     'ID': v[0],
-                    'patient_nom': v[2] if len(v) > 2 else 'Patient',
+                    'patient_nom': v[1] if len(v) > 1 else 'Patient',
                     'type': vente_type,
-                    'net_a_payer': float(v[6]) if len(v) > 6 else 0,
-                    'taux_assurance': v[9] if len(v) > 9 else 0,
-                    'date_vente': str(v[10]) if len(v) > 10 else '',
-                    'detail': detail if detail else '-',
-                    'created_by_nom': v[13] if len(v) > 13 else None,
-                    'statut': v[16] if len(v) > 16 else 'validee',
-                    # 🔥 ASSURANCE PRINCIPALE
+                    'net_a_payer': float(v[3]) if len(v) > 3 else 0,
+                    'taux_assurance': v[4] if len(v) > 4 else 0,
+                    'date_vente': str(v[5]) if len(v) > 5 else '',
+                    'detail': detail,
+                    'created_by_nom': v[8] if len(v) > 8 else None,
+                    'statut': v[9] if len(v) > 9 else 'validee',
                     'assurance_nom': assurance_principale,
                     'type_assurance': type_assurance,
-                    # 🔥 ASSURANCE COMPLÉMENTAIRE
                     'assurance2_nom': assurance2_nom,
                     'taux_assurance2': float(taux_assurance2 or 0),
                     'prise_en_charge2': float(prise_en_charge2 or 0),
                     'assurances': assurances,
-                    # 🔥 NOUVEAUX CHAMPS
                     'montant_donne': montant_donne,
                     'rendu': rendu,
                     'reste_a_payer': reste_a_payer,
                     'base_remboursement': base_remboursement,
                     'taux_temp_modifie': taux_temp_modifie,
-                    'taux_original': taux_original
+                    'taux_original': taux_original,
+                    'nb_actes': len(actes_data),
+                    'nb_produits': len(produits_data),
+                    'total_articles': len(actes_data) + len(produits_data)
                 })
         
         return jsonify(result)
@@ -6857,7 +6883,7 @@ def proformas():
 @app.route('/api/proformas', methods=['POST'])
 @login_required
 def api_creer_proforma():
-    """Créer une nouvelle proforma avec double assurance"""
+    """Créer une nouvelle proforma avec double assurance et PBR"""
     try:
         data = request.json
         structure_id = session.get('structure_id')
@@ -6873,21 +6899,49 @@ def api_creer_proforma():
             print(f"   ⚠️ Taux modifié: {data.get('taux_assurance2')}% (original: {data.get('taux_original')}%)")
         print("=" * 60)
         
-        # Calculer les totaux
+        # 🔥 Récupérer les articles
         articles = data.get('articles', [])
-        sous_total = 0
-        for article in articles:
-            qte = float(article.get('quantite', 0))
-            prix = float(article.get('prix_unitaire', 0))
-            article['total'] = qte * prix
-            sous_total += article['total']
         
-        # 🔥 ASSURANCE PRINCIPALE
+        # 🔥 Calculer les totaux avec PBR
+        sous_total = 0
+        pbr_total_amu = 0
+        sous_total_amu = 0
+        
+        for article in articles:
+            prix = float(article.get('prix', article.get('prix_unitaire', 0)))
+            pbr = float(article.get('pbr', prix))
+            quantite = float(article.get('quantite', 1))
+            total = prix * quantite
+            
+            article['total'] = total
+            article['prix'] = prix
+            article['pbr'] = pbr
+            sous_total += total
+            
+            # 🔥 Si l'article est pris en charge par AMU
+            prise_amu = article.get('prise_en_charge_amu', True)
+            if prise_amu:
+                sous_total_amu += total
+                pbr_total_amu += min(prix, pbr) * quantite
+        
+        # 🔥 Vérifier si le patient a une assurance principale
+        assurance_nom = data.get('assurance_nom', 'Non assuré')
+        est_assure = assurance_nom and assurance_nom != 'Non assuré'
+        
+        # 🔥 Calcul de l'AMU sur le PBR
         taux_assurance = float(data.get('taux_assurance', 0))
-        prise_en_charge = sous_total * (taux_assurance / 100)
+        prise_en_charge = 0
+        base_remboursement = 0
+        
+        if est_assure and taux_assurance > 0:
+            base_remboursement = min(sous_total_amu, pbr_total_amu)
+            if base_remboursement > 0:
+                prise_en_charge = (base_remboursement * taux_assurance) / 100
+        
+        # 🔥 Reste après AMU
         reste_apres_principal = sous_total - prise_en_charge
         
-        # 🔥 ASSURANCE COMPLÉMENTAIRE
+        # 🔥 ASSURANCE COMPLÉMENTAIRE (sur le reste après AMU)
         assurance2_active = data.get('assurance2_active', False)
         assurance2_nom = data.get('assurance2_nom', '')
         taux_assurance2 = float(data.get('taux_assurance2', 0)) if assurance2_active else 0
@@ -6904,9 +6958,17 @@ def api_creer_proforma():
         if net_a_payer < 0:
             net_a_payer = 0
         
+        print(f"📊 Sous-total clinique: {sous_total} FCFA")
+        print(f"📊 Base remboursement (PBR): {base_remboursement} FCFA")
+        print(f"📊 Prise en charge AMU: {prise_en_charge} FCFA")
+        print(f"📊 Reste après AMU: {reste_apres_principal} FCFA")
+        if assurance2_active:
+            print(f"📊 Prise en charge {assurance2_nom}: {prise_en_charge2} FCFA")
+        print(f"📊 Net à payer: {net_a_payer} FCFA")
+        
         expires_at = datetime.now() + timedelta(days=7)
         
-        # Récupérer le prochain numéro pour cette structure
+        # Récupérer le prochain numéro
         next_numero = db.execute_query("""
             SELECT COALESCE(MAX(numero_proforma), 0) + 1 as next_num
             FROM proformas 
@@ -6914,14 +6976,15 @@ def api_creer_proforma():
         """, (structure_id,))
         
         prochain_numero = next_numero[0]['next_num'] if next_numero else 1
-        print(f"   Numéro proforma pour structure {structure_id}: {prochain_numero}")
+        print(f"   Numéro proforma: {prochain_numero}")
         
-        # 🔥 CONSTRUIRE L'OBJET ASSURANCES POUR LE JSONB
+        # 🔥 CONSTRUIRE L'OBJET ASSURANCES
         assurances_data = {
             'principale': {
-                'nom': data.get('assurance_nom', 'Non assuré'),
+                'nom': assurance_nom,
                 'taux': taux_assurance,
-                'montant_prise_en_charge': prise_en_charge
+                'montant_prise_en_charge': prise_en_charge,
+                'base_remboursement': base_remboursement
             },
             'complementaire': {
                 'nom': assurance2_nom if assurance2_active else '',
@@ -6933,7 +6996,7 @@ def api_creer_proforma():
             } if assurance2_active and assurance2_nom else None
         }
         
-        # Insérer la proforma avec les données d'assurance
+        # Insérer la proforma
         result = db.execute_query("""
             INSERT INTO proformas (
                 structure_id, 
@@ -6954,21 +7017,22 @@ def api_creer_proforma():
                 sous_total, 
                 prise_en_charge, 
                 prise_en_charge2,
-                net_a_payer, 
+                net_a_payer,
+                base_remboursement,
                 notes,
                 created_by,
                 expires_at,
                 numero_proforma,
                 assurances_data
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
             RETURNING id
         """, (
             structure_id,
             data.get('patient_id'),
             data.get('patient_nom'),
             data.get('patient_telephone', ''),
-            data.get('assurance_nom', 'Non assuré'),
+            assurance_nom,
             taux_assurance,
             data.get('numero_assure', ''),
             assurance2_nom if assurance2_active else '',
@@ -6983,6 +7047,7 @@ def api_creer_proforma():
             prise_en_charge,
             prise_en_charge2,
             net_a_payer,
+            base_remboursement,  # 🔥 NOUVEAU
             data.get('notes', ''),
             user_name,
             expires_at,
@@ -6993,11 +7058,6 @@ def api_creer_proforma():
         proforma_id = result[0]['id']
         
         print(f"✅ Proforma #{proforma_id} créée (Numéro: {prochain_numero})")
-        print(f"   Sous-total: {sous_total} FCFA")
-        print(f"   Prise en charge: {prise_en_charge} FCFA")
-        if assurance2_active and prise_en_charge2 > 0:
-            print(f"   Prise en charge {assurance2_nom}: {prise_en_charge2} FCFA")
-        print(f"   Net à payer: {net_a_payer} FCFA")
         
         return jsonify({
             'success': True,
@@ -7007,6 +7067,7 @@ def api_creer_proforma():
             'sous_total': sous_total,
             'prise_en_charge': prise_en_charge,
             'prise_en_charge2': prise_en_charge2,
+            'base_remboursement': base_remboursement,
             'assurance2_nom': assurance2_nom if assurance2_active else '',
             'taux_assurance2': taux_assurance2 if assurance2_active else 0,
             'taux_modifie': taux_modifie,
@@ -7051,8 +7112,14 @@ def api_changer_statut_proforma(proforma_id):
 @app.route('/proforma/<int:proforma_id>/print')
 @login_required
 def proforma_print(proforma_id):
-    """Imprimer une proforma avec double assurance"""
+    """Imprimer une proforma avec double assurance et PBR"""
+    import json
+    
     structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        flash('Structure non trouvée', 'danger')
+        return redirect(url_for('proformas'))
     
     # Récupérer la proforma avec toutes les données
     proforma = db.execute_query("""
@@ -7088,7 +7155,54 @@ def proforma_print(proforma_id):
     taux_original = float(proforma.get('taux_original', 0))
     prise_en_charge2 = float(proforma.get('prise_en_charge2', 0))
     
+    # 🔥🔥🔥 CALCUL DU PBR TOTAL ET DE LA BASE REMBOURSEMENT 🔥🔥🔥
+    articles = proforma.get('articles', [])
+    if isinstance(articles, str):
+        try:
+            articles = json.loads(articles)
+        except:
+            articles = []
+    
+    sous_total = 0
+    pbr_total = 0
+    sous_total_amu = 0
+    pbr_total_amu = 0
+    
+    for a in articles:
+        prix = float(a.get('prix_unitaire', a.get('prix', 0)))
+        pbr = float(a.get('pbr', prix))
+        quantite = int(a.get('quantite', 1))
+        total = prix * quantite
+        
+        sous_total += total
+        pbr_total += min(prix, pbr) * quantite
+        
+        # 🔥 Si l'article est pris en charge par AMU
+        prise_amu = a.get('prise_en_charge_amu', True)
+        if prise_amu:
+            sous_total_amu += total
+            pbr_total_amu += min(prix, pbr) * quantite
+    
+    # 🔥 Base de remboursement = min(sous_total_amu, pbr_total_amu)
+    base_remboursement = min(sous_total_amu, pbr_total_amu)
+    
+    # 🔥 Taux d'assurance principale
+    taux_assurance = float(proforma.get('taux_assurance', 0))
+    prise_en_charge = 0
+    if base_remboursement > 0 and taux_assurance > 0:
+        prise_en_charge = (base_remboursement * taux_assurance) / 100
+    
+    # 🔥 Vérifier si l'assurance principale est active
+    assurance_nom = proforma.get('assurance_nom', 'Non assuré')
+    est_assure = assurance_nom and assurance_nom != 'Non assuré' and taux_assurance > 0
+    
     print(f"📄 Impression proforma #{proforma_id}")
+    print(f"   Patient: {proforma.get('patient_nom')}")
+    print(f"   Sous-total: {sous_total} FCFA")
+    print(f"   PBR total: {pbr_total} FCFA")
+    print(f"   Base remboursement: {base_remboursement} FCFA")
+    print(f"   Assurance principale: {assurance_nom} ({taux_assurance}%) - {'Active' if est_assure else 'Inactive'}")
+    print(f"   Prise en charge AMU: {prise_en_charge} FCFA")
     print(f"   Assurance2 active: {assurance2_active}")
     print(f"   Assurance2 nom: {assurance2_nom}")
     print(f"   Taux assurance2: {taux_assurance2}%")
@@ -7106,7 +7220,281 @@ def proforma_print(proforma_id):
                          assurance2_active=assurance2_active,
                          taux_modifie=taux_modifie,
                          taux_original=taux_original,
-                         assurances_data=assurances_data)
+                         assurances_data=assurances_data,
+                         # 🔥 NOUVEAUX CHAMPS
+                         base_remboursement=base_remboursement,
+                         prise_en_charge=prise_en_charge,
+                         taux_assurance=taux_assurance,
+                         sous_total=sous_total,
+                         est_assure=est_assure,
+                         assurance_nom=assurance_nom)
+
+@app.route('/api/proformas/convertir', methods=['POST'])
+@login_required
+def api_convertir_proforma():
+    """Convertir une proforma en vente avec PBR"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        user_name = session.get('user_name', 'System')
+        
+        if not structure_id:
+            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
+        
+        proforma_id = data.get('proforma_id')
+        if not proforma_id:
+            return jsonify({'success': False, 'error': 'ID proforma manquant'}), 400
+        
+        # Vérifier que la proforma existe
+        proforma = db.execute_query("""
+            SELECT * FROM proformas 
+            WHERE id = %s AND structure_id = %s AND statut IN ('en_attente', 'accepte')
+        """, (proforma_id, structure_id))
+        
+        if not proforma:
+            return jsonify({'success': False, 'error': 'Proforma non trouvée ou déjà convertie'}), 404
+        
+        proforma = proforma[0]
+        
+        # 🔥 Récupérer les articles
+        articles = data.get('articles', [])
+        
+        # 🔥🔥🔥 RECALCULER LES TOTAUX AVEC PBR 🔥🔥🔥
+        sous_total = 0
+        pbr_total_amu = 0
+        sous_total_amu = 0
+        montant_non_amu = 0
+        
+        articles_transformes = []
+        for a in articles:
+            prix = float(a.get('prix', a.get('prix_unitaire', 0)))
+            pbr = float(a.get('pbr', prix))
+            quantite = int(a.get('quantite', 1))
+            total = prix * quantite
+            
+            sous_total += total
+            
+            # 🔥 Vérifier la prise en charge AMU
+            prise_amu = a.get('prise_en_charge_amu', True)
+            prise_cac = a.get('prise_en_charge_cac', True)
+            
+            # 🔥 Transformer l'article pour la vente
+            article = {
+                'id': a.get('id', None),
+                'nom': a.get('nom', 'Article'),
+                'prix': prix,
+                'prix_unitaire': prix,
+                'pbr': pbr,
+                'quantite': quantite,
+                'total': total,
+                'prise_en_charge_amu': prise_amu,
+                'prise_en_charge_cac': prise_cac,
+                'type': a.get('type', 'acte')
+            }
+            
+            if prise_amu:
+                sous_total_amu += total
+                pbr_total_amu += min(prix, pbr) * quantite
+            else:
+                montant_non_amu += total
+            
+            articles_transformes.append(article)
+        
+        # 🔥 Séparer actes et produits
+        actes_data = [a for a in articles_transformes if a.get('type') != 'produit']
+        produits_data = [a for a in articles_transformes if a.get('type') == 'produit']
+        
+        # ⭐ Ajouter prix_reel pour les produits
+        for p in produits_data:
+            p['prix_reel'] = p['prix']
+        
+        # 🔥 Déterminer le type de vente
+        types = set(a.get('type', 'acte') for a in articles_transformes)
+        type_vente = 'mixte' if len(types) > 1 else ('pharmacie' if 'produit' in types else 'actes')
+        
+        # 🔥 Récupérer les données d'assurance de la proforma
+        assurance_nom = proforma.get('assurance_nom', 'Non assuré')
+        est_assure = assurance_nom and assurance_nom != 'Non assuré'
+        taux_assurance = float(proforma.get('taux_assurance', 0))
+        
+        assurance2_active = proforma.get('assurance2_active', False)
+        assurance2_nom = proforma.get('assurance2_nom', '')
+        taux_assurance2 = float(proforma.get('taux_assurance2', 0))
+        
+        # 🔥🔥🔥 RECALCUL DE L'AMU SUR LE PBR 🔥🔥🔥
+        prise_en_charge = 0
+        base_remboursement = 0
+        
+        if est_assure and taux_assurance > 0:
+            base_remboursement = min(sous_total_amu, pbr_total_amu)
+            if base_remboursement > 0:
+                prise_en_charge = (base_remboursement * taux_assurance) / 100
+        
+        # 🔥 Reste après AMU
+        reste_apres_amu = sous_total - prise_en_charge
+        
+        # 🔥🔥🔥 RECALCUL DE LA CAC SUR LE RESTE APRÈS AMU 🔥🔥🔥
+        prise_en_charge2 = 0
+        if assurance2_active and taux_assurance2 > 0 and reste_apres_amu > 0:
+            prise_en_charge2 = (reste_apres_amu * taux_assurance2) / 100
+        
+        # 🔥 Net à payer
+        net_a_payer = sous_total - prise_en_charge - prise_en_charge2
+        if net_a_payer < 0:
+            net_a_payer = 0
+        
+        print(f"📊 Conversion proforma #{proforma_id}")
+        print(f"   Sous-total: {sous_total} FCFA")
+        print(f"   Base remboursement (PBR): {base_remboursement} FCFA")
+        print(f"   AMU ({taux_assurance}%): {prise_en_charge} FCFA")
+        print(f"   Reste après AMU: {reste_apres_amu} FCFA")
+        if assurance2_active:
+            print(f"   CAC {assurance2_nom} ({taux_assurance2}%): {prise_en_charge2} FCFA")
+        print(f"   Net à payer: {net_a_payer} FCFA")
+        
+        # 🔥 Récupérer les données de paiement
+        montant_donne = float(data.get('montant_donne', 0))
+        
+        # 🔥 Calcul du rendu
+        rendu = 0
+        reste_a_payer = 0
+        if montant_donne > net_a_payer:
+            rendu = montant_donne - net_a_payer
+        elif montant_donne < net_a_payer:
+            reste_a_payer = net_a_payer - montant_donne
+        
+        import json
+        
+        # 🔥 Insérer la vente
+        result = db.execute_query("""
+            INSERT INTO ventes (
+                patient_id, patient_nom, structure_id, type, sous_total, 
+                prise_en_charge, net_a_payer, mode_paiement, taux_assurance,
+                date_vente, actes, produits, created_by_nom, statut,
+                assurance2_nom, taux_assurance2, prise_en_charge2,
+                montant_donne, rendu, reste_a_payer,
+                assurance_principale_active, proforma_id,
+                base_remboursement,
+                taux_aide, aide_hospitaliere
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s::jsonb, %s, 'validee', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            data.get('patient_id'),
+            data.get('patient_nom', 'Patient'),
+            structure_id,
+            type_vente,
+            sous_total,
+            prise_en_charge,
+            net_a_payer,
+            data.get('mode_paiement', 'especes'),
+            taux_assurance,
+            json.dumps(actes_data, ensure_ascii=False) if actes_data else '[]',
+            json.dumps(produits_data, ensure_ascii=False) if produits_data else '[]',
+            user_name,
+            assurance2_nom if assurance2_active else '',
+            taux_assurance2 if assurance2_active else 0,
+            prise_en_charge2,
+            montant_donne,
+            rendu,
+            reste_a_payer,
+            data.get('assurance_principale_active', True),
+            proforma_id,
+            base_remboursement,
+            0,  # taux_aide
+            0   # aide_hospitaliere
+        ))
+        
+        if not result or len(result) == 0:
+            return jsonify({'success': False, 'error': 'Erreur insertion vente'}), 500
+        
+        vente_id = result[0]['id']
+        print(f"✅ Vente créée depuis proforma #{proforma_id} avec ID: {vente_id}")
+        
+        # Marquer la proforma comme convertie
+        db.execute_query("""
+            UPDATE proformas 
+            SET statut = 'converti_en_vente', updated_at = NOW() 
+            WHERE id = %s
+        """, (proforma_id,))
+        
+        # 🔥 Ajouter la recette patient
+        montant_effectif = montant_donne - rendu
+        if montant_effectif > 0:
+            db.execute_query("""
+                INSERT INTO recettes (structure_id, montant, source, source_id, source_type, description, created_by_nom, date_recette)
+                VALUES (%s, %s, 'patients', %s, 'vente_proforma', %s, %s, NOW())
+            """, (structure_id, montant_effectif, vente_id, f'Vente depuis proforma #{proforma_id} - {data.get("patient_nom", "Patient")} - Encaissé: {montant_effectif} FCFA', user_name))
+            print(f"✅ Recette patient ajoutée: {montant_effectif} FCFA")
+        
+        # 🔥 Si reste à payer > 0, créer une facture
+        if reste_a_payer > 0:
+            date_echeance = datetime.now() + timedelta(days=7)
+            db.execute_query("""
+                INSERT INTO factures (structure_id, vente_id, patient_id, patient_nom, montant_total, montant_paye, montant_restant, date_echeance, statut, type_facture, notes, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'en_attente', 'patient', %s, %s)
+            """, (
+                structure_id,
+                vente_id,
+                data.get('patient_id'),
+                data.get('patient_nom', 'Patient'),
+                net_a_payer,
+                montant_effectif,
+                reste_a_payer,
+                date_echeance,
+                f'Facture depuis proforma #{proforma_id} - Reste à payer: {reste_a_payer} FCFA',
+                user_name
+            ))
+            print(f"📋 Facture créée pour le reste à payer: {reste_a_payer} FCFA")
+        
+        # 🔥 Mettre à jour le solde de caisse
+        try:
+            recettes_total = db.execute_query("""
+                SELECT COALESCE(SUM(montant), 0) as total 
+                FROM recettes 
+                WHERE structure_id = %s AND (est_annulation IS NULL OR est_annulation = FALSE)
+            """, (structure_id,))
+            
+            depenses_total = db.execute_query("""
+                SELECT COALESCE(SUM(montant), 0) as total 
+                FROM depenses 
+                WHERE structure_id = %s
+            """, (structure_id,))
+            
+            total_recettes = recettes_total[0]['total'] if recettes_total else 0
+            total_depenses = depenses_total[0]['total'] if depenses_total else 0
+            nouveau_solde = total_recettes - total_depenses
+            
+            db.execute_query("""
+                INSERT INTO caisse (structure_id, solde_actuel, date_mise_a_jour)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (structure_id) DO UPDATE SET 
+                    solde_actuel = EXCLUDED.solde_actuel,
+                    date_mise_a_jour = NOW()
+            """, (structure_id, nouveau_solde))
+            
+            print(f"💰 Solde de caisse mis à jour: {nouveau_solde} FCFA")
+            
+        except Exception as e:
+            print(f"⚠️ Erreur mise à jour solde: {e}")
+        
+        return jsonify({
+            'success': True,
+            'vente_id': vente_id,
+            'type': type_vente,
+            'net_a_payer': net_a_payer,
+            'montant_donne': montant_donne,
+            'rendu': rendu,
+            'reste_a_payer': reste_a_payer,
+            'message': 'Proforma convertie en vente avec succès'
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/proformas/count')

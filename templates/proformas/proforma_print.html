@@ -493,10 +493,10 @@
             <div>
                 <div class="label">Assurance principale</div>
                 <div class="value">
-                    {% if proforma.assurance_nom and proforma.assurance_nom != 'Non assuré' %}
-                    <span class="assurance-badge">{{ proforma.assurance_nom }}</span>
+                    {% if assurance_nom and assurance_nom != 'Non assuré' and est_assure %}
+                    <span class="assurance-badge">{{ assurance_nom }}</span>
                     <div style="font-size:12px; color:#6c757d; margin-top:3px;">
-                        Taux : {{ proforma.taux_assurance }}% 
+                        Taux : {{ taux_assurance }}% 
                         {% if proforma.numero_assure %} - N° {{ proforma.numero_assure }}{% endif %}
                     </div>
                     {% else %}
@@ -514,7 +514,7 @@
                         Taux : {{ taux_assurance2|default(0) }}%
                         {% if taux_modifie %}
                         <span class="badge-modifie">
-                            ⚠️ Taux exceptionnel (habituel: {{ taux_original|default(0) }}%)
+                            Taux exceptionnel (habituel: {{ taux_original|default(0) }}%)
                         </span>
                         {% endif %}
                     </div>
@@ -525,15 +525,16 @@
             </div>
         </div>
         
-        <!-- ===== TABLEAU DES ARTICLES ===== -->
+        <!-- ===== TABLEAU DES ARTICLES AVEC PBR ===== -->
         <table class="articles-table">
             <thead>
                 <tr>
                     <th style="width:5%;">N°</th>
-                    <th style="width:35%;">Désignation</th>
-                    <th style="width:15%;">Type</th>
-                    <th style="width:10%; text-align:center;">Qté</th>
-                    <th style="width:15%; text-align:right;">Prix unit.</th>
+                    <th style="width:30%;">Désignation</th>
+                    <th style="width:12%;">Type</th>
+                    <th style="width:8%; text-align:center;">Qté</th>
+                    <th style="width:13%; text-align:right;">Prix unit.</th>
+                    <th style="width:12%; text-align:right;">PBR</th>
                     <th style="width:20%; text-align:right;">Total</th>
                 </tr>
             </thead>
@@ -549,53 +550,77 @@
                     </td>
                     <td style="text-align:center;">{{ article.quantite }}</td>
                     <td style="text-align:right;">{{ article.prix_unitaire|round(0)|int }} F</td>
+                    <td style="text-align:right;">
+                        {% if article.pbr and article.pbr != article.prix_unitaire %}
+                            {{ article.pbr|round(0)|int }} F
+                        {% else %}
+                            <span style="color:#6c757d;">-</span>
+                        {% endif %}
+                    </td>
                     <td style="text-align:right; font-weight:600;">{{ article.total|round(0)|int }} F</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         
-        <!-- ===== TOTAUX AVEC DOUBLE ASSURANCE ===== -->
+<!-- ===== TOTAUX AVEC DOUBLE ASSURANCE ===== -->
         <div class="totaux">
             <div class="totaux-box">
                 <div class="ligne">
-                    <span>Sous-total</span>
-                    <span>{{ proforma.sous_total|round(0)|int }} FCFA</span>
+                    <span>Sous-total clinique</span>
+                    <span>{{ sous_total|default(proforma.sous_total)|round(0)|int }} FCFA</span>
                 </div>
                 
-                <!-- 🔥 PRISE EN CHARGE PRINCIPALE -->
+                <!-- 🔥 BASE REMBOURSEMENT (PBR) -->
+                {% if base_remboursement and base_remboursement > 0 %}
+                <div class="ligne" style="color:#6c757d; font-size:12px; border-top:1px dashed #ddd; padding-top:3px; margin-top:3px;">
+                    <span>Base remboursement (PBR)</span>
+                    <span>{{ base_remboursement|round(0)|int }} FCFA</span>
+                </div>
+                {% endif %}
+                
+                <!-- 🔥 PRISE EN CHARGE PRINCIPALE (AMU) -->
+                {% if prise_en_charge and prise_en_charge > 0 and est_assure %}
                 <div class="ligne principale">
-                    <span>Prise en charge ({{ proforma.taux_assurance }}%)</span>
-                    <span>- {{ proforma.prise_en_charge|round(0)|int }} FCFA</span>
+                    <span>Prise en charge {{ assurance_nom }} ({{ taux_assurance }}%)</span>
+                    <span>- {{ prise_en_charge|round(0)|int }} FCFA</span>
                 </div>
+                {% endif %}
                 
-                <!-- 🔥 PRISE EN CHARGE COMPLÉMENTAIRE -->
-                {% if assurance2_active and assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and prise_en_charge2 and prise_en_charge2 > 0 %}
-                <div class="ligne {% if taux_modifie %}complementaire-modifie{% else %}complementaire{% endif %}">
-                    <span>
-                        Prise en charge {{ assurance2_nom }} ({{ taux_assurance2|default(0) }}%)
-                        {% if taux_modifie %}
-                        <span class="badge-modifie" style="font-size:9px;">
-                            ⚠️ exceptionnel
+                <!-- 🔥🔥🔥 RESTE APRÈS AMU 🔥🔥🔥 -->
+                {% set reste_apres_amu = (sous_total|default(proforma.sous_total)) - prise_en_charge %}
+                
+                <!-- 🔥 PRISE EN CHARGE COMPLÉMENTAIRE (CAC) - RECALCULÉE -->
+                {% if assurance2_active and assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and taux_assurance2 > 0 %}
+                    {% set prise_en_charge2_calculee = (reste_apres_amu * taux_assurance2) / 100 %}
+                    {% if prise_en_charge2_calculee > 0 %}
+                    <div class="ligne {% if taux_modifie %}complementaire-modifie{% else %}complementaire{% endif %}">
+                        <span>
+                            Prise en charge {{ assurance2_nom }} ({{ taux_assurance2|default(0) }}%)
+                            {% if taux_modifie %}
+                            <span class="badge-modifie" style="font-size:9px;">
+                                exceptionnel
+                            </span>
+                            {% endif %}
                         </span>
-                        {% endif %}
-                    </span>
-                    <span>- {{ prise_en_charge2|round(0)|int }} FCFA</span>
-                </div>
-                
-                <!-- 🔥 AFFICHER LE TAUX ORIGINAL SI MODIFIÉ -->
-                {% if taux_modifie and taux_original and taux_original > 0 %}
-                <div class="ligne" style="font-size:10px; color:#6c757d; padding-left:20px;">
-                    <span><i class="fas fa-arrow-right"></i> Taux habituel:</span>
-                    <span>{{ taux_original }}%</span>
-                </div>
+                        <span>- {{ prise_en_charge2_calculee|round(0)|int }} FCFA</span>
+                    </div>
+                    
+                    <!-- 🔥 AFFICHER LE TAUX ORIGINAL SI MODIFIÉ -->
+                    {% if taux_modifie and taux_original and taux_original > 0 %}
+                    <div class="ligne" style="font-size:10px; color:#6c757d; padding-left:20px;">
+                        <span><i class="fas fa-arrow-right"></i> Taux habituel</span>
+                        <span>{{ taux_original }}%</span>
+                    </div>
+                    {% endif %}
+                    {% endif %}
                 {% endif %}
-                {% endif %}
                 
-                <!-- 🔥 NET À PAYER -->
+                <!-- 🔥🔥🔥 NET À PAYER RECALCULÉ 🔥🔥🔥 -->
+                {% set net_a_payer = (sous_total|default(proforma.sous_total)) - prise_en_charge - prise_en_charge2_calculee|default(0) %}
                 <div class="ligne total">
                     <span>Net à payer</span>
-                    <span>{{ proforma.net_a_payer|round(0)|int }} FCFA</span>
+                    <span>{{ net_a_payer|round(0)|int }} FCFA</span>
                 </div>
             </div>
         </div>
@@ -603,7 +628,7 @@
         <!-- ===== NOTES ===== -->
         {% if proforma.notes %}
         <div class="notes">
-            <strong>📝 Notes :</strong> {{ proforma.notes }}
+            <strong>Notes :</strong> {{ proforma.notes }}
         </div>
         {% endif %}
         
@@ -612,7 +637,7 @@
             <strong>NB :</strong> Le montant net à payer peut varier en fonction des prestations réellement effectuées.
             Cette proforma est valable 7 jours.
             {% if assurance2_active and assurance2_nom and taux_modifie %}
-            <br><strong>⚠️ Taux exceptionnel :</strong> Le taux de l'assurance complémentaire a été modifié pour cette proforma.
+            <br><strong>Taux exceptionnel :</strong> Le taux de l'assurance complémentaire a été modifié pour cette proforma.
             {% endif %}
         </div>
         

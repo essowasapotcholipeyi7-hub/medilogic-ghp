@@ -207,12 +207,12 @@
                         <label class="form-label small">Filtrer par statut</label>
                         <select id="filtreStatut" class="form-select form-select-sm" onchange="filtrerRendezVous()">
                             <option value="tous">Tous les statuts</option>
-                            <option value="programme">📋 Programmé</option>
-                            <option value="confirme">✅ Confirmé</option>
-                            <option value="termine">✔️ Terminé</option>
-                            <option value="annule">❌ Annulé</option>
-                            <option value="reporte">🔄 Reporté</option>
-                            <option value="depasse">⏰ Dépassés</option>
+                            <option value="programme">Programmé</option>
+                            <option value="confirme">Confirmé</option>
+                            <option value="termine">Terminé</option>
+                            <option value="annule">Annulé</option>
+                            <option value="reporte">Reporté</option>
+                            <option value="depasse">Dépassés</option>
                         </select>
                     </div>
                     <div class="col-md-4">
@@ -251,15 +251,15 @@
                                 <td>{{ rdv.motif }}</td>
                                 <td>
                                     {% if rdv.statut == 'confirme' %}
-                                        <span class="badge bg-success">✅ Confirmé</span>
+                                        <span class="badge bg-success">Confirmé</span>
                                     {% elif rdv.statut == 'programme' %}
-                                        <span class="badge bg-warning text-dark">📋 Programmé</span>
+                                        <span class="badge bg-warning text-dark">Programmé</span>
                                     {% elif rdv.statut == 'annule' %}
-                                        <span class="badge bg-danger">❌ Annulé</span>
+                                        <span class="badge bg-danger">Annulé</span>
                                     {% elif rdv.statut == 'reporte' %}
-                                        <span class="badge bg-info">🔄 Reporté</span>
+                                        <span class="badge bg-info">Reporté</span>
                                     {% elif rdv.statut == 'termine' %}
-                                        <span class="badge bg-secondary">✔️ Terminé</span>
+                                        <span class="badge bg-secondary">Terminé</span>
                                     {% else %}
                                         <span class="badge bg-secondary">{{ rdv.statut }}</span>
                                     {% endif %}
@@ -572,7 +572,7 @@ function clearSearchPatientRdv() {
 }
 
 function confirmerRendezVous(id) {
-    if (confirm('✅ Confirmer ce rendez-vous ?')) {
+    if (confirm('Confirmer ce rendez-vous ?')) {
         showLoader('Confirmation...');
         fetch(`/api/rendez_vous/${id}/confirmer`, { 
             method: 'POST', 
@@ -690,13 +690,13 @@ function envoyerMessageWhatsApp(tel, patientNom, date, heure, motif, structureNo
     }
     
     let message = `🔔 *RAPPEL DE RENDEZ-VOUS* 🔔%0A%0A`;
-    message += `🏥 *${structureNom}*%0A%0A`;
+    message += `*${structureNom}*%0A%0A`;
     message += `Cher(e) *${patientNom}*,%0A%0A`;
     message += `Nous vous rappelons votre rendez-vous :%0A`;
-    message += `📅 Date : *${date}*%0A`;
-    message += `⏰ Heure : *${heure}*%0A`;
-    message += `📋 Motif : *${motif}*%0A%0A`;
-    message += `Merci de votre ponctualité ! 🙏%0A%0A`;
+    message += `Date : *${date}*%0A`;
+    message += `Heure : *${heure}*%0A`;
+    message += `Motif : *${motif}*%0A%0A`;
+    message += `Merci de votre ponctualité ! %0A%0A`;
     message += `Pour toute annulation, veuillez nous contacter.`;
     
     const whatsappUrl = `https://wa.me/${telClean}?text=${message}`;
@@ -940,171 +940,479 @@ function formaterDate(dateStr) {
 function imprimerRendezVousPatient(id) {
     const row = document.querySelector(`tr[data-id="${id}"]`);
     if (!row) {
-        showToast('Rendez-vous non trouvé', 'danger');
+        showToast('Rendez-vous non trouve', 'danger');
         return;
     }
-    
+
     const patientNom = row.cells[1]?.innerText || 'Patient';
     const patientTel = row.cells[2]?.innerText || '';
     const date = row.cells[3]?.innerText || '';
     const heure = row.cells[4]?.innerText || '';
     const motif = row.cells[5]?.innerText || 'Consultation';
-    
-    const structureNom = localStorage.getItem('structureNom') || 'Medilogic-GHP';
+    const statut = row.cells[6]?.innerText || '';
+
+    const structureNom = localStorage.getItem('structureNom') || 'HOPITAL CENTRAL DE LOME';
     const structureTel = localStorage.getItem('structureTelephone') || '';
     const structureEmail = localStorage.getItem('structureEmail') || '';
+    const structureAdresse = localStorage.getItem('structureAdresse') || '';
     const structureLogo = localStorage.getItem('structureLogo') || '';
 
-    const dateActuelle = new Date().toLocaleString('fr-FR');
-    const numeroRdv = 'RDV-' + id + '-' + new Date().getFullYear();
-    const dateFormatee = formaterDate(date);
-    
+    const dateActuelle = new Date().toLocaleString('fr-FR', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
+    const numeroRdv = 'RDV-' + String(id).padStart(4, '0') + '-' + new Date().getFullYear();
+
+    // Contenu du QR Code
+    const qrContent = [
+        '=== CONFIRMATION DE RENDEZ-VOUS ===',
+        '',
+        'Structure : ' + structureNom,
+        'Numero RDV : ' + numeroRdv,
+        '',
+        '--- Informations Patient ---',
+        'Patient : ' + patientNom,
+        'Telephone : ' + patientTel,
+        '',
+        '--- Details du Rendez-vous ---',
+        'Date : ' + date,
+        'Heure : ' + heure,
+        'Motif : ' + motif,
+        'Statut : ' + statut || 'Programme',
+        '',
+        '--- Informations Structure ---',
+        structureAdresse ? 'Adresse : ' + structureAdresse : '',
+        structureTel ? 'Tel : ' + structureTel : '',
+        structureEmail ? 'Email : ' + structureEmail : '',
+        '',
+        'Merci de votre confiance.',
+        'Prenez soin de vous.'
+    ].filter(line => line !== '').join('\n');
+
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrContent)}`;
+
+    function formaterDateLongue(dateStr) {
+        const jours = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+        const mois = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre'];
+        const d = new Date(dateStr);
+        return jours[d.getDay()] + ' ' + d.getDate() + ' ' + mois[d.getMonth()] + ' ' + d.getFullYear();
+    }
+
+    const dateFormatee = formaterDateLongue(date);
+
     let html = `<!DOCTYPE html>
-    <html>
+    <html lang="fr">
     <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Confirmation de rendez-vous</title>
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background: #e9ecef;
-                padding: 30px;
+                font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+                background: #f0f2f5;
+                padding: 20px;
                 display: flex;
                 justify-content: center;
                 align-items: center;
                 min-height: 100vh;
             }
-            .recu-card {
-                max-width: 500px;
+            .recu-container {
+                max-width: 700px;
                 width: 100%;
-                margin: 0 auto;
-                background: white;
+                background: #ffffff;
                 border-radius: 16px;
-                box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+                box-shadow: 0 20px 50px rgba(0,0,0,0.08);
                 overflow: hidden;
+                margin: 0 auto;
             }
             .recu-header {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: linear-gradient(145deg, #1a2a6c, #2d4373);
+                padding: 22px 30px 18px 30px;
                 color: white;
-                padding: 25px;
-                text-align: center;
             }
-            .recu-header h1 { font-size: 22px; margin-bottom: 5px; font-weight: 600; }
-            .recu-header p { font-size: 11px; opacity: 0.85; margin-top: 5px; }
-            .recu-body { padding: 25px; }
-            .info-section {
-                margin-bottom: 20px;
-                padding-bottom: 15px;
-                border-bottom: 1px dashed #e0e0e0;
-            }
-            .info-title {
-                font-size: 11px;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-                color: #667eea;
-                font-weight: 600;
-                margin-bottom: 10px;
-            }
-            .info-content {
+            .recu-header .top-row {
                 display: flex;
                 justify-content: space-between;
-                margin-bottom: 8px;
-                font-size: 14px;
+                align-items: center;
+                flex-wrap: wrap;
             }
-            .info-label { font-weight: 600; color: #555; }
-            .info-value { color: #333; }
-            .rdv-details {
-                background: #f8f9fa;
-                padding: 15px;
-                border-radius: 12px;
-                margin: 20px 0;
-                text-align: center;
+            .recu-header .logo-area {
+                display: flex;
+                align-items: center;
+                gap: 12px;
             }
-            .rdv-date { font-size: 20px; font-weight: 700; color: #667eea; }
-            .rdv-time { font-size: 28px; font-weight: 800; color: #333; margin: 5px 0; }
-            .notice {
-                background: #fff3cd;
-                padding: 12px;
-                border-radius: 10px;
-                margin: 15px 0;
+            .recu-header .logo-area img {
+                max-height: 45px;
+                max-width: 100px;
+                object-fit: contain;
+            }
+            .recu-header .logo-area h1 {
+                font-size: 18px;
+                font-weight: 600;
+                letter-spacing: 0.3px;
+            }
+            .recu-header .badge-rdv {
+                background: rgba(255,255,255,0.15);
+                padding: 5px 14px;
+                border-radius: 30px;
                 font-size: 11px;
-                color: #856404;
-                text-align: center;
+                font-weight: 500;
+                border: 1px solid rgba(255,255,255,0.2);
             }
-            .documents-list {
-                margin: 15px 0;
-                padding-left: 20px;
-                font-size: 12px;
-                color: #555;
-                line-height: 1.6;
+            .recu-header .sub-info {
+                margin-top: 8px;
+                font-size: 11px;
+                opacity: 0.8;
+                display: flex;
+                gap: 15px;
+                flex-wrap: wrap;
             }
-            .footer {
-                background: #f8f9fa;
-                padding: 15px;
-                text-align: center;
+            .recu-body {
+                padding: 20px 30px 15px 30px;
+            }
+            .section-title {
                 font-size: 10px;
-                color: #999;
-                border-top: 1px solid #eee;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                color: #6c7a89;
+                font-weight: 600;
+                margin-bottom: 10px;
+                border-bottom: 2px solid #eef2f7;
+                padding-bottom: 5px;
             }
+            .grid-2cols {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 12px 30px;
+                margin-bottom: 15px;
+            }
+            .info-item {
+                display: flex;
+                flex-direction: column;
+            }
+            .info-item .label {
+                font-size: 9px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                color: #8e9aaf;
+                font-weight: 600;
+            }
+            .info-item .value {
+                font-size: 13px;
+                color: #1a2a3a;
+                font-weight: 500;
+                padding: 2px 0;
+            }
+            .info-item .value.telephone {
+                font-family: 'Courier New', monospace;
+                font-weight: 600;
+                color: #1a2a6c;
+            }
+            .rdv-card {
+                background: #f8faff;
+                border-radius: 12px;
+                padding: 15px 20px;
+                margin: 12px 0 15px 0;
+                border-left: 4px solid #2d4373;
+            }
+            /* ===== DATE PLUS GRANDE ===== */
+            .rdv-card .rdv-date-big {
+                font-size: 26px;  /* Taille augmentée */
+                font-weight: 700;
+                color: #1a2a6c;
+                letter-spacing: 0.5px;
+            }
+            /* ===== HEURE PLUS GRANDE ===== */
+            .rdv-card .rdv-time-big {
+                font-size: 30px;  /* Taille augmentée */
+                font-weight: 800;
+                color: #1a2a3a;
+                margin-top: 2px;
+            }
+            .rdv-card .rdv-motif {
+                font-size: 14px;
+                color: #3d4f60;
+                margin-top: 5px;
+                font-weight: 500;
+            }
+            .rdv-card .rdv-motif span {
+                background: #eef2f7;
+                padding: 2px 12px;
+                border-radius: 20px;
+                font-weight: 600;
+                color: #1a2a6c;
+                font-size: 13px;
+            }
+            .flex-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 15px;
+                margin: 12px 0 10px 0;
+                padding-top: 12px;
+                border-top: 1px dashed #dce3ed;
+            }
+            .flex-row .left-col {
+                flex: 1;
+            }
+            .qr-area {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 3px;
+                min-width: 120px;
+            }
+            .qr-area img {
+                border-radius: 10px;
+                border: 1px solid #e0e6ef;
+                padding: 5px;
+                background: white;
+                width: 120px;
+                height: 120px;
+            }
+            .qr-area .qr-label {
+                font-size: 8px;
+                color: #8e9aaf;
+                text-transform: uppercase;
+                letter-spacing: 0.6px;
+            }
+            .documents-box {
+                background: #f9fafc;
+                border-radius: 10px;
+                padding: 10px 15px;
+            }
+            .documents-box ul {
+                list-style: none;
+                padding: 0;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 2px 15px;
+            }
+            .documents-box ul li {
+                font-size: 11px;
+                color: #3d4f60;
+                padding: 2px 0;
+                position: relative;
+                padding-left: 16px;
+            }
+            .documents-box ul li:before {
+                content: "";
+                position: absolute;
+                left: 0;
+                top: 8px;
+                width: 8px;
+                height: 2px;
+                background: #2d4373;
+                border-radius: 2px;
+            }
+            .thank-you {
+                text-align: center;
+                padding: 8px 0 4px 0;
+                font-size: 14px;
+                font-weight: 600;
+                color: #1a2a6c;
+                letter-spacing: 0.5px;
+            }
+            .notice-box {
+                background: #fef8e7;
+                border-radius: 8px;
+                padding: 8px 15px;
+                margin: 10px 0 5px 0;
+                font-size: 10px;
+                color: #7d6b3a;
+                text-align: center;
+                border: 1px solid #f0e4c8;
+            }
+            .footer-recu {
+                background: #f5f7fb;
+                padding: 10px 30px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                font-size: 9px;
+                color: #7e8a9b;
+                border-top: 1px solid #e6ebf2;
+            }
+            .footer-recu .left {
+                display: flex;
+                gap: 15px;
+                flex-wrap: wrap;
+            }
+            .footer-recu .right {
+                font-weight: 500;
+                color: #1a2a6c;
+                font-size: 10px;
+            }
+
             @media print {
-                body { background: white; padding: 0; margin: 0; }
-                .recu-card { box-shadow: none; margin: 0; max-width: 100%; }
-                button { display: none; }
+                body { 
+                    background: white; 
+                    padding: 0; 
+                    margin: 0; 
+                    height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .recu-container { 
+                    border-radius: 0; 
+                    box-shadow: none; 
+                    max-width: 100%;
+                    height: auto;
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+                .recu-header { 
+                    background: #1a2a6c !important; 
+                    -webkit-print-color-adjust: exact; 
+                    print-color-adjust: exact; 
+                }
+                .notice-box { 
+                    -webkit-print-color-adjust: exact; 
+                    print-color-adjust: exact; 
+                }
+                .rdv-card { 
+                    -webkit-print-color-adjust: exact; 
+                    print-color-adjust: exact; 
+                }
+                .documents-box { 
+                    -webkit-print-color-adjust: exact; 
+                    print-color-adjust: exact; 
+                }
+                .footer-recu { 
+                    -webkit-print-color-adjust: exact; 
+                    print-color-adjust: exact; 
+                }
+                html, body {
+                    height: 100%;
+                    margin: 0;
+                    padding: 0;
+                }
+                .recu-container {
+                    max-height: 100vh;
+                    overflow: hidden;
+                }
+            }
+
+            @media (max-width: 600px) {
+                .recu-body { padding: 15px; }
+                .grid-2cols { grid-template-columns: 1fr; gap: 8px; }
+                .recu-header { padding: 15px; }
+                .recu-header .top-row { flex-direction: column; align-items: flex-start; gap: 10px; }
+                .documents-box ul { grid-template-columns: 1fr; }
+                .flex-row { flex-direction: column; align-items: center; }
+                .rdv-card .rdv-date-big { font-size: 20px; }
+                .rdv-card .rdv-time-big { font-size: 24px; }
+                .footer-recu { flex-direction: column; gap: 5px; text-align: center; padding: 8px 15px; }
+                .qr-area img { width: 100px; height: 100px; }
             }
         </style>
     </head>
     <body>
-        <div class="recu-card">
+        <div class="recu-container">
             <div class="recu-header">
-                ${structureLogo ? `<img src="${structureLogo}" alt="Logo" style="max-height: 60px; margin-bottom: 10px;">` : ''}
-                <h1>${structureNom}</h1>
-                <p>${structureTel ? '📞 ' + structureTel : ''} ${structureEmail ? '| 📧 ' + structureEmail : ''}</p>
-                <p>CONFIRMATION DE RENDEZ-VOUS</p>
-            </div>
-            <div class="recu-body">
-                <div class="info-section">
-                    <div class="info-title">INFORMATIONS PATIENT</div>
-                    <div class="info-content"><span class="info-label">Patient :</span><span class="info-value">${patientNom}</span></div>
-                    <div class="info-content"><span class="info-label">Téléphone :</span><span class="info-value">${patientTel || 'Non renseigné'}</span></div>
-                    <div class="info-content"><span class="info-label">N° Rendez-vous :</span><span class="info-value">${numeroRdv}</span></div>
+                <div class="top-row">
+                    <div class="logo-area">
+                        ${structureLogo ? `<img src="${structureLogo}" alt="Logo">` : ''}
+                        <h1>${structureNom}</h1>
+                    </div>
+                    <div class="badge-rdv">${numeroRdv}</div>
                 </div>
-                <div class="rdv-details">
-                    <div class="info-title">DÉTAILS DU RENDEZ-VOUS</div>
-                    <div class="rdv-date">📅 ${dateFormatee}</div>
-                    <div class="rdv-time">⏰ ${heure}</div>
-                    <div class="info-content" style="justify-content: center; margin-top: 8px;">
-                        <span class="info-label">Motif :</span>
-                        <span class="info-value" style="margin-left: 10px;">${motif}</span>
+                <div class="sub-info">
+                    ${structureAdresse ? `<span>${structureAdresse}</span>` : ''}
+                    ${structureTel ? `<span>Tel : ${structureTel}</span>` : ''}
+                    ${structureEmail ? `<span>Email : ${structureEmail}</span>` : ''}
+                </div>
+            </div>
+
+            <div class="recu-body">
+                <div class="section-title">Informations patient</div>
+                <div class="grid-2cols">
+                    <div class="info-item">
+                        <span class="label">Patient</span>
+                        <span class="value">${patientNom}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Telephone</span>
+                        <span class="value telephone">${patientTel || 'Non renseigne'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Imprime le</span>
+                        <span class="value">${dateActuelle}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Statut</span>
+                        <span class="value">${statut || 'Programme'}</span>
                     </div>
                 </div>
-                <div class="notice">
-                    ⚠️ IMPORTANT : En cas d'empêchement, merci de nous prévenir au moins 24h à l'avance.
+
+                <div class="section-title">Details du rendez-vous</div>
+                <div class="rdv-card">
+                    <div class="rdv-date-big">${dateFormatee}</div>
+                    <div class="rdv-time-big">${heure}</div>
+                    <div class="rdv-motif">Motif : <span>${motif}</span></div>
                 </div>
-                <div class="info-title">📋 DOCUMENTS À APPORTER</div>
-                <div class="documents-list">
-                    ✓ Votre carnet de santé ou dossier médical<br>
-                    ✓ Ordonnances en cours ou traitements récents<br>
-                    ✓ Résultats d'analyses ou examens complémentaires<br>
-                    ✓ pièce d'identité<br>
-                    ✓ Cartes d'assurance
+
+                <div class="flex-row">
+                    <div class="left-col">
+                        <div class="section-title" style="border-bottom: none; margin-bottom: 4px;">Documents a apporter</div>
+                        <div class="documents-box">
+                            <ul>
+                                <li>Carnet de sante</li>
+                                <li>Ordonnances en cours</li>
+                                <li>Resultats d'analyses</li>
+                                <li>Piece d'identite</li>
+                                <li>Cartes d'assurance</li>
+                                <li>Examens complementaires</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="qr-area">
+                        <img src="${qrCodeUrl}" alt="QR Code" width="120" height="120">
+                        <span class="qr-label">Scannez pour les details</span>
+                    </div>
                 </div>
-                <div class="notice" style="background: #d4edda; color: #155724;">
-                    ✅ Merci de votre confiance !
+
+                <div class="thank-you">Nous vous remercions pour votre confiance</div>
+
+                <div class="notice-box">
+                    En cas d'empêchement, merci de nous prévenir au moins 24 heures à l'avance.
                 </div>
             </div>
-            <div class="footer">
-                Document généré le ${dateActuelle}<br>
-                ${structureNom} - Prenez soin de vous
+
+            <div class="footer-recu">
+                <div class="left">
+                    <span>Genere le ${dateActuelle}</span>
+                    <span>|</span>
+                    <span>${structureNom}</span>
+                </div>
+                <div class="right">Prenez soin de vous</div>
             </div>
         </div>
-        <script>window.onload=function(){window.print();setTimeout(function(){window.close();},800);};<\/script>
+
+        <script>
+            window.onload = function() {
+                window.print();
+                setTimeout(function() {
+                    window.close();
+                }, 600);
+            };
+        <\/script>
     </body>
     </html>`;
-    
+
     const printWindow = window.open('', '_blank');
-    printWindow.document.write(html);
-    printWindow.document.close();
+    if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+    } else {
+        showToast('Impossible d\'ouvrir la fenetre d\'impression. Verifiez que les pop-ups sont autorises.', 'danger');
+    }
 }
 
 // Initialisation

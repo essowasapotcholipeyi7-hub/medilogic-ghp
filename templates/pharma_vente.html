@@ -250,11 +250,11 @@
                     <div class="col-md-2">
                         <label class="form-label">Mode de paiement</label>
                         <select class="form-control" id="modePaiement">
-                            <option value="especes">💰 Espèces</option>
-                            <option value="carte">💳 Carte bancaire</option>
-                            <option value="Moov_money">📱 FLOOZ</option>
-                            <option value="Mixx_By_Yas">📱 MIXX By YAS</option>
-                            <option value="cheque">📝 Chèque</option>
+                            <option value="especes">Espèces</option>
+                            <option value="carte">Carte bancaire</option>
+                            <option value="Moov_money">FLOOZ</option>
+                            <option value="Mixx_By_Yas">MIXX By YAS</option>
+                            <option value="cheque">Chèque</option>
                         </select>
                     </div>
 
@@ -286,18 +286,18 @@
                     <div class="col-md-2">
                         <label class="form-label">Type de document</label>
                         <select class="form-control" id="typeDocument">
-                            <option value="recu_client">📄 Reçu Patient</option>
-                            <option value="recu_structure">📋 Reçu Structure (copie)</option>
-                            <option value="facture_client">📑 Facture Patient</option>
-                            <option value="facture_structure">🗄️ Facture Structure (archive)</option>
-                            <option value="les_deux">📄+📑 Les deux</option>
+                            <option value="recu_client">Reçu Patient</option>
+                            <option value="recu_structure">Reçu Structure (copie)</option>
+                            <option value="facture_client">Facture Patient</option>
+                            <option value="facture_structure">Facture Structure (archive)</option>
+                            <option value="les_deux">Les deux</option>
                         </select>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Format80mm/A4</label>
                         <select class="form-control" id="formatImpression">
-                            <option value="80mm" selected>🎫 Format Ticket (80mm)</option>
-                            <option value="A4">📄 Format A4</option>
+                            <option value="80mm" selected>Format Ticket (80mm)</option>
+                            <option value="A4">Format A4</option>
                         </select>
                     </div>
 
@@ -1362,7 +1362,7 @@ function calculerTotal() {
     let aideHospitaliere = 0;
     let netAPayer = 0;
 
-    // 🔥 Déterminer la base pour l'aide hospitalière (3 cas)
+    // 🔥 Déterminer la base pour l'aide hospitalière (4 cas)
     let baseAide = 0;
 
     if (estAssure && assurancePrincipaleActive) {
@@ -1374,6 +1374,12 @@ function calculerTotal() {
         let resteApresCAC = sousTotal - priseEnChargeCAC;
         baseAide = resteApresCAC;
         console.log('📊 Cas 2 - Patient non assuré avec CAC, base = reste après CAC:', baseAide);
+    } else if (estAssure && !assurancePrincipaleActive && assurance2Active) {
+        // ✅ Cas 4: Patient ASSURÉ mais assurance principale DÉSACTIVÉE → CAC seule
+        // Aide sur le RESTE après CAC (comme cas 2)
+        let resteApresCAC = sousTotal - priseEnChargeCAC;
+        baseAide = resteApresCAC;
+        console.log('📊 Cas 4 - Patient assuré mais assurance désactivée, base = reste après CAC:', baseAide);
     } else {
         // ✅ Cas 3: Patient NON ASSURÉ sans CAC → Aide sur le SOUS-TOTAL
         baseAide = sousTotal;
@@ -1418,7 +1424,7 @@ function calculerTotal() {
     const aideEl = document.getElementById('aideHospitaliere');
     if (aideEl) {
         if (aideHospitaliere > 0) {
-            aideEl.innerHTML = `🏥 Aide hospitalière (${tauxAide}%) : - ${aideHospitaliere.toLocaleString()} FCFA`;
+            aideEl.innerHTML = `Aide hospitalière (${tauxAide}%) : - ${aideHospitaliere.toLocaleString()} FCFA`;
             aideEl.style.display = 'block';
         } else {
             aideEl.style.display = 'none';

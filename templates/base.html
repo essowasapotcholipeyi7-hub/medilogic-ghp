@@ -405,7 +405,7 @@
         #selectedPatientBadge {
             background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
             border-left: 5px solid #28a745;
-            border-radius: 16px;
+            border-radius: 0;
             animation: slideDown 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2);
         }
@@ -796,6 +796,31 @@
             padding: 3px 8px;
             border-radius: 20px;
         }
+
+/* Supprimer les marges latérales */
+.container-fluid {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    max-width: 100% !important;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+}
+
+/* Pour la sidebar et le contenu dans historique */
+.col-md-3, .col-md-9 {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* Pour la navbar */
+.navbar {
+    padding-left: 15px;
+    padding-right: 15px;
+}
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -1027,7 +1052,7 @@
 
 <!-- BANDEAU PATIENT SÉLECTIONNÉ -->
 {% if session.user_id %}
-<div class="container mt-3">
+<div class="container-fluid px-3 mt-2">
     <div id="selectedPatientBadge" class="alert py-3 mb-0 fade-in" style="display:none;">
         <div class="row align-items-center">
             <div class="col-md-8">
@@ -1524,7 +1549,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 {% endif %}
 
-<div class="container mt-4">
+<div class="container-fluid px-0 mt-2">
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             {% for category, message in messages %}

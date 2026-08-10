@@ -86,25 +86,43 @@
                                     {% endif %}
                                 </td>
                                 <td style="vertical-align: middle; text-align: center;">{{ patient.taux_assurance2 or 0 }}%</td>
-                                <td style="vertical-align: middle; text-align: center;">
-                                    <div class="btn-group btn-group-sm" style="flex-wrap: wrap; gap: 3px;">
-                                        <button class="btn btn-success" onclick='selectPatient({{ patient.ID }}, "{{ patient.nom }} {{ patient.prenom }}", "{{ patient.type_assurance }}", {{ patient.taux_prise_charge or 0 }}, "{{ patient.assurance2_nom or '' }}", {{ patient.taux_assurance2 or 0 }})' title="Sélectionner">
-                                            <i class="fas fa-check"></i> Sélectionner
-                                        </button>
-                                        <button class="btn btn-info" onclick="voirDetails({{ patient.ID }})" title="Voir détails">
-                                            <i class="fas fa-eye"></i> Détails
-                                        </button>
-                                        <button class="btn btn-warning" onclick="editPatient({{ patient.ID }})" title="Modifier">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="btn btn-danger" onclick="supprimerPatient({{ patient.ID }})" title="Supprimer">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                        <button class="btn btn-success" onclick="envoyerLienPatient({{ patient.ID }}, '{{ patient.nom }} {{ patient.prenom }}', '{{ patient.telephone }}')" title="WhatsApp">
-                                            <i class="fab fa-whatsapp"></i>
-                                        </button>
-                                    </div>
-                                </td>
+<td style="vertical-align: middle; text-align: center;">
+    <div class="d-flex flex-wrap gap-1 justify-content-center align-items-center">
+        
+        <!-- Action principale (plus visible mais soft) -->
+        <button class="btn btn-sm btn-outline-primary px-2"
+                onclick='selectPatient({{ patient.ID }}, "{{ patient.nom }} {{ patient.prenom }}", "{{ patient.type_assurance }}", {{ patient.taux_prise_charge or 0 }}, "{{ patient.assurance2_nom or '' }}", {{ patient.taux_assurance2 or 0 }})'
+                title="Sélectionner ce patient">
+            <i class="fas fa-check me-1"></i> Sélectionner
+        </button>
+
+        <!-- Actions secondaires (icônes soft) -->
+        <button class="btn btn-sm btn-outline-secondary"
+                onclick="voirDetails({{ patient.ID }})"
+                title="Voir les détails">
+            <i class="fas fa-eye"></i>
+        </button>
+
+        <button class="btn btn-sm btn-outline-secondary"
+                onclick="editPatient({{ patient.ID }})"
+                title="Modifier">
+            <i class="fas fa-pen"></i>
+        </button>
+
+        <button class="btn btn-sm btn-outline-danger"
+                onclick="supprimerPatient({{ patient.ID }})"
+                title="Supprimer">
+            <i class="fas fa-trash-alt"></i>
+        </button>
+
+        <button class="btn btn-sm btn-outline-success"
+                onclick="envoyerLienPatient({{ patient.ID }}, '{{ patient.nom }} {{ patient.prenom }}', '{{ patient.telephone }}')"
+                title="Envoyer le lien WhatsApp">
+            <i class="fab fa-whatsapp"></i>
+        </button>
+    </div>
+</td>
+
                             </tr>
                             {% else %}
                             <tr>
@@ -285,6 +303,8 @@
                                         <option value="OLEA">OLEA</option>
                                         <option value="NSIA">NSIA</option>
                                         <option value="SUNU">SUNU</option>
+                                        <option value="C2A">C2A</option>
+                                        <option value="GCA">GCA</option>
                                         <option value="FIDELIA">FIDELIA</option>
                                         <option value="autre">Autre</option>
                                     </select>
@@ -457,6 +477,8 @@
                                         <option value="OLEA">OLEA</option>
                                         <option value="NSIA">NSIA</option>
                                         <option value="SUNU">SUNU</option>
+                                        <option value="C2A">C2A</option>
+                                        <option value="GCA">GCA</option>
                                         <option value="FIDELIA">FIDELIA</option>
                                         <option value="autre">Autre</option>
                                     </select>
@@ -865,7 +887,7 @@ function supprimerPatient(id) {
     
     const nomComplet = row.cells[1].innerText.trim();
     
-    if (!confirm(`⚠️ Supprimer définitivement le patient "${nomComplet}" ?\n\nCette action est irréversible.`)) {
+    if (!confirm(`Supprimer définitivement le patient "${nomComplet}" ?\n\nCette action est irréversible.`)) {
         return;
     }
     
@@ -878,7 +900,7 @@ function supprimerPatient(id) {
     .then(data => {
         hideLoader();
         if(data.success) {
-            alert('✅ Patient supprimé avec succès !');
+            alert('Patient supprimé avec succès !');
             location.reload();
         } else {
             alert('❌ Erreur: ' + (data.error || 'Erreur inconnue'));
@@ -1089,7 +1111,7 @@ function savePatient() {
     .then(data => {
         hideLoader();
         if(data.success) {
-            alert('✅ Patient enregistré avec succès !');
+            alert('Patient enregistré avec succès !');
             location.reload();
         } else {
             alert('❌ Erreur: ' + (data.error || 'Erreur inconnue'));
@@ -1265,7 +1287,7 @@ function saveEditPatient() {
     .then(data => {
         hideLoader();
         if(data.success) {
-            alert('✅ Patient modifié avec succès !');
+            alert('Patient modifié avec succès !');
             location.reload();
         } else {
             alert('Erreur: ' + (data.error || 'Erreur inconnue'));
@@ -1353,7 +1375,7 @@ function showPatientDestinationModal(id, nom, assurance, taux, assurance2, taux2
                                             onmouseout="this.style.transform='scale(1)'"
                                             onclick="redirigerVers('actes', ${id})">
                                         <i class="fas fa-stethoscope" style="font-size: 32px; display: block; margin-bottom: 10px;"></i>
-                                        <span style="font-size: 18px; font-weight: 600;">🩺 Actes</span>
+                                        <span style="font-size: 18px; font-weight: 600;">Actes</span>
                                         <br>
                                         <small class="text-muted">Vente d'actes médicaux</small>
                                     </button>
@@ -1367,7 +1389,7 @@ function showPatientDestinationModal(id, nom, assurance, taux, assurance2, taux2
                                             onmouseout="this.style.transform='scale(1)'"
                                             onclick="redirigerVers('pharma', ${id})">
                                         <i class="fas fa-pills" style="font-size: 32px; display: block; margin-bottom: 10px;"></i>
-                                        <span style="font-size: 18px; font-weight: 600;">💊 Pharmacie</span>
+                                        <span style="font-size: 18px; font-weight: 600;">Pharmacie</span>
                                         <br>
                                         <small class="text-muted">Vente de médicaments</small>
                                     </button>
@@ -1381,7 +1403,7 @@ function showPatientDestinationModal(id, nom, assurance, taux, assurance2, taux2
                                             onmouseout="this.style.transform='scale(1)'"
                                             onclick="redirigerVers('prescriptions', ${id})">
                                         <i class="fas fa-prescription-bottle" style="font-size: 32px; display: block; margin-bottom: 10px;"></i>
-                                        <span style="font-size: 18px; font-weight: 600;">📋 Prescriptions</span>
+                                        <span style="font-size: 18px; font-weight: 600;">Prescriptions</span>
                                         <br>
                                         <small class="text-muted">Voir les prescriptions reçues</small>
                                     </button>
@@ -1424,15 +1446,15 @@ function redirigerVers(destination, patientId) {
     // Rediriger
     switch(destination) {
         case 'actes':
-            console.log('🔬 Redirection vers Actes...');
+            console.log('Redirection vers Actes...');
             window.location.href = '/actes_vente';
             break;
         case 'pharma':
-            console.log('💊 Redirection vers Pharmacie...');
+            console.log('Redirection vers Pharmacie...');
             window.location.href = '/pharma_vente';
             break;
         case 'prescriptions':
-            console.log('📋 Redirection vers Prescriptions reçues...');
+            console.log('Redirection vers Prescriptions reçues...');
             window.location.href = '/prescriptions-recues';
             break;
         default:
@@ -1490,7 +1512,7 @@ function envoyerLienPatient(id, nom, telephone) {
         .then(response => response.json())
         .then(data => {
             let structureNom = data.nom || 'Notre établissement';
-            let message = `🏥 *${structureNom}*%0A%0A`;
+            let message = `*${structureNom}*%0A%0A`;
             message += `Bonjour *${nom}*,%0A%0A`;
             message += `Voici votre lien pour consulter vos rendez-vous :%0A${lien}%0A%0A`;
             message += `🔒 Ce lien est personnel et sécurisé.%0A%0A`;
@@ -1572,5 +1594,57 @@ document.addEventListener('DOMContentLoaded', function() {
 #patientDestinationModal .badge {
     font-size: 14px;
     padding: 8px 16px;
+}
+
+/* ===== Boutons d'actions soft & professionnels ===== */
+.btn-outline-primary {
+    color: #3b82f6;
+    border-color: #bfdbfe;
+    background-color: #eff6ff;
+}
+.btn-outline-primary:hover {
+    background-color: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+
+.btn-outline-secondary {
+    color: #64748b;
+    border-color: #e2e8f0;
+    background-color: #f8fafc;
+}
+.btn-outline-secondary:hover {
+    background-color: #64748b;
+    border-color: #64748b;
+    color: white;
+}
+
+.btn-outline-danger {
+    color: #ef4444;
+    border-color: #fecaca;
+    background-color: #fef2f2;
+}
+.btn-outline-danger:hover {
+    background-color: #ef4444;
+    border-color: #ef4444;
+    color: white;
+}
+
+.btn-outline-success {
+    color: #22c55e;
+    border-color: #bbf7d0;
+    background-color: #f0fdf4;
+}
+.btn-outline-success:hover {
+    background-color: #22c55e;
+    border-color: #22c55e;
+    color: white;
+}
+
+/* Amélioration visuelle globale des boutons sm */
+.btn-sm {
+    font-size: 0.8125rem;
+    padding: 0.28rem 0.55rem;
+    border-radius: 6px;
 }
 <style>

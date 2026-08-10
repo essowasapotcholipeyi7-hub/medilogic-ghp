@@ -564,7 +564,7 @@ function saveDepense() {
     .then(data => {
         hideLoader();
         if (data.success) {
-            alert('✅ charge enregistrée avec succès');
+            alert('charge enregistrée avec succès');
             location.reload();
         } else {
             alert('❌ Erreur: ' + data.error);

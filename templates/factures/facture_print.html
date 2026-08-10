@@ -601,18 +601,18 @@
             </div>
             
             <div class="ligne paye">
-                <span>✅ Montant payé</span>
+                <span>Montant payé</span>
                 <span>{{ facture.montant_paye|default(0)|round(0)|int }} FCFA</span>
             </div>
             
             {% if facture.reste_a_payer > 0 %}
             <div class="ligne reste">
-                <span>⏳ Reste à payer</span>
+                <span>Reste à payer</span>
                 <span>{{ facture.reste_a_payer|default(0)|round(0)|int }} FCFA</span>
             </div>
             {% else %}
             <div class="ligne" style="border-top: 1px solid #000; padding-top: 5px; margin-top: 5px; font-weight: bold;">
-                <span>✅ Facture entièrement payée</span>
+                <span>Facture entièrement payée</span>
                 <span>✓</span>
             </div>
             {% endif %}
@@ -623,9 +623,9 @@
             {% set statut_labels = {
                 'en_attente': 'En attente de paiement',
                 'partielle': 'Paiement partiel',
-                'payee': '✅ Facture payée',
-                'en_retard': '⚠️ En retard de paiement',
-                'impayee': '⚠️ Impayée',
+                'payee': 'Facture payée',
+                'en_retard': 'En retard de paiement',
+                'impayee': 'Impayée',
                 'annulee': 'Annulée'
             } %}
             <span class="statut statut-{{ facture.statut }}">
@@ -653,7 +653,7 @@
         <!-- Notes -->
         {% if facture.notes %}
         <div style="margin-top: 8px; font-size: 10px; padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
-            <strong>📝 Notes :</strong> {{ facture.notes }}
+            <strong>Notes :</strong> {{ facture.notes }}
         </div>
         {% endif %}
 
@@ -667,8 +667,8 @@
     <!-- Boutons (non imprimés) -->
     <div class="no-print">
         <button class="btn-print" onclick="window.print()">🖨️ Imprimer</button>
-        <button class="btn-pdf" onclick="telechargerPDF()">📄 PDF</button>
-        <button class="btn-back" onclick="retour()">⬅️ Retour</button>
+        <button class="btn-pdf" onclick="telechargerPDF()">PDF</button>
+        <button class="btn-back" onclick="retour()">Retour</button>
         <button class="btn-close" onclick="fermer()">✖ Fermer</button>
     </div>
 

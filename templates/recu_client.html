@@ -179,7 +179,7 @@
     {% if assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and assurance2_appliquee and assurance2_appliquee == true %}
     <strong>Assurance complémentaire :</strong> {{ assurance2_nom }} ({{ taux_assurance2 }}%)
     {% if taux_modifie and taux_modifie == true %}
-    <span style="color: #856404; background: #fff3cd; padding: 0px 4px; border-radius: 2px; font-size: 8px;">⚠️ exceptionnel</span>
+    <span style="color: #856404; background: #fff3cd; padding: 0px 4px; border-radius: 2px; font-size: 8px;">exceptionnel</span>
     {% endif %}
     <br>
     {% if numero_assure2 and numero_assure2 != '' %}
@@ -258,7 +258,7 @@
         <span>
             Prise en charge {{ assurance2_nom }} ({{ taux_assurance2 }}%)
             {% if taux_modifie and taux_modifie == true %}
-            <span style="font-size:8px; background:#fff3cd; padding:0px 3px; border-radius:2px;">⚠️ exceptionnel</span>
+            <span style="font-size:8px; background:#fff3cd; padding:0px 3px; border-radius:2px;">exceptionnel</span>
             {% endif %}
         </span>
         <span>- {{ prise_en_charge2|default(0)|round(0)|int }} FCFA</span>
@@ -324,7 +324,7 @@
         <!-- BOUTONS -->
         <div class="text-center mt-3 no-print">
             <button onclick="window.print()" class="btn btn-primary btn-sm">🖨️ Imprimer</button>
-            <button onclick="telechargerPDF()" class="btn btn-success btn-sm">📄 PDF</button>
+            <button onclick="telechargerPDF()" class="btn btn-success btn-sm">PDF</button>
             <button onclick="fermerOuRediriger()" class="btn btn-secondary btn-sm">✖ Fermer</button>
         </div>
     </div>

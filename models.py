@@ -915,12 +915,12 @@ class RendezVous(db.Model):
     def get_statut_label(self):
         """Retourne le libellé du statut"""
         labels = {
-            'programme': '📋 Programmé',
-            'confirme': '✅ Confirmé',
-            'termine': '✔️ Terminé',
-            'annule': '❌ Annulé',
-            'reporte': '🔄 Reporté',
-            'absent': '👤 Absent'
+            'programme': 'Programmé',
+            'confirme': 'Confirmé',
+            'termine': 'Terminé',
+            'annule': 'Annulé',
+            'reporte': 'Reporté',
+            'absent': 'Absent'
         }
         return labels.get(self.statut, self.statut)
     

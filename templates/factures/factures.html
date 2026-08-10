@@ -133,11 +133,11 @@
                     <div class="mb-3">
                         <label>Mode de paiement</label>
                         <select class="form-control" id="modePaiement">
-                            <option value="especes">💰 Espèces</option>
-                            <option value="carte">💳 Carte bancaire</option>
-                            <option value="orange_money">📱 Orange Money</option>
-                            <option value="mtn_money">📱 MTN Money</option>
-                            <option value="cheque">📝 Chèque</option>
+                            <option value="especes">Espèces</option>
+                            <option value="carte">Carte bancaire</option>
+                            <option value="orange_money">Orange Money</option>
+                            <option value="mtn_money">MTN Money</option>
+                            <option value="cheque">Chèque</option>
                         </select>
                     </div>
                     <div class="mb-3">
@@ -503,7 +503,7 @@ function confirmerPaiement() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert(`✅ Paiement enregistré !\nMontant: ${montant.toLocaleString()} FCFA\nReste à payer: ${data.reste_a_payer.toLocaleString()} FCFA`);
+            alert(`Paiement enregistré !\nMontant: ${montant.toLocaleString()} FCFA\nReste à payer: ${data.reste_a_payer.toLocaleString()} FCFA`);
             
             bootstrap.Modal.getInstance(document.getElementById('paiementModal')).hide();
             chargerFactures('toutes');

@@ -232,11 +232,11 @@
                     <div class="col-md-2">
                         <label class="form-label">Mode de paiement</label>
                         <select class="form-control" id="modePaiement">
-                            <option value="especes">💰 Espèces</option>
-                            <option value="carte">💳 Carte bancaire</option>
-                            <option value="Moov_money">📱 FLOOZ</option>
-                            <option value="Mixx_By_Yas">📱 MIXX By YAS</option>
-                            <option value="cheque">📝 Chèque</option>
+                            <option value="especes">Espèces</option>
+                            <option value="carte">Carte bancaire</option>
+                            <option value="Moov_money">FLOOZ</option>
+                            <option value="Mixx_By_Yas">MIXX By YAS</option>
+                            <option value="cheque">Chèque</option>
                         </select>
                     </div>
 <!-- 🔥 Montant donné par le patient avec style rouge -->
@@ -267,18 +267,18 @@
                     <div class="col-md-2">
                         <label class="form-label">Type de document</label>
                         <select class="form-control" id="typeDocument">
-                            <option value="recu_client">📄 Reçu Patient</option>
-                            <option value="recu_structure">📋 Reçu Structure (copie)</option>
-                            <option value="facture_client">📑 Facture Patient</option>
-                            <option value="facture_structure">🗄️ Facture Structure (archive)</option>
-                            <option value="les_deux">📄+📑 Les deux (Patient+Structure)</option>
+                            <option value="recu_client">Reçu Patient</option>
+                            <option value="recu_structure">Reçu Structure (copie)</option>
+                            <option value="facture_client">Facture Patient</option>
+                            <option value="facture_structure">Facture Structure (archive)</option>
+                            <option value="les_deux">Les deux (Patient+Structure)</option>
                         </select>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Format 80mm/A4</label>
                         <select class="form-control" id="formatImpression">
-                            <option value="80mm" selected>🎫 Format Ticket (80mm)</option>
-                            <option value="A4">📄 Format A4</option>
+                            <option value="80mm" selected>Format Ticket (80mm)</option>
+                            <option value="A4">Format A4</option>
                         </select>
                     </div>
 
@@ -784,7 +784,7 @@ function ajouterActe() {
         message += `❌ NON PRIS EN CHARGE PAR L'ASSURANCE PRINCIPALE\n`;
         message += `L'acte "${acteNom}" n'est pas pris en charge par ${patientAssurance}.\n`;
         if (commentaireAMU) {
-            message += `📝 ${commentaireAMU}\n`;
+            message += ` ${commentaireAMU}\n`;
         }
         message += `\n`;
     }
@@ -794,7 +794,7 @@ function ajouterActe() {
         message += `❌ NON PRIS EN CHARGE PAR L'ASSURANCE COMPLÉMENTAIRE\n`;
         message += `L'acte "${acteNom}" n'est pas pris en charge par ${patientAssurance2}.\n`;
         if (commentaireCAC) {
-            message += `📝 ${commentaireCAC}\n`;
+            message += ` ${commentaireCAC}\n`;
         }
         message += `\n`;
     }
@@ -803,24 +803,24 @@ function ajouterActe() {
     if (!priseEnChargeAMU && !priseEnChargeCAC && (isAMU || isCAC)) {
         infoMessage = `⚠️ ACTE NON PRIS EN CHARGE PAR LES ASSURANCES\n\n`;
         infoMessage += `L'acte "${acteNom}" n'est pas pris en charge par les assurances du patient.\n\n`;
-        infoMessage += `💰 Le patient devra payer la totalité du montant : ${(actePrix * quantite).toLocaleString()} FCFA\n\n`;
-        infoMessage += `ℹ️ La clinique peut appliquer une réduction si elle le souhaite.\n\n`;
+        infoMessage += `Le patient devra payer la totalité du montant : ${(actePrix * quantite).toLocaleString()} FCFA\n\n`;
+        infoMessage += `La clinique peut appliquer une réduction si elle le souhaite.\n\n`;
         infoMessage += `Voulez-vous ajouter cet acte au panier ?`;
     }
     // Cas 2: AMU ne prend pas en charge mais CAC prend le relais
     else if (!priseEnChargeAMU && priseEnChargeCAC && isAMU && isCAC) {
-        infoMessage = `ℹ️ Pris en charge par ${patientAssurance2} (CAC) mais pas par ${patientAssurance} (AMU).\n\nL'assurance complémentaire prendra le relais sur le reste à charge.`;
+        infoMessage = `Pris en charge par ${patientAssurance2} (CAC) mais pas par ${patientAssurance} (AMU).\n\nL'assurance complémentaire prendra le relais sur le reste à charge.`;
     }
     // Cas 3: CAC ne prend pas en charge mais AMU prend
     else if (priseEnChargeAMU && !priseEnChargeCAC && isAMU && isCAC) {
-        infoMessage = `ℹ️ Pris en charge par ${patientAssurance} (AMU) mais pas par ${patientAssurance2} (CAC).\n\nLe patient devra payer la différence après l'AMU.`;
+        infoMessage = `Pris en charge par ${patientAssurance} (AMU) mais pas par ${patientAssurance2} (CAC).\n\nLe patient devra payer la différence après l'AMU.`;
     }
     // Cas 4: Une seule assurance est active
     else if (!priseEnChargeAMU && isAMU && !isCAC) {
-        infoMessage = `ℹ️ L'acte n'est pas pris en charge par ${patientAssurance} (AMU).\n\nLe patient n'a pas d'assurance complémentaire, il devra payer la totalité.`;
+        infoMessage = `L'acte n'est pas pris en charge par ${patientAssurance} (AMU).\n\nLe patient n'a pas d'assurance complémentaire, il devra payer la totalité.`;
     }
     else if (!priseEnChargeCAC && isCAC && !isAMU) {
-        infoMessage = `ℹ️ L'acte n'est pas pris en charge par ${patientAssurance2} (CAC).\n\nLe patient n'a pas d'assurance principale.`;
+        infoMessage = `L'acte n'est pas pris en charge par ${patientAssurance2} (CAC).\n\nLe patient n'a pas d'assurance principale.`;
     }
     
     // 🔥 AFFICHER LE MESSAGE ET DEMANDER CONFIRMATION
@@ -1062,11 +1062,11 @@ function calculerTotal() {
         document.getElementById('tauxAideHospitaliere').value = 0;
     }
     
-    console.log('📊 Type assurance:', typeAssurance);
-    console.log('📊 Est assuré:', estAssure);
-    console.log('📊 Taux AMU utilisé:', tauxAMU);
-    console.log('📊 Taux Aide hospitalière:', tauxAide);
-    console.log('📊 Assurance principale active:', assurancePrincipaleActive);
+    console.log('Type assurance:', typeAssurance);
+    console.log('Est assuré:', estAssure);
+    console.log('Taux AMU utilisé:', tauxAMU);
+    console.log('Taux Aide hospitalière:', tauxAide);
+    console.log('Assurance principale active:', assurancePrincipaleActive);
     
     // 🔥🔥🔥 CALCUL DE L'ASSURANCE PRINCIPALE (AMU) 🔥🔥🔥
     let baseRemboursement = 0;
@@ -1094,11 +1094,11 @@ function calculerTotal() {
         if (baseNonAssure > 0 && tauxAMU > 0) {
             baseRemboursement = baseNonAssure;
             priseEnChargeAMU = (baseNonAssure * tauxAMU) / 100;
-            console.log('🏥 Patient non assuré - Aide hospitalière sur:', baseNonAssure);
+            console.log('Patient non assuré - Aide hospitalière sur:', baseNonAssure);
         } else {
             baseRemboursement = 0;
             priseEnChargeAMU = 0;
-            console.log('🏥 Patient non assuré - Pas d\'aide');
+            console.log('Patient non assuré - Pas d\'aide');
         }
     } else {
         // Assurance principale désactivée
@@ -1159,7 +1159,7 @@ function calculerTotal() {
     let aideHospitaliere = 0;
     let netAPayer = 0;
 
-    // 🔥 Déterminer la base pour l'aide hospitalière (3 cas)
+    // 🔥 Déterminer la base pour l'aide hospitalière (4 cas)
     let baseAide = 0;
 
     if (estAssure && assurancePrincipaleActive) {
@@ -1171,6 +1171,12 @@ function calculerTotal() {
         let resteApresCAC = sousTotal - priseEnChargeCAC;
         baseAide = resteApresCAC;
         console.log('📊 Cas 2 - Patient non assuré avec CAC, base = reste après CAC:', baseAide);
+    } else if (estAssure && !assurancePrincipaleActive && assurance2Active) {
+        // ✅ Cas 4: Patient ASSURÉ mais assurance principale DÉSACTIVÉE → CAC seule
+        // Aide sur le RESTE après CAC (comme cas 2)
+        let resteApresCAC = sousTotal - priseEnChargeCAC;
+        baseAide = resteApresCAC;
+        console.log('📊 Cas 4 - Patient assuré mais assurance désactivée, base = reste après CAC:', baseAide);
     } else {
         // ✅ Cas 3: Patient NON ASSURÉ sans CAC → Aide sur le SOUS-TOTAL
         baseAide = sousTotal;
@@ -1215,7 +1221,7 @@ function calculerTotal() {
     const aideEl = document.getElementById('aideHospitaliere');
     if (aideEl) {
         if (aideHospitaliere > 0) {
-            aideEl.innerHTML = `🏥 Aide hospitalière (${tauxAide}%) : - ${aideHospitaliere.toLocaleString()} FCFA`;
+            aideEl.innerHTML = `Aide hospitalière (${tauxAide}%) : - ${aideHospitaliere.toLocaleString()} FCFA`;
             aideEl.style.display = 'block';
         } else {
             aideEl.style.display = 'none';
@@ -1692,35 +1698,41 @@ function finaliserVente() {
         priseEnCharge2 = (baseCAC * tauxComplementaire) / 100;
     }
     
-    // 🔥🔥🔥 CALCUL DU NET À PAYER AVEC AIDE HOSPITALIÈRE (3 CAS) 🔥🔥🔥
+    // 🔥🔥🔥 CALCUL DU NET À PAYER AVEC AIDE HOSPITALIÈRE (4 CAS) 🔥🔥🔥
     let netAPayer = 0;
     let aideHospitaliere = 0;
     let resteApresAssurances = sousTotal - priseEnCharge - priseEnCharge2;
     if (resteApresAssurances < 0) resteApresAssurances = 0;
-    
-    // 🔥 Déterminer la base pour l'aide hospitalière (3 cas)
+
+    // 🔥 Déterminer la base pour l'aide hospitalière (4 cas)
     let baseAide = 0;
-    
+
     if (assurancePrincipaleActive && (patientAssurance === 'amu_cnss' || patientAssurance === 'amu_inam')) {
-        // Cas 1: Patient ASSURÉ avec assurance active → Aide sur le RESTE après AMU + CAC
+        // ✅ Cas 1: Patient ASSURÉ avec assurance active → Aide sur le RESTE après AMU + CAC
         baseAide = resteApresAssurances;
         console.log('📊 Cas 1 - Patient assuré, base aide = reste après AMU+CAC:', baseAide);
     } else if (assurance2Active && patientAssurance === 'non_assure') {
-        // Cas 2: Patient NON ASSURÉ mais avec CAC → Aide sur le RESTE après CAC
+        // ✅ Cas 2: Patient NON ASSURÉ mais avec CAC → Aide sur le RESTE après CAC
         let resteApresCAC = sousTotal - priseEnCharge2;
         baseAide = resteApresCAC;
         console.log('📊 Cas 2 - Patient non assuré avec CAC, base aide = reste après CAC:', baseAide);
+    } else if (assurance2Active && !assurancePrincipaleActive && (patientAssurance === 'amu_cnss' || patientAssurance === 'amu_inam')) {
+        // 🔥🔥🔥 NOUVEAU CAS 4: Patient ASSURÉ mais assurance principale DÉSACTIVÉE → CAC seule
+        // Aide sur le RESTE après CAC (comme cas 2)
+        let resteApresCAC = sousTotal - priseEnCharge2;
+        baseAide = resteApresCAC;
+        console.log('📊 Cas 4 - Patient assuré mais assurance désactivée, base aide = reste après CAC:', baseAide);
     } else {
-        // Cas 3: Patient NON ASSURÉ sans CAC → Aide sur le SOUS-TOTAL
+        // ✅ Cas 3: Patient NON ASSURÉ sans CAC → Aide sur le SOUS-TOTAL
         baseAide = sousTotal;
         console.log('📊 Cas 3 - Patient non assuré sans CAC, base aide = sous-total:', baseAide);
     }
-    
+
     // 🔥 Appliquer l'aide hospitalière sur la base déterminée
     if (tauxAide > 0 && baseAide > 0) {
         aideHospitaliere = (baseAide * tauxAide) / 100;
         netAPayer = baseAide - aideHospitaliere;
-        console.log('📊 Aide hospitalière appliquée:', {
+        console.log('Aide hospitalière appliquée:', {
             taux: tauxAide,
             base: baseAide,
             montant: aideHospitaliere,
@@ -1729,7 +1741,7 @@ function finaliserVente() {
     } else {
         netAPayer = baseAide;
     }
-    
+
     if (netAPayer < 0) netAPayer = 0;
     
     console.log('💰 Net à payer (avec aide hospitalière):', netAPayer);
@@ -1771,13 +1783,13 @@ function finaliserVente() {
         let detailCalcul = `📊 DÉTAIL DU CALCUL :\n`;
         detailCalcul += `💰 Sous-total : ${sousTotal.toLocaleString()} FCFA\n`;
         if (priseEnCharge > 0) {
-            detailCalcul += `🏥 Prise en charge (${tauxPrincipal}%) : - ${priseEnCharge.toLocaleString()} FCFA\n`;
+            detailCalcul += `Prise en charge (${tauxPrincipal}%) : - ${priseEnCharge.toLocaleString()} FCFA\n`;
         }
         if (priseEnCharge2 > 0) {
-            detailCalcul += `🏥 Prise en charge ${patientAssurance2} (${tauxComplementaire}%) : - ${priseEnCharge2.toLocaleString()} FCFA\n`;
+            detailCalcul += `Prise en charge ${patientAssurance2} (${tauxComplementaire}%) : - ${priseEnCharge2.toLocaleString()} FCFA\n`;
         }
         if (tauxAide > 0) {
-            detailCalcul += `🏥 Aide hospitalière (${tauxAide}%) : - ${aideHospitaliere.toLocaleString()} FCFA\n`;
+            detailCalcul += `Aide hospitalière (${tauxAide}%) : - ${aideHospitaliere.toLocaleString()} FCFA\n`;
         }
         detailCalcul += `\n💰 NET À PAYER : ${netAPayer.toLocaleString()} FCFA\n`;
         
@@ -1814,16 +1826,16 @@ function finaliserVente() {
     }
     
     if (montantDonne > 0 && montantDonne < netAPayer) {
-        let detailCalcul = `📊 DÉTAIL DU CALCUL :\n`;
-        detailCalcul += `💰 Sous-total : ${sousTotal.toLocaleString()} FCFA\n`;
+        let detailCalcul = `DÉTAIL DU CALCUL :\n`;
+        detailCalcul += `Sous-total : ${sousTotal.toLocaleString()} FCFA\n`;
         if (priseEnCharge > 0) {
-            detailCalcul += `🏥 Prise en charge (${tauxPrincipal}%) : - ${priseEnCharge.toLocaleString()} FCFA\n`;
+            detailCalcul += `Prise en charge (${tauxPrincipal}%) : - ${priseEnCharge.toLocaleString()} FCFA\n`;
         }
         if (priseEnCharge2 > 0) {
-            detailCalcul += `🏥 Prise en charge ${patientAssurance2} (${tauxComplementaire}%) : - ${priseEnCharge2.toLocaleString()} FCFA\n`;
+            detailCalcul += `Prise en charge ${patientAssurance2} (${tauxComplementaire}%) : - ${priseEnCharge2.toLocaleString()} FCFA\n`;
         }
         if (tauxAide > 0) {
-            detailCalcul += `🏥 Aide hospitalière (${tauxAide}%) : - ${aideHospitaliere.toLocaleString()} FCFA\n`;
+            detailCalcul += `Aide hospitalière (${tauxAide}%) : - ${aideHospitaliere.toLocaleString()} FCFA\n`;
         }
         detailCalcul += `\n💰 NET À PAYER : ${netAPayer.toLocaleString()} FCFA\n`;
         
