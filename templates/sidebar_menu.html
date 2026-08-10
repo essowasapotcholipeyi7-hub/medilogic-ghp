@@ -43,16 +43,22 @@
             </ul>
         </div>
 
-        <!-- Historique et Rendez-vous -->
-        <a class="nav-link" href="{{ url_for('historique_ventes') }}">
-            Historique
-        </a>
-        <a class="nav-link" href="{{ url_for('rendez_vous') }}">
-            Rendez-vous
-        </a>
-        <a class="nav-link" href="{{ url_for('rappels_rendez_vous') }}">
-            Rappels
-        </a>
+<!-- Historique et Rendez-vous -->
+<a class="nav-link" href="{{ url_for('historique_ventes') }}">
+    Historique
+</a>
+
+<a class="nav-link" href="{{ url_for('gestion_medecins') }}">
+    Medecins
+</a>
+
+<a class="nav-link" href="{{ url_for('rendez_vous') }}">
+    Rendez-vous
+</a>
+
+<a class="nav-link" href="{{ url_for('rappels_rendez_vous') }}">
+    Rappels
+</a>
 
         <!-- Factures Proforma -->
         <a class="nav-link {% if request.endpoint == 'proformas' %}active{% endif %}" href="{{ url_for('proformas') }}">

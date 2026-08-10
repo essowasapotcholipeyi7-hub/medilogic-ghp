@@ -9,15 +9,15 @@
         vertical-align: middle !important;
     }
     
-    /* Largeurs responsives */
-    #rendezVousTable th:nth-child(1) { width: 5%; }  /* ID */
-    #rendezVousTable th:nth-child(2) { width: 18%; } /* Patient */
-    #rendezVousTable th:nth-child(3) { width: 12%; } /* Téléphone */
-    #rendezVousTable th:nth-child(4) { width: 10%; } /* Date */
-    #rendezVousTable th:nth-child(5) { width: 8%; }  /* Heure */
-    #rendezVousTable th:nth-child(6) { width: 20%; } /* Motif */
-    #rendezVousTable th:nth-child(7) { width: 10%; } /* Statut */
-    #rendezVousTable th:nth-child(8) { width: 17%; } /* Actions */
+    #rendezVousTable th:nth-child(1) { width: 5%; }
+    #rendezVousTable th:nth-child(2) { width: 15%; }
+    #rendezVousTable th:nth-child(3) { width: 10%; }
+    #rendezVousTable th:nth-child(4) { width: 10%; }
+    #rendezVousTable th:nth-child(5) { width: 8%; }
+    #rendezVousTable th:nth-child(6) { width: 15%; }
+    #rendezVousTable th:nth-child(7) { width: 10%; }
+    #rendezVousTable th:nth-child(8) { width: 12%; }
+    #rendezVousTable th:nth-child(9) { width: 15%; }
     
     .badge {
         font-size: 11px;
@@ -75,7 +75,7 @@
     </div>
 
     <div class="col-md-9">
-        <!-- Statistiques améliorées -->
+        <!-- Statistiques -->
         <div class="row mb-4 g-3">
             <div class="col-md-4">
                 <div class="card stat-card border-0 shadow-sm">
@@ -112,7 +112,7 @@
             </div>
         </div>
 
-        <!-- Formulaire ajout rendez-vous amélioré -->
+        <!-- Formulaire ajout rendez-vous -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-gradient-primary text-white">
                 <h5 class="mb-0"><i class="fas fa-plus-circle me-2"></i> Nouveau rendez-vous</h5>
@@ -125,7 +125,7 @@
                                 <i class="fas fa-search text-primary"></i>
                             </span>
                             <input type="text" id="searchPatientRdv" class="form-control" 
-                                   placeholder="Rechercher un patient par nom, prénom ou téléphone..." 
+                                   placeholder="Rechercher un patient par nom, prenom ou telephone..." 
                                    onkeyup="filtrerPatientsRdv()">
                             <button class="btn btn-outline-secondary" onclick="clearSearchPatientRdv()" type="button">
                                 <i class="fas fa-times"></i>
@@ -135,7 +135,7 @@
                             </button>
                         </div>
                         <div class="text-muted small mt-1">
-                            <i class="fas fa-info-circle"></i> <span id="patientRdvCount">0</span> patient(s) trouvé(s)
+                            <i class="fas fa-info-circle"></i> <span id="patientRdvCount">0</span> patient(s) trouve(s)
                         </div>
                     </div>
                 </div>
@@ -146,7 +146,7 @@
                             <i class="fas fa-user me-1"></i> Patient
                         </label>
                         <select class="form-select" id="patientSelect" size="5" style="height: auto;">
-                            <option value="">-- Sélectionner un patient --</option>
+                            <option value="">-- Selectionner un patient --</option>
                             {% for patient in patients %}
                             <option value="{{ patient.ID }}" 
                                     data-nom="{{ patient.nom }}" 
@@ -157,27 +157,85 @@
                             {% endfor %}
                         </select>
                     </div>
+                    
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-user-md me-1"></i> Medecin
+                        </label>
+                        <select class="form-select" id="medecinSelect" onchange="afficherDisponibilites()">
+                            <option value="">-- Selectionner un medecin --</option>
+                            {% for medecin in medecins %}
+                            {% if medecin.actif %}
+                            <option value="{{ medecin.id }}" 
+                                    data-specialite="{{ medecin.specialite }}"
+                                    data-honoraire="{{ medecin.honoraire_consultation }}">
+                                {{ medecin.titre }} {{ medecin.prenom }} {{ medecin.nom }} - {{ medecin.specialite }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted" id="medecinInfos"></small>
+                    </div>
+                    
                     <div class="col-md-3">
                         <label class="form-label fw-bold">
-                            <i class="fas fa-calendar me-1"></i> Date
+                            Date
                         </label>
-                        <input type="date" class="form-control" id="dateRendezVous" min="{{ today }}">
+                        <input type="date" class="form-control" id="dateRendezVous" min="{{ today }}" onchange="afficherDisponibilites()">
                     </div>
+                    
                     <div class="col-md-2">
                         <label class="form-label fw-bold">
-                            <i class="fas fa-clock me-1"></i> Heure
+                            Heure
                         </label>
                         <input type="time" class="form-control" id="heureRendezVous">
+                        <div class="text-muted small" id="disponibilitesInfo"></div>
                     </div>
+                    
                     <div class="col-md-2">
                         <label class="form-label fw-bold">
-                            <i class="fas fa-stethoscope me-1"></i> Motif <span class="text-danger">*</span>
+                            Duree
                         </label>
-                        <input type="text" class="form-control" id="motif" 
-                               placeholder="Ex: Consultation /Dr, Examen médical, Vaccination..."
-                               required>
+                        <select class="form-select" id="dureeRendezVous">
+                            <option value="15">15 min</option>
+                            <option value="30" selected>30 min</option>
+                            <option value="45">45 min</option>
+                            <option value="60">60 min</option>
+                        </select>
                     </div>
-                </div>
+                    
+<div class="col-md-3">
+    <label class="form-label fw-bold">
+        <i class="fas fa-stethoscope me-1"></i> Motif <span class="text-danger">*</span>
+    </label>
+    <select class="form-select" id="motifSelect" onchange="changerMotif()">
+        <option value="">-- Selectionner un motif --</option>
+        <option value="Consultation generale">Consultation generale</option>
+        <option value="Consultation specialisee">Consultation specialisee</option>
+        <option value="Examen medical">Examen medical</option>
+        <option value="Vaccination">Vaccination</option>
+        <option value="Suivi medical">Suivi medical</option>
+        <option value="Controle">Controle</option>
+        <option value="Urgence">Urgence</option>
+        <option value="Certificat medical">Certificat medical</option>
+        <option value="Prise de sang">Prise de sang</option>
+        <option value="Radiologie">Radiologie</option>
+        <option value="Consultation pediatrique">Consultation pediatrique</option>
+        <option value="Consultation geriatrique">Consultation geriatrique</option>
+        <option value="Consultation psychologique">Consultation psychologique</option>
+        <option value="Bilan de sante">Bilan de sante</option>
+        <option value="Medecine du travail">Medecine du travail</option>
+        <option value="Sport medical">Sport medical</option>
+        <option value="Autre">Autre (saisir personnalise)</option>
+    </select>
+    <div id="motifAutreContainer" style="display:none; margin-top: 5px;">
+        <input type="text" class="form-control" id="motifAutre" 
+               placeholder="Saisir le motif personnalise..." 
+               oninput="verifierMotifAutre()">
+        <small class="text-muted" id="motifAutreHelp">Saisissez le motif de votre choix</small>
+    </div>
+</div>
+
                 <div class="row mt-3">
                     <div class="col-md-12">
                         <button class="btn btn-primary" onclick="ajouterRendezVous()">
@@ -190,41 +248,71 @@
 
         <!-- Liste des rendez-vous -->
         <div class="card shadow-sm">
-            <div class="card-header bg-gradient-info text-white d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="fas fa-list me-2"></i> Liste des rendez-vous</h5>
-                <div>
-                    <button class="btn btn-light btn-sm me-2" onclick="imprimerRendezVous()">
-                        <i class="fas fa-print me-1"></i> Imprimer
-                    </button>
-                    <button class="btn btn-light btn-sm" onclick="exporterRendezVousCSV()">
-                        <i class="fas fa-file-excel me-1"></i> Exporter
-                    </button>
-                </div>
-            </div>
+<!-- Dans l'en-tete de la carte -->
+<div class="card-header bg-gradient-info text-white d-flex justify-content-between align-items-center">
+    <h5 class="mb-0"><i class="fas fa-list me-2"></i> Liste des rendez-vous</h5>
+    <div>
+        <!-- Nouveau bouton pour imprimer le calendrier -->
+        <button class="btn btn-light btn-sm me-2" onclick="imprimerCalendrier()">
+            <i class="fas fa-calendar-alt me-1"></i> Calendrier
+        </button>
+        <button class="btn btn-light btn-sm me-2" onclick="imprimerRendezVous()">
+            <i class="fas fa-print me-1"></i> Imprimer
+        </button>
+        <button class="btn btn-light btn-sm" onclick="exporterRendezVousCSV()">
+            <i class="fas fa-file-excel me-1"></i> Exporter
+        </button>
+    </div>
+</div>
+
             <div class="card-body">
-                <div class="row g-2 mb-3">
-                    <div class="col-md-4">
-                        <label class="form-label small">Filtrer par statut</label>
-                        <select id="filtreStatut" class="form-select form-select-sm" onchange="filtrerRendezVous()">
-                            <option value="tous">Tous les statuts</option>
-                            <option value="programme">Programmé</option>
-                            <option value="confirme">Confirmé</option>
-                            <option value="termine">Terminé</option>
-                            <option value="annule">Annulé</option>
-                            <option value="reporte">Reporté</option>
-                            <option value="depasse">Dépassés</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small">Filtrer par date</label>
-                        <input type="date" id="filtreDate" class="form-control form-control-sm" onchange="filtrerRendezVous()">
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <button class="btn btn-secondary btn-sm w-100" onclick="resetFilters()">
-                            <i class="fas fa-undo-alt me-1"></i> Réinitialiser
-                        </button>
-                    </div>
-                </div>
+
+<!-- Filtres ameliores -->
+<div class="row g-2 mb-3">
+    <div class="col-md-3">
+        <label class="form-label small">Filtrer par statut</label>
+        <select id="filtreStatut" class="form-select form-select-sm" onchange="filtrerRendezVous()">
+            <option value="tous">Tous les statuts</option>
+            <option value="programme">Programme</option>
+            <option value="confirme">Confirme</option>
+            <option value="termine">Termine</option>
+            <option value="annule">Annule</option>
+            <option value="reporte">Reporte</option>
+        </select>
+    </div>
+    
+    <div class="col-md-3">
+        <label class="form-label small">Filtrer par medecin</label>
+        <select id="filtreMedecin" class="form-select form-select-sm" onchange="filtrerRendezVous()">
+            <option value="tous">Tous les medecins</option>
+            {% for medecin in medecins %}
+            <option value="{{ medecin.id }}">{{ medecin.titre }} {{ medecin.nom }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    
+    <div class="col-md-3">
+        <label class="form-label small">Periode</label>
+        <select id="filtrePeriode" class="form-select form-select-sm" onchange="changerPeriode()">
+            <option value="aujourdhui" {% if filtre_date == 'aujourdhui' %}selected{% endif %}>Aujourd'hui</option>
+            <option value="semaine" {% if filtre_date == 'semaine' %}selected{% endif %}>Cette semaine</option>
+            <option value="mois" {% if filtre_date == 'mois' %}selected{% endif %}>Ce mois</option>
+            <option value="personnalise" {% if filtre_date == 'personnalise' %}selected{% endif %}>Personnalise</option>
+        </select>
+    </div>
+    
+    <div class="col-md-3" id="periodePersonnalisee" style="{% if filtre_date != 'personnalise' %}display:none;{% endif %}">
+        <label class="form-label small">Periode personnalisee</label>
+        <div class="d-flex gap-1">
+            <input type="date" id="dateDebut" class="form-control form-control-sm" 
+                   value="{{ date_debut or '' }}" onchange="appliquerPeriodeAuto()">
+            <span class="text-muted small align-self-center">a</span>
+            <input type="date" id="dateFin" class="form-control form-control-sm" 
+                   value="{{ date_fin or '' }}" onchange="appliquerPeriodeAuto()">
+        </div>
+    </div>
+</div>
+
 
                 <div class="table-responsive">
                     <table class="table table-hover table-bordered" id="rendezVousTable">
@@ -232,7 +320,8 @@
                             <tr>
                                 <th>ID</th>
                                 <th>Patient</th>
-                                <th>Téléphone</th>
+                                <th>Telephone</th>
+                                <th>Medecin</th>
                                 <th>Date</th>
                                 <th>Heure</th>
                                 <th>Motif</th>
@@ -242,24 +331,31 @@
                         </thead>
                         <tbody id="rendezVousList">
                             {% for rdv in rendez_vous %}
-                            <tr data-id="{{ rdv.ID }}" data-statut="{{ rdv.statut }}" data-date="{{ rdv.date_rendez_vous }}">
+                            <tr data-id="{{ rdv.ID }}" data-statut="{{ rdv.statut }}" data-date="{{ rdv.date_rendez_vous }}" data-medecin="{{ rdv.medecin_id }}">
                                 <td>{{ rdv.ID }}</td>
                                 <td>{{ rdv.patient_nom }}</td>
                                 <td>{{ rdv.patient_telephone }}</td>
+                                <td>
+                                    {% if rdv.medecin_nom %}
+                                    <span class="badge bg-info">{{ rdv.medecin_nom }}</span>
+                                    {% else %}
+                                    <span class="text-muted">Non attribue</span>
+                                    {% endif %}
+                                </td>
                                 <td>{{ rdv.date_rendez_vous }}</td>
                                 <td>{{ rdv.heure_rendez_vous }}</td>
                                 <td>{{ rdv.motif }}</td>
                                 <td>
                                     {% if rdv.statut == 'confirme' %}
-                                        <span class="badge bg-success">Confirmé</span>
+                                        <span class="badge bg-success">Confirme</span>
                                     {% elif rdv.statut == 'programme' %}
-                                        <span class="badge bg-warning text-dark">Programmé</span>
+                                        <span class="badge bg-warning text-dark">Programme</span>
                                     {% elif rdv.statut == 'annule' %}
-                                        <span class="badge bg-danger">Annulé</span>
+                                        <span class="badge bg-danger">Annule</span>
                                     {% elif rdv.statut == 'reporte' %}
-                                        <span class="badge bg-info">Reporté</span>
+                                        <span class="badge bg-info">Reporte</span>
                                     {% elif rdv.statut == 'termine' %}
-                                        <span class="badge bg-secondary">Terminé</span>
+                                        <span class="badge bg-secondary">Termine</span>
                                     {% else %}
                                         <span class="badge bg-secondary">{{ rdv.statut }}</span>
                                     {% endif %}
@@ -289,7 +385,7 @@
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="8" class="text-center text-muted py-4">
+                                <td colspan="9" class="text-center text-muted py-4">
                                     <i class="fas fa-calendar-times fa-3x mb-2"></i><br>
                                     Aucun rendez-vous
                                 </td>
@@ -323,7 +419,7 @@
                 <div class="mb-3">
                     <label class="form-label fw-bold">Message au patient (optionnel)</label>
                     <textarea class="form-control" id="messageReport" rows="3" 
-                              placeholder="Votre rendez-vous a été reporté au..."></textarea>
+                              placeholder="Votre rendez-vous a ete reporte au..."></textarea>
                 </div>
             </div>
             <div class="modal-footer">
@@ -351,11 +447,11 @@
                         <input type="text" class="form-control" id="patientNom" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Prénoms</label>
+                        <label class="form-label">Prenoms</label>
                         <input type="text" class="form-control" id="patientPrenoms">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Téléphone *</label>
+                        <label class="form-label">Telephone *</label>
                         <input type="tel" class="form-control" id="patientTelephone" required>
                     </div>
                     <div class="mb-3">
@@ -374,13 +470,113 @@
     </div>
 </div>
 
+<!-- Modal Details Medecin -->
+<div class="modal fade" id="medecinDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-user-md me-2"></i> 
+                    <span id="medecinName"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Informations generales -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted">Informations personnelles</h6>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <p class="mb-1"><strong>Specialite:</strong> <span id="detailSpecialite"></span></p>
+                                        <p class="mb-1"><strong>Qualification:</strong> <span id="detailQualification"></span></p>
+                                        <p class="mb-1"><strong>Telephone:</strong> <span id="detailTelephone"></span></p>
+                                    </div>
+                                    <div class="col-6">
+                                        <p class="mb-1"><strong>Email:</strong> <span id="detailEmail"></span></p>
+                                        <p class="mb-1"><strong>Honoraire:</strong> <span id="detailHonoraire"></span></p>
+                                        <p class="mb-0"><strong>Statut:</strong> <span id="detailStatut"></span></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted">Statistiques</h6>
+                                <div class="row text-center">
+                                    <div class="col-4">
+                                        <h3 class="text-primary" id="detailTotal">0</h3>
+                                        <small class="text-muted">Total consultations</small>
+                                    </div>
+                                    <div class="col-4">
+                                        <h3 class="text-success" id="detailMois">0</h3>
+                                        <small class="text-muted">Ce mois</small>
+                                    </div>
+                                    <div class="col-4">
+                                        <h3 class="text-info" id="detailSemaine">0</h3>
+                                        <small class="text-muted">Cette semaine</small>
+                                    </div>
+                                </div>
+                                <div class="mt-2 text-center">
+                                    <small class="text-muted">Derniere consultation: <span id="detailDerniere"></span></small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Historique des consultations -->
+                <h6 class="text-muted mb-3">Historique des consultations</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover" id="consultationsHistoryTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Heure</th>
+                                <th>Patient</th>
+                                <th>Telephone</th>
+                                <th>Motif</th>
+                                <th>Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody id="consultationsHistoryList">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Chargement...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Graphique d'evolution -->
+                <div class="mt-3">
+                    <h6 class="text-muted">Evolution des consultations</h6>
+                    <canvas id="medecinChart" height="150"></canvas>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="imprimerHistoriqueMedecin()">
+                    <i class="fas fa-print me-1"></i> Imprimer PDF
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 let currentRdvId = null;
+let currentMedecinId = null;
+let consultationsHistory = [];
+let medecinChart = null;
 
-// Variables globales pour les stats
-let patientsList = [];
+// ============================================================
+// STATISTIQUES
+// ============================================================
 
-// Mettre à jour les stats
 function updateStats() {
     const rows = document.querySelectorAll('#rendezVousList tr:not([style*="display: none"])');
     const today = new Date().toISOString().split('T')[0];
@@ -394,9 +590,9 @@ function updateStats() {
     weekLater.setDate(todayDate.getDate() + 7);
     
     rows.forEach(row => {
-        if (row.cells.length < 8 || row.cells[0].innerText === '') return;
+        if (row.cells.length < 9 || row.cells[0].innerText === '') return;
         
-        const dateStr = row.cells[3]?.innerText || '';
+        const dateStr = row.cells[4]?.innerText || '';
         const statut = row.getAttribute('data-statut');
         
         if (dateStr) {
@@ -421,9 +617,13 @@ function updateStats() {
     document.getElementById('statsEnAttente').innerText = enAttenteCount;
 }
 
-// Filtrer rendez-vous
+// ============================================================
+// FILTRES
+// ============================================================
+
 function filtrerRendezVous() {
     const statut = document.getElementById('filtreStatut').value;
+    const medecin = document.getElementById('filtreMedecin').value;
     const date = document.getElementById('filtreDate').value;
     const today = new Date().toISOString().split('T')[0];
     
@@ -431,11 +631,12 @@ function filtrerRendezVous() {
     let visibleCount = 0;
     
     rows.forEach(row => {
-        if (row.cells.length < 8) return;
+        if (row.cells.length < 9) return;
         
         let show = true;
         const rowStatut = row.getAttribute('data-statut');
-        const rowDate = row.cells[3]?.innerText || '';
+        const rowDate = row.cells[4]?.innerText || '';
+        const rowMedecin = row.getAttribute('data-medecin') || '';
         
         if (statut !== 'tous') {
             if (statut === 'depasse') {
@@ -445,6 +646,10 @@ function filtrerRendezVous() {
             } else if (rowStatut !== statut) {
                 show = false;
             }
+        }
+        
+        if (medecin !== 'tous' && rowMedecin !== medecin) {
+            show = false;
         }
         
         if (date && rowDate !== date) {
@@ -460,92 +665,14 @@ function filtrerRendezVous() {
 
 function resetFilters() {
     document.getElementById('filtreStatut').value = 'tous';
+    document.getElementById('filtreMedecin').value = 'tous';
     document.getElementById('filtreDate').value = '';
     filtrerRendezVous();
 }
 
-// Ajouter rendez-vous
-function ajouterRendezVous() {
-    const select = document.getElementById('patientSelect');
-    const patientId = select.value;
-    const selectedOption = select.options[select.selectedIndex];
-    const patientNom = selectedOption?.getAttribute('data-nom');
-    const patientPrenom = selectedOption?.getAttribute('data-prenom');
-    const patientTel = selectedOption?.getAttribute('data-tel');
-    const date = document.getElementById('dateRendezVous').value;
-    const heure = document.getElementById('heureRendezVous').value;
-    const motif = document.getElementById('motif').value;
-    
-    // Vérifications
-    if (!patientId) {
-        showToast('Veuillez sélectionner un patient', 'warning');
-        return;
-    }
-    if (!date || !heure) {
-        showToast('Veuillez remplir la date et l\'heure', 'warning');
-        return;
-    }
-    if (!motif || motif.trim() === '') {
-        showToast('Veuillez saisir le motif du rendez-vous', 'warning');
-        document.getElementById('motif').focus();
-        return;
-    }
-    
-    // Vérifier si la date n'est pas passée
-    const today = new Date().toISOString().split('T')[0];
-    if (date < today) {
-        showToast('La date ne peut pas être dans le passé', 'danger');
-        return;
-    }
-    
-    showLoader('Enregistrement du rendez-vous...');
-    
-    fetch('/api/rendez_vous', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            patient_id: patientId,
-            patient_nom: (patientNom + ' ' + patientPrenom).trim(),
-            patient_telephone: patientTel,
-            date: date,
-            heure: heure,
-            motif: motif.trim()
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        hideLoader();
-        if (data.success) {
-            showToast('Rendez-vous ajouté avec succès !', 'success');
-            setTimeout(() => location.reload(), 1500);
-        } else {
-            showToast('Erreur: ' + data.error, 'danger');
-        }
-    })
-    .catch(() => {
-        hideLoader();
-        showToast('Erreur lors de l\'enregistrement', 'danger');
-    });
-}
-function terminerRendezVous(id) {
-    if (confirm('✓ Marquer ce rendez-vous comme terminé ?')) {
-        showLoader('Mise à jour...');
-        fetch(`/api/rendez_vous/${id}/terminer`, { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'} 
-        })
-        .then(response => response.json())
-        .then(data => { 
-            hideLoader();
-            if (data.success) {
-                showToast('Rendez-vous terminé !', 'success');
-                location.reload();
-            } else {
-                showToast('Erreur: ' + data.error, 'danger');
-            }
-        });
-    }
-}
+// ============================================================
+// GESTION DES PATIENTS
+// ============================================================
 
 function filtrerPatientsRdv() {
     const searchTerm = document.getElementById('searchPatientRdv').value.toLowerCase().trim();
@@ -571,6 +698,682 @@ function clearSearchPatientRdv() {
     filtrerPatientsRdv();
 }
 
+function showAddPatientModal() {
+    document.getElementById('patientForm').reset();
+    new bootstrap.Modal(document.getElementById('addPatientModal')).show();
+}
+
+function ajouterPatientRapide() {
+    const nom = document.getElementById('patientNom').value.trim();
+    const prenoms = document.getElementById('patientPrenoms').value.trim();
+    const telephone = document.getElementById('patientTelephone').value.trim();
+    const email = document.getElementById('patientEmail').value.trim();
+    
+    if (!nom) {
+        showToast('Veuillez entrer le nom du patient', 'warning');
+        return;
+    }
+    if (!telephone) {
+        showToast('Veuillez entrer le telephone', 'warning');
+        return;
+    }
+    
+    showLoader('Enregistrement du patient...');
+    
+    fetch('/api/patients', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            nom: nom,
+            prenoms: prenoms,
+            telephone: telephone,
+            email: email
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoader();
+        if (data.success) {
+            showToast('Patient ajoute avec succes !', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('addPatientModal')).hide();
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast('Erreur: ' + data.error, 'danger');
+        }
+    })
+    .catch(() => {
+        hideLoader();
+        showToast('Erreur lors de l\'enregistrement', 'danger');
+    });
+}
+
+// ============================================================
+// GESTION DES MEDECINS
+// ============================================================
+
+function afficherDisponibilites() {
+    const medecinId = document.getElementById('medecinSelect').value;
+    const date = document.getElementById('dateRendezVous').value;
+    
+    if (!medecinId || !date) return;
+    
+    const infoDiv = document.getElementById('disponibilitesInfo');
+    infoDiv.innerHTML = '<span class="text-muted">Verification...</span>';
+    
+    fetch(`/api/medecins/${medecinId}/disponibilites?date=${date}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.disponible) {
+                infoDiv.innerHTML = '<span class="text-success">Disponible ce jour</span>';
+            } else {
+                infoDiv.innerHTML = '<span class="text-danger">Indisponible ce jour</span>';
+            }
+        })
+        .catch(() => {
+            infoDiv.innerHTML = '';
+        });
+}
+
+function voirConsultations(id) {
+    currentMedecinId = id;
+    
+    fetch(`/api/medecins/${id}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('medecinName').textContent = 
+                data.titre + ' ' + (data.prenom || '') + ' ' + data.nom;
+            document.getElementById('detailSpecialite').textContent = data.specialite || 'Non specifiee';
+            document.getElementById('detailQualification').textContent = data.qualification || 'Non specifiee';
+            document.getElementById('detailTelephone').textContent = data.telephone || 'Non renseigne';
+            document.getElementById('detailEmail').textContent = data.email || 'Non renseigne';
+            document.getElementById('detailHonoraire').textContent = 
+                (data.honoraire_consultation || 0) + ' F';
+            document.getElementById('detailStatut').textContent = data.actif ? 'Actif' : 'Inactif';
+            
+            document.getElementById('detailTotal').textContent = data.total_consultations || 0;
+            document.getElementById('detailMois').textContent = data.consultations_mois || 0;
+            document.getElementById('detailSemaine').textContent = data.consultations_semaine || 0;
+            document.getElementById('detailDerniere').textContent = 
+                data.derniere_consultation || 'Aucune consultation';
+        });
+    
+    chargerHistoriqueConsultations(id);
+    new bootstrap.Modal(document.getElementById('medecinDetailsModal')).show();
+}
+
+function chargerHistoriqueConsultations(medecinId) {
+    const tbody = document.getElementById('consultationsHistoryList');
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Chargement...</td></tr>';
+    
+    fetch(`/api/medecins/${medecinId}/consultations`)
+        .then(response => response.json())
+        .then(data => {
+            consultationsHistory = data;
+            
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Aucune consultation effectuee</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = data.map(rdv => `
+                <tr>
+                    <td>${rdv.date_rendez_vous}</td>
+                    <td>${rdv.heure_rendez_vous}</td>
+                    <td>${rdv.patient_nom}</td>
+                    <td>${rdv.patient_telephone || '-'}</td>
+                    <td>${rdv.motif || '-'}</td>
+                    <td>
+                        <span class="badge ${rdv.statut === 'termine' ? 'bg-success' : 'bg-warning'}">
+                            ${rdv.statut === 'termine' ? 'Termine' : rdv.statut}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+            
+            creerGraphiqueConsultations(data);
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Erreur lors du chargement</td></tr>';
+        });
+}
+
+function creerGraphiqueConsultations(data) {
+    const ctx = document.getElementById('medecinChart').getContext('2d');
+    
+    const mois = {};
+    data.forEach(rdv => {
+        const date = new Date(rdv.date_rendez_vous);
+        const key = (date.getMonth() + 1) + '/' + date.getFullYear();
+        mois[key] = (mois[key] || 0) + 1;
+    });
+    
+    const labels = Object.keys(mois).sort();
+    const values = labels.map(key => mois[key]);
+    
+    if (medecinChart) {
+        medecinChart.destroy();
+    }
+    
+    medecinChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Consultations',
+                data: values,
+                backgroundColor: 'rgba(102, 126, 234, 0.7)',
+                borderColor: 'rgba(102, 126, 234, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+}
+
+// ============================================================
+// IMPRESSION PDF HISTORIQUE MEDECIN
+// ============================================================
+
+function imprimerHistoriqueMedecin() {
+    if (consultationsHistory.length === 0) {
+        showToast('Aucune consultation a imprimer', 'warning');
+        return;
+    }
+
+    const medecinName = document.getElementById('medecinName').textContent;
+    const specialite = document.getElementById('detailSpecialite').textContent;
+    const telephone = document.getElementById('detailTelephone').textContent;
+    const total = document.getElementById('detailTotal').textContent;
+    const mois = document.getElementById('detailMois').textContent;
+    const semaine = document.getElementById('detailSemaine').textContent;
+    const derniere = document.getElementById('detailDerniere').textContent;
+    
+    const structureNom = localStorage.getItem('structureNom') || 'HOPITAL CENTRAL DE LOME';
+    const structureLogo = localStorage.getItem('structureLogo') || '';
+    const dateActuelle = new Date().toLocaleString('fr-FR', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
+
+    let tableRows = '';
+    consultationsHistory.forEach(rdv => {
+        const statutBadge = rdv.statut === 'termine' ? 'Termine' : rdv.statut;
+        tableRows += `
+            <tr>
+                <td>${rdv.date_rendez_vous}</td>
+                <td>${rdv.heure_rendez_vous}</td>
+                <td>${rdv.patient_nom}</td>
+                <td>${rdv.patient_telephone || '-'}</td>
+                <td>${rdv.motif || '-'}</td>
+                <td>${statutBadge}</td>
+            </tr>
+        `;
+    });
+
+    let html = `<!DOCTYPE html>
+    <html lang="fr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Historique des consultations</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+                background: #f0f2f5;
+                padding: 30px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+            }
+            .rapport-container {
+                max-width: 1000px;
+                width: 100%;
+                background: #ffffff;
+                border-radius: 16px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.08);
+                overflow: hidden;
+                margin: 0 auto;
+            }
+            .rapport-header {
+                background: linear-gradient(145deg, #1a2a6c, #2d4373);
+                padding: 25px 35px;
+                color: white;
+            }
+            .rapport-header .top-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+            }
+            .rapport-header .logo-area {
+                display: flex;
+                align-items: center;
+                gap: 15px;
+            }
+            .rapport-header .logo-area img {
+                max-height: 50px;
+                max-width: 120px;
+                object-fit: contain;
+            }
+            .rapport-header .logo-area h1 {
+                font-size: 20px;
+                font-weight: 600;
+                letter-spacing: 0.3px;
+            }
+            .rapport-header .badge-rapport {
+                background: rgba(255,255,255,0.15);
+                padding: 6px 16px;
+                border-radius: 30px;
+                font-size: 12px;
+                font-weight: 500;
+                border: 1px solid rgba(255,255,255,0.2);
+            }
+            .rapport-body {
+                padding: 30px 35px;
+            }
+            .section-title {
+                font-size: 11px;
+                text-transform: uppercase;
+                letter-spacing: 1.2px;
+                color: #6c7a89;
+                font-weight: 600;
+                margin-bottom: 12px;
+                border-bottom: 2px solid #eef2f7;
+                padding-bottom: 6px;
+            }
+            .info-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 15px;
+                margin-bottom: 25px;
+            }
+            .info-card {
+                background: #f8faff;
+                border-radius: 10px;
+                padding: 12px 18px;
+                border-left: 3px solid #2d4373;
+            }
+            .info-card .label {
+                font-size: 10px;
+                text-transform: uppercase;
+                color: #8e9aaf;
+                font-weight: 600;
+                letter-spacing: 0.5px;
+            }
+            .info-card .value {
+                font-size: 14px;
+                font-weight: 600;
+                color: #1a2a3a;
+                margin-top: 2px;
+            }
+            .stat-box {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 15px;
+                margin: 20px 0 25px 0;
+            }
+            .stat-item {
+                background: #f5f7fb;
+                border-radius: 10px;
+                padding: 15px;
+                text-align: center;
+            }
+            .stat-item .number {
+                font-size: 24px;
+                font-weight: 700;
+                color: #1a2a6c;
+            }
+            .stat-item .label {
+                font-size: 10px;
+                text-transform: uppercase;
+                color: #8e9aaf;
+                font-weight: 600;
+                margin-top: 3px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 15px;
+                font-size: 12px;
+            }
+            th {
+                background: #f5f7fb;
+                color: #1a2a3a;
+                font-weight: 600;
+                padding: 8px 12px;
+                text-align: left;
+                border-bottom: 2px solid #e6ebf2;
+                font-size: 10px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            td {
+                padding: 7px 12px;
+                border-bottom: 1px solid #eef2f7;
+                color: #3d4f60;
+            }
+            .footer-rapport {
+                background: #f5f7fb;
+                padding: 12px 35px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                font-size: 9px;
+                color: #7e8a9b;
+                border-top: 1px solid #e6ebf2;
+            }
+            .footer-rapport .right {
+                font-weight: 500;
+                color: #1a2a6c;
+            }
+            .mention {
+                font-size: 8px;
+                color: #aab3c5;
+                text-align: center;
+                margin-top: 5px;
+                padding-top: 8px;
+                border-top: 1px dashed #e6ebf2;
+            }
+            @media print {
+                body { background: white; padding: 0; margin: 0; }
+                .rapport-container { border-radius: 0; box-shadow: none; max-width: 100%; }
+                .rapport-header { background: #1a2a6c !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .stat-item { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .info-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .footer-rapport { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="rapport-container">
+            <div class="rapport-header">
+                <div class="top-row">
+                    <div class="logo-area">
+                        ${structureLogo ? `<img src="${structureLogo}" alt="Logo">` : ''}
+                        <h1>${structureNom}</h1>
+                    </div>
+                    <div class="badge-rapport">Historique des consultations</div>
+                </div>
+            </div>
+
+            <div class="rapport-body">
+                <div class="section-title">Informations du medecin</div>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="label">Medecin</div>
+                        <div class="value">${medecinName}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="label">Specialite</div>
+                        <div class="value">${specialite}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="label">Telephone</div>
+                        <div class="value">${telephone}</div>
+                    </div>
+                </div>
+
+                <div class="section-title">Statistiques</div>
+                <div class="stat-box">
+                    <div class="stat-item">
+                        <div class="number">${total}</div>
+                        <div class="label">Total consultations</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="number">${mois}</div>
+                        <div class="label">Ce mois</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="number">${semaine}</div>
+                        <div class="label">Cette semaine</div>
+                    </div>
+                </div>
+                <div style="text-align: center; margin-bottom: 20px; font-size: 12px; color: #6c7a89;">
+                    Derniere consultation: ${derniere}
+                </div>
+
+                <div class="section-title">Liste des consultations</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Heure</th>
+                            <th>Patient</th>
+                            <th>Telephone</th>
+                            <th>Motif</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+
+                <div class="mention">
+                    Document genere le ${dateActuelle} - ${structureNom}
+                </div>
+            </div>
+
+            <div class="footer-rapport">
+                <span>Total: ${consultationsHistory.length} consultations</span>
+                <span class="right">Prenez soin de vous</span>
+            </div>
+        </div>
+
+        <script>
+            window.onload = function() {
+                window.print();
+                setTimeout(function() {
+                    window.close();
+                }, 600);
+            };
+        <\/script>
+    </body>
+    </html>`;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+    } else {
+        showToast('Impossible d\'ouvrir la fenetre d\'impression', 'danger');
+    }
+}
+
+
+// ============================================================
+// GESTION DES MOTIFS
+// ============================================================
+
+// ============================================================
+// GESTION DES MOTIFS - CORRIGE
+// ============================================================
+
+function changerMotif() {
+    const select = document.getElementById('motifSelect');
+    const container = document.getElementById('motifAutreContainer');
+    const input = document.getElementById('motifAutre');
+    const valeur = select.value;
+    
+    console.log('Motif selectionne:', valeur); // Pour deboguer
+    
+    if (valeur === 'Autre') {
+        container.style.display = 'block';
+        input.required = true;
+        input.focus();
+        // Reinitialiser le message d'erreur
+        input.classList.remove('is-invalid');
+        document.getElementById('motifAutreHelp').textContent = 'Saisissez le motif de votre choix';
+        document.getElementById('motifAutreHelp').style.color = '#6c7a89';
+    } else {
+        container.style.display = 'none';
+        input.required = false;
+        input.value = '';
+        input.classList.remove('is-invalid');
+    }
+}
+
+function verifierMotifAutre() {
+    const input = document.getElementById('motifAutre');
+    const help = document.getElementById('motifAutreHelp');
+    const valeur = input.value.trim();
+    
+    if (valeur.length > 0) {
+        input.classList.remove('is-invalid');
+        input.classList.add('is-valid');
+        help.textContent = 'Motif personnalise saisi';
+        help.style.color = '#28a745';
+    } else {
+        input.classList.remove('is-valid');
+        help.textContent = 'Saisissez le motif de votre choix';
+        help.style.color = '#6c7a89';
+    }
+}
+
+function getMotifValue() {
+    const select = document.getElementById('motifSelect');
+    const input = document.getElementById('motifAutre');
+    
+    if (select.value === 'Autre') {
+        const valeur = input.value.trim();
+        if (!valeur) {
+            showToast('Veuillez saisir un motif personnalise', 'warning');
+            input.focus();
+            input.classList.add('is-invalid');
+            document.getElementById('motifAutreHelp').textContent = 'Ce champ est requis';
+            document.getElementById('motifAutreHelp').style.color = '#dc3545';
+            return null;
+        }
+        return valeur;
+    }
+    return select.value;
+}
+// ============================================================
+// GESTION DES RENDEZ-VOUS
+// ============================================================
+
+function ajouterRendezVous() {
+    const select = document.getElementById('patientSelect');
+    const patientId = select.value;
+    const selectedOption = select.options[select.selectedIndex];
+    const patientNom = selectedOption?.getAttribute('data-nom');
+    const patientPrenom = selectedOption?.getAttribute('data-prenom');
+    const patientTel = selectedOption?.getAttribute('data-tel');
+    
+    const medecinId = document.getElementById('medecinSelect').value;
+    const date = document.getElementById('dateRendezVous').value;
+    const heure = document.getElementById('heureRendezVous').value;
+    const duree = document.getElementById('dureeRendezVous').value;
+    
+    // Recuperer le motif
+    const motif = getMotifValue();
+    
+    // Verifier si le motif est null (erreur de saisie)
+    if (motif === null) {
+        return; // getMotifValue a deja affiche un message d'erreur
+    }
+    
+    // Verifications
+    if (!patientId) {
+        showToast('Veuillez selectionner un patient', 'warning');
+        return;
+    }
+    if (!medecinId) {
+        showToast('Veuillez selectionner un medecin', 'warning');
+        return;
+    }
+    if (!date || !heure) {
+        showToast('Veuillez remplir la date et l\'heure', 'warning');
+        return;
+    }
+    if (!motif) {
+        showToast('Veuillez selectionner ou saisir un motif', 'warning');
+        document.getElementById('motifSelect').focus();
+        return;
+    }
+    
+    // Verifier si la date n'est pas passee
+    const today = new Date().toISOString().split('T')[0];
+    if (date < today) {
+        showToast('La date ne peut pas etre dans le passe', 'danger');
+        return;
+    }
+    
+    showLoader('Enregistrement du rendez-vous...');
+    
+    fetch('/api/rendez_vous', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            patient_id: patientId,
+            patient_nom: (patientNom + ' ' + patientPrenom).trim(),
+            patient_telephone: patientTel,
+            medecin_id: medecinId,
+            date: date,
+            heure: heure,
+            duree: parseInt(duree),
+            motif: motif
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoader();
+        if (data.success) {
+            showToast('Rendez-vous ajoute avec succes !', 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast('Erreur: ' + data.error, 'danger');
+        }
+    })
+    .catch(() => {
+        hideLoader();
+        showToast('Erreur lors de l\'enregistrement', 'danger');
+    });
+}
+
+function terminerRendezVous(id) {
+    if (confirm('Marquer ce rendez-vous comme termine ?')) {
+        showLoader('Mise a jour...');
+        fetch(`/api/rendez_vous/${id}/terminer`, { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'} 
+        })
+        .then(response => response.json())
+        .then(data => { 
+            hideLoader();
+            if (data.success) {
+                showToast('Rendez-vous termine !', 'success');
+                location.reload();
+            } else {
+                showToast('Erreur: ' + data.error, 'danger');
+            }
+        });
+    }
+}
+
 function confirmerRendezVous(id) {
     if (confirm('Confirmer ce rendez-vous ?')) {
         showLoader('Confirmation...');
@@ -582,7 +1385,7 @@ function confirmerRendezVous(id) {
         .then(data => {
             hideLoader();
             if (data.success) {
-                showToast('Rendez-vous confirmé !', 'success');
+                showToast('Rendez-vous confirme !', 'success');
                 location.reload();
             } else {
                 showToast('Erreur: ' + data.error, 'danger');
@@ -628,7 +1431,7 @@ function validerReport() {
             if (data.whatsapp_url) {
                 window.open(data.whatsapp_url, '_blank');
             }
-            showToast('Rendez-vous reporté avec succès !', 'success');
+            showToast('Rendez-vous reporte avec succes !', 'success');
             bootstrap.Modal.getInstance(document.getElementById('reporterModal')).hide();
             setTimeout(() => location.reload(), 1500);
         } else {
@@ -645,25 +1448,49 @@ function validerReport() {
     });
 }
 
+function annulerRendezVous(id) {
+    if (confirm('Annuler ce rendez-vous ?')) {
+        showLoader('Annulation...');
+        fetch(`/api/rendez_vous/${id}/annuler`, { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'} 
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoader();
+            if (data.success) {
+                showToast('Rendez-vous annule !', 'success');
+                location.reload();
+            } else {
+                showToast('Erreur: ' + data.error, 'danger');
+            }
+        });
+    }
+}
+
+// ============================================================
+// RAPPEL WHATSAPP
+// ============================================================
+
 function envoyerRappel(id) {
     const row = document.querySelector(`tr[data-id="${id}"]`);
     if (!row) {
-        showToast('Rendez-vous non trouvé', 'danger');
+        showToast('Rendez-vous non trouve', 'danger');
         return;
     }
     
     const patientNom = row.cells[1]?.innerText || 'Patient';
     const patientTel = row.cells[2]?.innerText || '';
-    const date = row.cells[3]?.innerText || '';
-    const heure = row.cells[4]?.innerText || '';
-    const motif = row.cells[5]?.innerText || '';
+    const date = row.cells[4]?.innerText || '';
+    const heure = row.cells[5]?.innerText || '';
+    const motif = row.cells[6]?.innerText || '';
     
     if (!patientTel) {
-        showToast('Numéro de téléphone non disponible', 'warning');
+        showToast('Numero de telephone non disponible', 'warning');
         return;
     }
     
-    showLoader('Préparation du message...');
+    showLoader('Preparation du message...');
     
     let structureNom = localStorage.getItem('structureNom');
     if (structureNom) {
@@ -672,12 +1499,12 @@ function envoyerRappel(id) {
         fetch('/api/structure/nom')
             .then(response => response.json())
             .then(data => {
-                let nom = data.nom || 'Notre établissement';
+                let nom = data.nom || 'Notre etablissement';
                 localStorage.setItem('structureNom', nom);
                 envoyerMessageWhatsApp(patientTel, patientNom, date, heure, motif, nom);
             })
             .catch(() => {
-                envoyerMessageWhatsApp(patientTel, patientNom, date, heure, motif, 'Notre établissement');
+                envoyerMessageWhatsApp(patientTel, patientNom, date, heure, motif, 'Notre etablissement');
             });
     }
 }
@@ -689,141 +1516,115 @@ function envoyerMessageWhatsApp(tel, patientNom, date, heure, motif, structureNo
         telClean = '228' + telClean;
     }
     
-    let message = `🔔 *RAPPEL DE RENDEZ-VOUS* 🔔%0A%0A`;
-    message += `*${structureNom}*%0A%0A`;
-    message += `Cher(e) *${patientNom}*,%0A%0A`;
+    let message = `RAPPEL DE RENDEZ-VOUS%0A%0A`;
+    message += `${structureNom}%0A%0A`;
+    message += `Cher(e) ${patientNom},%0A%0A`;
     message += `Nous vous rappelons votre rendez-vous :%0A`;
-    message += `Date : *${date}*%0A`;
-    message += `Heure : *${heure}*%0A`;
-    message += `Motif : *${motif}*%0A%0A`;
-    message += `Merci de votre ponctualité ! %0A%0A`;
+    message += `Date : ${date}%0A`;
+    message += `Heure : ${heure}%0A`;
+    message += `Motif : ${motif}%0A%0A`;
+    message += `Merci de votre ponctualite ! %0A%0A`;
     message += `Pour toute annulation, veuillez nous contacter.`;
     
     const whatsappUrl = `https://wa.me/${telClean}?text=${message}`;
     window.open(whatsappUrl, '_blank');
-    showToast('Message WhatsApp préparé', 'success');
+    showToast('Message WhatsApp prepare', 'success');
 }
 
-function annulerRendezVous(id) {
-    if (confirm('❌ Annuler ce rendez-vous ?')) {
-        showLoader('Annulation...');
-        fetch(`/api/rendez_vous/${id}/annuler`, { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'} 
-        })
-        .then(response => response.json())
-        .then(data => {
-            hideLoader();
-            if (data.success) {
-                showToast('Rendez-vous annulé !', 'success');
-                location.reload();
-            } else {
-                showToast('Erreur: ' + data.error, 'danger');
-            }
-        });
-    }
-}
 
-function showAddPatientModal() {
-    document.getElementById('patientForm').reset();
-    new bootstrap.Modal(document.getElementById('addPatientModal')).show();
-}
+// ============================================================
+// FILTRES PAR PERIODE - MISE A JOUR AUTOMATIQUE
+// ============================================================
 
-function ajouterPatientRapide() {
-    const nom = document.getElementById('patientNom').value.trim();
-    const prenoms = document.getElementById('patientPrenoms').value.trim();
-    const telephone = document.getElementById('patientTelephone').value.trim();
-    const email = document.getElementById('patientEmail').value.trim();
+function changerPeriode() {
+    const periode = document.getElementById('filtrePeriode').value;
+    const divPersonnalise = document.getElementById('periodePersonnalisee');
     
-    if (!nom) {
-        showToast('Veuillez entrer le nom du patient', 'warning');
-        return;
-    }
-    if (!telephone) {
-        showToast('Veuillez entrer le téléphone', 'warning');
-        return;
-    }
-    
-    showLoader('Enregistrement du patient...');
-    
-    fetch('/api/patients', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            nom: nom,
-            prenoms: prenoms,
-            telephone: telephone,
-            email: email
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        hideLoader();
-        if (data.success) {
-            showToast('Patient ajouté avec succès !', 'success');
-            bootstrap.Modal.getInstance(document.getElementById('addPatientModal')).hide();
-            setTimeout(() => location.reload(), 1500);
-        } else {
-            showToast('Erreur: ' + data.error, 'danger');
+    if (periode === 'personnalise') {
+        divPersonnalise.style.display = 'block';
+        // Si les dates sont vides, mettre les dates par defaut
+        const dateDebut = document.getElementById('dateDebut');
+        const dateFin = document.getElementById('dateFin');
+        if (!dateDebut.value) {
+            const today = new Date().toISOString().split('T')[0];
+            dateDebut.value = today;
+            dateFin.value = today;
         }
-    })
-    .catch(() => {
-        hideLoader();
-        showToast('Erreur lors de l\'enregistrement', 'danger');
-    });
-}
-
-// Fonctions utilitaires
-function showLoader(message = 'Chargement...') {
-    const loader = document.getElementById('globalLoader');
-    if (loader) {
-        document.getElementById('loaderMessage').innerText = message;
-        loader.style.display = 'flex';
-    }
-}
-
-function hideLoader() {
-    const loader = document.getElementById('globalLoader');
-    if (loader) {
-        loader.style.display = 'none';
-    }
-}
-
-function showToast(message, type = 'info') {
-    const toast = document.getElementById('globalToast');
-    if (toast) {
-        const toastBody = toast.querySelector('.toast-body');
-        const toastHeader = toast.querySelector('.toast-header');
-        
-        toastBody.innerText = message;
-        
-        const iconMap = {
-            success: '✓',
-            danger: '⚠️',
-            warning: '⚠️',
-            info: 'ℹ️'
-        };
-        
-        toastHeader.innerHTML = `<strong class="me-auto">${iconMap[type] || 'ℹ️'} Notification</strong>`;
-        
-        const bsToast = new bootstrap.Toast(toast);
-        bsToast.show();
+        appliquerPeriodeAuto();
     } else {
-        alert(message);
+        divPersonnalise.style.display = 'none';
+        // Recharger la page avec le filtre
+        window.location.href = `/rendez_vous?filtre_date=${periode}`;
     }
 }
 
-// ========== IMPRESSION LISTE ==========
+function appliquerPeriodeAuto() {
+    const dateDebut = document.getElementById('dateDebut').value;
+    const dateFin = document.getElementById('dateFin').value;
+    
+    // Si une des dates est vide, ne rien faire
+    if (!dateDebut || !dateFin) {
+        return;
+    }
+    
+    // Si la date de debut est apres la date de fin, les inverser
+    if (dateDebut > dateFin) {
+        document.getElementById('dateDebut').value = dateFin;
+        document.getElementById('dateFin').value = dateDebut;
+        // Rappeler la fonction avec les dates inversees
+        appliquerPeriodeAuto();
+        return;
+    }
+    
+    // Recharger la page avec les dates personnalisees
+    window.location.href = `/rendez_vous?filtre_date=personnalise&date_debut=${dateDebut}&date_fin=${dateFin}`;
+}
+
+// Initialiser les dates personnalisees
+document.addEventListener('DOMContentLoaded', function() {
+    const periode = document.getElementById('filtrePeriode');
+    if (periode && periode.value === 'personnalise') {
+        document.getElementById('periodePersonnalisee').style.display = 'block';
+    }
+});
+
+
+// ============================================================
+// IMPRESSION DU CALENDRIER
+// ============================================================
+
+function imprimerCalendrier() {
+    const periode = document.getElementById('filtrePeriode').value;
+    const dateDebut = document.getElementById('dateDebut')?.value || '';
+    const dateFin = document.getElementById('dateFin')?.value || '';
+    const vue = 'semaine'; // ou 'mois' selon votre besoin
+    
+    let url = '/rendez_vous/print?filtre_date=' + periode;
+    
+    if (periode === 'personnalise') {
+        url += '&date_debut=' + dateDebut + '&date_fin=' + dateFin;
+    }
+    
+    // Ouvrir dans une nouvelle fenetre pour l'impression
+    window.open(url, '_blank', 'width=1200,height=800');
+}
+
+
+// ============================================================
+// IMPRESSION LISTE DES RENDEZ-VOUS
+// ============================================================
+
 function imprimerRendezVous() {
     const rows = document.querySelectorAll('#rendezVousList tr:not([style*="display: none"])');
     if (rows.length === 0) {
-        showToast('Aucun rendez-vous à imprimer', 'warning');
+        showToast('Aucun rendez-vous a imprimer', 'warning');
         return;
     }
     
     const structureNom = localStorage.getItem('structureNom') || 'Medilogic-GHP';
     const dateFiltre = document.getElementById('filtreDate').value;
     const statutFiltre = document.getElementById('filtreStatut').options[document.getElementById('filtreStatut').selectedIndex]?.text || 'Tous';
+    const medecinFiltre = document.getElementById('filtreMedecin').options[document.getElementById('filtreMedecin').selectedIndex]?.text || 'Tous';
     
     let html = `<!DOCTYPE html>
     <html>
@@ -848,30 +1649,31 @@ function imprimerRendezVous() {
             <p>Liste des rendez-vous - ${new Date().toLocaleString('fr-FR')}</p>
         </div>
         <div class="filters">
-            Filtres: Statut: ${statutFiltre} ${dateFiltre ? '| Date: ' + dateFiltre : ''}
+            Filtres: Statut: ${statutFiltre} | Medecin: ${medecinFiltre} ${dateFiltre ? '| Date: ' + dateFiltre : ''}
         </div>
         <table>
             <thead>
-                <tr><th>Date</th><th>Heure</th><th>Patient</th><th>Téléphone</th><th>Motif</th><th>Statut</th></tr>
+                <tr><th>Date</th><th>Heure</th><th>Patient</th><th>Telephone</th><th>Medecin</th><th>Motif</th><th>Statut</th></tr>
             </thead>
             <tbody>`;
     
     rows.forEach(row => {
         const cells = row.cells;
         if (cells.length > 1) {
-            const date = cells[3]?.innerText || '-';
-            const heure = cells[4]?.innerText || '-';
+            const date = cells[4]?.innerText || '-';
+            const heure = cells[5]?.innerText || '-';
             const patient = cells[1]?.innerText || '-';
             const telephone = cells[2]?.innerText || '-';
-            const motif = cells[5]?.innerText || '-';
-            let statut = cells[6]?.innerText || '-';
+            const medecin = cells[3]?.innerText.replace(/<[^>]*>/g, '').trim() || '-';
+            const motif = cells[6]?.innerText || '-';
+            let statut = cells[7]?.innerText || '-';
             statut = statut.replace(/[✅📋❌🔄✔️]/g, '').trim();
-            html += `<tr><td>${date}</td><td>${heure}</td><td>${patient}</td><td>${telephone}</td><td>${motif}</td><td>${statut}</td></tr>`;
+            html += `<tr><td>${date}</td><td>${heure}</td><td>${patient}</td><td>${telephone}</td><td>${medecin}</td><td>${motif}</td><td>${statut}</td></tr>`;
         }
     });
     
     html += `</tbody></table>
-        <div class="footer">Document généré par Medilogic-GHP - Total: ${rows.length} rendez-vous</div>
+        <div class="footer">Document genere par Medilogic-GHP - Total: ${rows.length} rendez-vous</div>
         <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);};<\/script>
     </body>
     </html>`;
@@ -881,25 +1683,30 @@ function imprimerRendezVous() {
     printWindow.document.close();
 }
 
+// ============================================================
+// EXPORT CSV
+// ============================================================
+
 function exporterRendezVousCSV() {
     const rows = document.querySelectorAll('#rendezVousList tr:not([style*="display: none"])');
     if (rows.length === 0) {
-        showToast('Aucun rendez-vous à exporter', 'warning');
+        showToast('Aucun rendez-vous a exporter', 'warning');
         return;
     }
     
-    let csvContent = "Date;Heure;Patient;Téléphone;Motif;Statut\n";
+    let csvContent = "Date;Heure;Patient;Telephone;Medecin;Motif;Statut\n";
     rows.forEach(row => {
         const cells = row.cells;
         if (cells.length > 1) {
-            const date = cells[3]?.innerText || '';
-            const heure = cells[4]?.innerText || '';
+            const date = cells[4]?.innerText || '';
+            const heure = cells[5]?.innerText || '';
             const patient = cells[1]?.innerText || '';
             const telephone = cells[2]?.innerText || '';
-            const motif = cells[5]?.innerText || '';
-            let statut = cells[6]?.innerText || '';
+            const medecin = cells[3]?.innerText.replace(/<[^>]*>/g, '').trim() || '';
+            const motif = cells[6]?.innerText || '';
+            let statut = cells[7]?.innerText || '';
             statut = statut.replace(/[✅📋❌🔄✔️]/g, '').trim();
-            csvContent += `"${date}";"${heure}";"${patient}";"${telephone}";"${motif}";"${statut}"\n`;
+            csvContent += `"${date}";"${heure}";"${patient}";"${telephone}";"${medecin}";"${motif}";"${statut}"\n`;
         }
     });
     
@@ -909,13 +1716,16 @@ function exporterRendezVousCSV() {
     link.setAttribute('download', `rendez_vous_${new Date().toISOString().split('T')[0]}.csv`);
     link.click();
     URL.revokeObjectURL(link.href);
-    showToast('Export CSV réussi', 'success');
+    showToast('Export CSV reussi', 'success');
 }
 
-// ========== IMPRESSION REÇU PATIENT ==========
+// ============================================================
+// IMPRESSION REÇU PATIENT AVEC QR CODE
+// ============================================================
+
 function formaterDate(dateStr) {
     const jours = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-    const mois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const mois = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre'];
     
     const date = new Date(dateStr);
     const jourSemaine = jours[date.getDay()];
@@ -932,7 +1742,7 @@ function formaterDate(dateStr) {
     if (diffJours === 0) jourTexte = " (AUJOURD'HUI)";
     else if (diffJours === 1) jourTexte = " (DEMAIN)";
     else if (diffJours > 1) jourTexte = ` (dans ${diffJours} jours)`;
-    else if (diffJours < 0) jourTexte = " (DATE PASSÉE)";
+    else if (diffJours < 0) jourTexte = " (DATE PASSEE)";
     
     return `${jourSemaine} ${jour} ${moisNom} ${annee}${jourTexte}`;
 }
@@ -946,10 +1756,11 @@ function imprimerRendezVousPatient(id) {
 
     const patientNom = row.cells[1]?.innerText || 'Patient';
     const patientTel = row.cells[2]?.innerText || '';
-    const date = row.cells[3]?.innerText || '';
-    const heure = row.cells[4]?.innerText || '';
-    const motif = row.cells[5]?.innerText || 'Consultation';
-    const statut = row.cells[6]?.innerText || '';
+    const medecinNom = row.cells[3]?.innerText.replace(/<[^>]*>/g, '').trim() || 'Non attribue';
+    const date = row.cells[4]?.innerText || '';
+    const heure = row.cells[5]?.innerText || '';
+    const motif = row.cells[6]?.innerText || 'Consultation';
+    const statut = row.cells[7]?.innerText || '';
 
     const structureNom = localStorage.getItem('structureNom') || 'HOPITAL CENTRAL DE LOME';
     const structureTel = localStorage.getItem('structureTelephone') || '';
@@ -966,7 +1777,6 @@ function imprimerRendezVousPatient(id) {
     });
     const numeroRdv = 'RDV-' + String(id).padStart(4, '0') + '-' + new Date().getFullYear();
 
-    // Contenu du QR Code
     const qrContent = [
         '=== CONFIRMATION DE RENDEZ-VOUS ===',
         '',
@@ -980,6 +1790,7 @@ function imprimerRendezVousPatient(id) {
         '--- Details du Rendez-vous ---',
         'Date : ' + date,
         'Heure : ' + heure,
+        'Medecin : ' + medecinNom,
         'Motif : ' + motif,
         'Statut : ' + statut || 'Programme',
         '',
@@ -1119,16 +1930,14 @@ function imprimerRendezVousPatient(id) {
                 margin: 12px 0 15px 0;
                 border-left: 4px solid #2d4373;
             }
-            /* ===== DATE PLUS GRANDE ===== */
             .rdv-card .rdv-date-big {
-                font-size: 26px;  /* Taille augmentée */
+                font-size: 26px;
                 font-weight: 700;
                 color: #1a2a6c;
                 letter-spacing: 0.5px;
             }
-            /* ===== HEURE PLUS GRANDE ===== */
             .rdv-card .rdv-time-big {
-                font-size: 30px;  /* Taille augmentée */
+                font-size: 30px;
                 font-weight: 800;
                 color: #1a2a3a;
                 margin-top: 2px;
@@ -1146,6 +1955,15 @@ function imprimerRendezVousPatient(id) {
                 font-weight: 600;
                 color: #1a2a6c;
                 font-size: 13px;
+            }
+            .rdv-card .rdv-medecin {
+                font-size: 13px;
+                color: #3d4f60;
+                margin-top: 2px;
+            }
+            .rdv-card .rdv-medecin span {
+                font-weight: 600;
+                color: #1a2a6c;
             }
             .flex-row {
                 display: flex;
@@ -1342,8 +2160,8 @@ function imprimerRendezVousPatient(id) {
                         <span class="value telephone">${patientTel || 'Non renseigne'}</span>
                     </div>
                     <div class="info-item">
-                        <span class="label">Imprime le</span>
-                        <span class="value">${dateActuelle}</span>
+                        <span class="label">Medecin</span>
+                        <span class="value">${medecinNom}</span>
                     </div>
                     <div class="info-item">
                         <span class="label">Statut</span>
@@ -1411,24 +2229,75 @@ function imprimerRendezVousPatient(id) {
         printWindow.document.write(html);
         printWindow.document.close();
     } else {
-        showToast('Impossible d\'ouvrir la fenetre d\'impression. Verifiez que les pop-ups sont autorises.', 'danger');
+        showToast('Impossible d\'ouvrir la fenetre d\'impression.', 'danger');
     }
 }
 
-// Initialisation
+// ============================================================
+// FONCTIONS UTILITAIRES
+// ============================================================
+
+function showLoader(message = 'Chargement...') {
+    const loader = document.getElementById('globalLoader');
+    if (loader) {
+        document.getElementById('loaderMessage').innerText = message;
+        loader.style.display = 'flex';
+    }
+}
+
+function hideLoader() {
+    const loader = document.getElementById('globalLoader');
+    if (loader) {
+        loader.style.display = 'none';
+    }
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.getElementById('globalToast');
+    if (toast) {
+        const toastBody = toast.querySelector('.toast-body');
+        const toastHeader = toast.querySelector('.toast-header');
+        
+        toastBody.innerText = message;
+        
+        const iconMap = {
+            success: '✓',
+            danger: '⚠️',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+        
+        toastHeader.innerHTML = `<strong class="me-auto">${iconMap[type] || 'ℹ️'} Notification</strong>`;
+        
+        const bsToast = new bootstrap.Toast(toast);
+        bsToast.show();
+    } else {
+        alert(message);
+    }
+}
+
+// ============================================================
+// INITIALISATION
+// ============================================================
+
 document.addEventListener('DOMContentLoaded', function() {
     updateStats();
     filtrerPatientsRdv();
     
-    // Mettre à jour les stats quand les filtres changent
     const observer = new MutationObserver(function() {
         updateStats();
     });
     observer.observe(document.getElementById('rendezVousList'), { childList: true, subtree: true });
     
-    // Ajouter la date du jour par défaut
     if (!document.getElementById('dateRendezVous').value) {
         document.getElementById('dateRendezVous').value = new Date().toISOString().split('T')[0];
+    }
+
+    // Verifier si le motif est deja sur "Autre"
+    const motifSelect = document.getElementById('motifSelect');
+    if (motifSelect && motifSelect.value === 'Autre') {
+        document.getElementById('motifAutreContainer').style.display = 'block';
+        document.getElementById('motifAutre').focus();
     }
 });
 </script>

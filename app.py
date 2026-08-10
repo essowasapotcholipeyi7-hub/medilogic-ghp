@@ -2761,14 +2761,761 @@ def debug_ventes():
     return jsonify(result)
 
 
-# ========== RENDEZ-VOUS ==========
+# ============================================================
+# ROUTES POUR LES MEDECINS (NOUVELLES)
+# ============================================================
+
+# ============================================================
+# ROUTES POUR LA GESTION DES MEDECINS
+# ============================================================
+
+@app.route('/medecins')
+@login_required
+def gestion_medecins():
+    """Page de gestion des medecins"""
+    structure_id = session.get('structure_id')
+    
+    # Recuperer les medecins (sans qualification)
+    medecins = db.execute_query("""
+        SELECT 
+            id, nom, prenom, titre, specialite,
+            telephone, email, honoraire_consultation, actif
+        FROM medecins 
+        WHERE structure_id = %s
+        ORDER BY nom
+    """, (structure_id,))
+    
+    medecins_list = []
+    for m in medecins:
+        # Si c'est un dictionnaire, utiliser .get()
+        if isinstance(m, dict):
+            med_id = m.get('id')
+            # Compter les consultations
+            nb = db.execute_query("""
+                SELECT COUNT(*) FROM rendez_vous 
+                WHERE medecin_id = %s AND statut = 'termine'
+            """, (med_id,))
+            
+            # CORRECTION ICI: nb est une liste de dictionnaires
+            nb_consultations = nb[0].get('count') if nb and len(nb) > 0 else 0
+            # OU si la clé est 'count'
+            # nb_consultations = nb[0]['count'] if nb and len(nb) > 0 else 0
+            
+            medecins_list.append({
+                'id': med_id,
+                'nom': m.get('nom'),
+                'prenom': m.get('prenom'),
+                'titre': m.get('titre', 'Dr'),
+                'specialite': m.get('specialite'),
+                'qualification': m.get('specialite', ''),
+                'telephone': m.get('telephone'),
+                'email': m.get('email'),
+                'honoraire': m.get('honoraire_consultation', 0),
+                'actif': m.get('actif', True),
+                'nb_consultations': nb_consultations
+            })
+        else:
+            # Si c'est un tuple, utiliser les indices
+            med_id = m[0]
+            nb = db.execute_query("""
+                SELECT COUNT(*) FROM rendez_vous 
+                WHERE medecin_id = %s AND statut = 'termine'
+            """, (med_id,))
+            
+            # CORRECTION ICI: nb est une liste de dictionnaires
+            nb_consultations = nb[0].get('count') if nb and len(nb) > 0 else 0
+            
+            medecins_list.append({
+                'id': med_id,
+                'nom': m[1],
+                'prenom': m[2],
+                'titre': m[3] if len(m) > 3 else 'Dr',
+                'specialite': m[4] if len(m) > 4 else '',
+                'qualification': m[4] if len(m) > 4 else '',
+                'telephone': m[5] if len(m) > 5 else '',
+                'email': m[6] if len(m) > 6 else '',
+                'honoraire': m[7] if len(m) > 7 else 0,
+                'actif': m[8] if len(m) > 8 else True,
+                'nb_consultations': nb_consultations
+            })
+    
+    return render_template('medecins.html', medecins=medecins_list)
+
+@app.route('/api/medecins', methods=['POST'])
+@login_required
+def api_ajouter_medecin():
+    """Ajouter un nouveau medecin"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        
+        # Validation
+        required = ['nom', 'specialite']
+        for field in required:
+            if not data.get(field):
+                return jsonify({'success': False, 'error': f'Le champ {field} est requis'}), 400
+        
+        # Verifier si le medecin existe deja
+        existant = db.execute_query("""
+            SELECT id FROM medecins 
+            WHERE nom = %s AND prenom = %s AND structure_id = %s
+        """, (data.get('nom'), data.get('prenom', ''), structure_id))
+        
+        if existant and len(existant) > 0:
+            return jsonify({'success': False, 'error': 'Ce medecin existe deja'}), 400
+        
+        # Inserer le medecin
+        result = db.execute_query("""
+            INSERT INTO medecins (
+                structure_id,
+                nom,
+                prenom,
+                titre,
+                specialite,
+                qualification,
+                telephone,
+                email,
+                honoraire_consultation,
+                actif
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            structure_id,
+            data.get('nom'),
+            data.get('prenom', ''),
+            data.get('titre', 'Dr'),
+            data.get('specialite'),
+            data.get('qualification', ''),
+            data.get('telephone', ''),
+            data.get('email', ''),
+            data.get('honoraire_consultation', 0),
+            data.get('actif', True)
+        ))
+        
+        if result and len(result) > 0:
+            medecin_id = result[0]['id'] if isinstance(result[0], dict) else result[0][0]
+            return jsonify({'success': True, 'id': medecin_id, 'message': 'Medecin ajoute avec succes'})
+        else:
+            return jsonify({'success': False, 'error': 'Erreur lors de l\'insertion'}), 500
+            
+    except Exception as e:
+        print(f"Erreur ajout medecin: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/medecins/<int:id>', methods=['PUT'])
+@login_required
+def api_modifier_medecin(id):
+    """Modifier un medecin"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        
+        # Verifier que le medecin existe
+        medecin = db.execute_query("""
+            SELECT id FROM medecins WHERE id = %s AND structure_id = %s
+        """, (id, structure_id))
+        
+        if not medecin or len(medecin) == 0:
+            return jsonify({'success': False, 'error': 'Medecin non trouve'}), 404
+        
+        # Mettre a jour
+        db.execute_query("""
+            UPDATE medecins SET
+                nom = %s,
+                prenom = %s,
+                titre = %s,
+                specialite = %s,
+                qualification = %s,
+                telephone = %s,
+                email = %s,
+                honoraire_consultation = %s,
+                actif = %s
+            WHERE id = %s AND structure_id = %s
+        """, (
+            data.get('nom'),
+            data.get('prenom', ''),
+            data.get('titre', 'Dr'),
+            data.get('specialite'),
+            data.get('qualification', ''),
+            data.get('telephone', ''),
+            data.get('email', ''),
+            data.get('honoraire_consultation', 0),
+            data.get('actif', True),
+            id,
+            structure_id
+        ))
+        
+        return jsonify({'success': True, 'message': 'Medecin modifie avec succes'})
+        
+    except Exception as e:
+        print(f"Erreur modification medecin: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/medecins/<int:id>/toggle', methods=['POST'])
+@login_required
+def api_toggle_medecin(id):
+    """Activer/Desactiver un medecin"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        # Recuperer le statut actuel
+        medecin = db.execute_query("""
+            SELECT actif FROM medecins WHERE id = %s AND structure_id = %s
+        """, (id, structure_id))
+        
+        if not medecin or len(medecin) == 0:
+            return jsonify({'success': False, 'error': 'Medecin non trouve'}), 404
+        
+        actif = medecin[0][0] if medecin[0] else True
+        nouveau_statut = not actif
+        
+        db.execute_query("""
+            UPDATE medecins SET actif = %s WHERE id = %s AND structure_id = %s
+        """, (nouveau_statut, id, structure_id))
+        
+        return jsonify({
+            'success': True, 
+            'actif': nouveau_statut,
+            'message': f'Medecin {"active" if nouveau_statut else "desactive"} avec succes'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/medecins/<int:id>/historique', methods=['GET'])
+@login_required
+def api_historique_medecin(id):
+    """Recupere l'historique complet d'un medecin - Version robuste"""
+    structure_id = session.get('structure_id')
+    
+    try:
+        # 1. Recuperer les informations du medecin
+        medecin = db.execute_query("""
+            SELECT id, nom, prenom, titre, specialite, telephone, email
+            FROM medecins 
+            WHERE id = %s AND structure_id = %s
+        """, (id, structure_id))
+        
+        if not medecin or len(medecin) == 0:
+            return jsonify({'error': 'Medecin non trouve'}), 404
+        
+        # Extraire les infos du medecin
+        if isinstance(medecin[0], dict):
+            m = medecin[0]
+            info = {
+                'id': m.get('id'),
+                'nom': m.get('nom'),
+                'prenom': m.get('prenom'),
+                'titre': m.get('titre', 'Dr'),
+                'specialite': m.get('specialite'),
+                'telephone': m.get('telephone'),
+                'email': m.get('email')
+            }
+        else:
+            m = medecin[0]
+            info = {
+                'id': m[0],
+                'nom': m[1],
+                'prenom': m[2],
+                'titre': m[3] if len(m) > 3 else 'Dr',
+                'specialite': m[4] if len(m) > 4 else '',
+                'telephone': m[5] if len(m) > 5 else '',
+                'email': m[6] if len(m) > 6 else ''
+            }
+        
+        # 2. Recuperer les statistiques avec TO_CHAR
+        stats = db.execute_query("""
+            SELECT 
+                COUNT(*) as total,
+                COUNT(CASE WHEN statut = 'termine' THEN 1 END) as termines,
+                COUNT(CASE WHEN statut = 'annule' THEN 1 END) as annules,
+                COUNT(CASE WHEN statut = 'confirme' THEN 1 END) as confirmes,
+                COUNT(CASE WHEN statut = 'programme' THEN 1 END) as programmes,
+                COUNT(CASE WHEN statut = 'reporte' THEN 1 END) as reportes
+            FROM rendez_vous
+            WHERE medecin_id = %s AND structure_id = %s
+        """, (id, structure_id))
+        
+        # Extraire les stats
+        if stats and len(stats) > 0:
+            if isinstance(stats[0], dict):
+                s = stats[0]
+                stats_data = {
+                    'total': int(s.get('total', 0) or 0),
+                    'termines': int(s.get('termines', 0) or 0),
+                    'annules': int(s.get('annules', 0) or 0),
+                    'confirmes': int(s.get('confirmes', 0) or 0),
+                    'programmes': int(s.get('programmes', 0) or 0),
+                    'reportes': int(s.get('reportes', 0) or 0)
+                }
+            else:
+                s = stats[0]
+                stats_data = {
+                    'total': int(s[0]) if len(s) > 0 and s[0] else 0,
+                    'termines': int(s[1]) if len(s) > 1 and s[1] else 0,
+                    'annules': int(s[2]) if len(s) > 2 and s[2] else 0,
+                    'confirmes': int(s[3]) if len(s) > 3 and s[3] else 0,
+                    'programmes': int(s[4]) if len(s) > 4 and s[4] else 0,
+                    'reportes': int(s[5]) if len(s) > 5 and s[5] else 0
+                }
+        else:
+            stats_data = {'total': 0, 'termines': 0, 'annules': 0, 'confirmes': 0, 'programmes': 0, 'reportes': 0}
+        
+        # 3. Recuperer l'historique - TOUT EN STRING avec TO_CHAR
+        historique = db.execute_query("""
+            SELECT 
+                r.id,
+                TO_CHAR(r.date_rdv, 'YYYY-MM-DD') as date_rdv,
+                TO_CHAR(r.heure_rdv, 'HH24:MI') as heure_rdv,
+                COALESCE(r.motif, '') as motif,
+                COALESCE(r.statut, 'programme') as statut,
+                COALESCE(r.duree, 30) as duree,
+                COALESCE(r.patient_nom, '') as patient_nom,
+                COALESCE(r.patient_telephone, '') as patient_telephone,
+                TO_CHAR(r.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at
+            FROM rendez_vous r
+            WHERE r.medecin_id = %s AND r.structure_id = %s
+            ORDER BY r.date_rdv DESC, r.heure_rdv DESC
+            LIMIT 50
+        """, (id, structure_id))
+        
+        # Construire la liste - tout est deja en string
+        historique_list = []
+        for r in historique:
+            if isinstance(r, dict):
+                historique_list.append({
+                    'id': r.get('id'),
+                    'date_rdv': r.get('date_rdv'),
+                    'heure_rdv': r.get('heure_rdv'),
+                    'motif': r.get('motif', ''),
+                    'statut': r.get('statut', 'programme'),
+                    'duree': int(r.get('duree', 30) or 30),
+                    'patient_nom': r.get('patient_nom', ''),
+                    'patient_telephone': r.get('patient_telephone', ''),
+                    'created_at': r.get('created_at')
+                })
+            else:
+                historique_list.append({
+                    'id': r[0] if len(r) > 0 else None,
+                    'date_rdv': r[1] if len(r) > 1 else None,
+                    'heure_rdv': r[2] if len(r) > 2 else None,
+                    'motif': r[3] if len(r) > 3 else '',
+                    'statut': r[4] if len(r) > 4 else 'programme',
+                    'duree': int(r[5]) if len(r) > 5 and r[5] else 30,
+                    'patient_nom': r[6] if len(r) > 6 else '',
+                    'patient_telephone': r[7] if len(r) > 7 else '',
+                    'created_at': r[8] if len(r) > 8 else None
+                })
+        
+        # 4. Statistiques par mois
+        stats_mois = db.execute_query("""
+            SELECT 
+                EXTRACT(YEAR FROM date_rdv) as annee,
+                EXTRACT(MONTH FROM date_rdv) as mois,
+                COUNT(*) as total
+            FROM rendez_vous
+            WHERE medecin_id = %s AND structure_id = %s AND statut = 'termine'
+            GROUP BY annee, mois
+            ORDER BY annee DESC, mois DESC
+            LIMIT 12
+        """, (id, structure_id))
+        
+        stats_mois_list = []
+        for s in stats_mois:
+            if isinstance(s, dict):
+                stats_mois_list.append({
+                    'annee': int(s.get('annee', 0) or 0),
+                    'mois': int(s.get('mois', 0) or 0),
+                    'total': int(s.get('total', 0) or 0)
+                })
+            else:
+                stats_mois_list.append({
+                    'annee': int(s[0]) if len(s) > 0 and s[0] else 0,
+                    'mois': int(s[1]) if len(s) > 1 and s[1] else 0,
+                    'total': int(s[2]) if len(s) > 2 and s[2] else 0
+                })
+        
+        # Construire la reponse
+        response_data = {
+            'info': info,
+            'stats': stats_data,
+            'historique': historique_list,
+            'stats_mois': stats_mois_list
+        }
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        print(f"Erreur dans api_historique_medecin: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/medecins', methods=['GET'])
+@login_required
+def get_medecins():
+    """Recupere la liste des medecins avec leurs statistiques"""
+    structure_id = session.get('structure_id')
+    
+    # Recuperer les medecins depuis Neon
+    medecins = db.execute_query("""
+        SELECT id, nom, prenom, titre, specialite, qualification, 
+               telephone, email, honoraire_consultation, actif
+        FROM medecins 
+        WHERE structure_id = %s 
+        ORDER BY nom
+    """, (structure_id,))
+    
+    result = []
+    for m in medecins:
+        if isinstance(m, dict):
+            med_id = m.get('id')
+            nom = m.get('nom')
+            prenom = m.get('prenom')
+            titre = m.get('titre', 'Dr')
+            specialite = m.get('specialite')
+            qualification = m.get('qualification')
+            telephone = m.get('telephone')
+            email = m.get('email')
+            honoraire = m.get('honoraire_consultation', 0)
+            actif = m.get('actif', True)
+        else:
+            med_id = m[0]
+            nom = m[1]
+            prenom = m[2]
+            titre = m[3] if len(m) > 3 else 'Dr'
+            specialite = m[4] if len(m) > 4 else ''
+            qualification = m[5] if len(m) > 5 else ''
+            telephone = m[6] if len(m) > 6 else ''
+            email = m[7] if len(m) > 7 else ''
+            honoraire = m[8] if len(m) > 8 else 0
+            actif = m[9] if len(m) > 9 else True
+        
+        # Compter les consultations terminees
+        nb_total = db.execute_query("""
+            SELECT COUNT(*) FROM rendez_vous 
+            WHERE medecin_id = %s AND statut = 'termine'
+        """, (med_id,))
+        nb_total = nb_total[0][0] if nb_total else 0
+        
+        # Ce mois
+        now = datetime.now()
+        nb_mois = db.execute_query("""
+            SELECT COUNT(*) FROM rendez_vous 
+            WHERE medecin_id = %s AND statut = 'termine' 
+            AND EXTRACT(YEAR FROM date_rdv) = %s 
+            AND EXTRACT(MONTH FROM date_rdv) = %s
+        """, (med_id, now.year, now.month))
+        nb_mois = nb_mois[0][0] if nb_mois else 0
+        
+        # Cette semaine
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
+        nb_semaine = db.execute_query("""
+            SELECT COUNT(*) FROM rendez_vous 
+            WHERE medecin_id = %s AND statut = 'termine' 
+            AND date_rdv >= %s AND date_rdv <= %s
+        """, (med_id, week_start, week_end))
+        nb_semaine = nb_semaine[0][0] if nb_semaine else 0
+        
+        # Derniere consultation
+        dernier = db.execute_query("""
+            SELECT date_rdv FROM rendez_vous 
+            WHERE medecin_id = %s AND statut = 'termine' 
+            ORDER BY date_rdv DESC, heure_rdv DESC LIMIT 1
+        """, (med_id,))
+        derniere_date = dernier[0][0].isoformat() if dernier and len(dernier) > 0 else None
+        
+        result.append({
+            'id': med_id,
+            'nom': nom,
+            'prenom': prenom,
+            'titre': titre,
+            'specialite': specialite,
+            'qualification': qualification or specialite,
+            'telephone': telephone,
+            'email': email,
+            'honoraire_consultation': float(honoraire) if honoraire else 0,
+            'actif': actif,
+            'nb_consultations': nb_total,
+            'consultations_mois': nb_mois,
+            'consultations_semaine': nb_semaine,
+            'derniere_consultation': derniere_date
+        })
+    
+    return jsonify(result)
+
+
+@app.route('/api/medecins/<int:id>', methods=['GET'])
+@login_required
+def get_medecin_details(id):
+    """Recupere les details d'un medecin"""
+    structure_id = session.get('structure_id')
+    
+    # Une seule requete avec toutes les statistiques
+    result = db.execute_query("""
+        SELECT 
+            m.id,
+            m.nom,
+            m.prenom,
+            m.titre,
+            m.specialite,
+            m.qualification,
+            m.telephone,
+            m.email,
+            m.honoraire_consultation,
+            m.actif,
+            COUNT(CASE WHEN r.statut = 'termine' THEN 1 END) as total_consultations,
+            COUNT(CASE WHEN r.statut = 'termine' 
+                AND EXTRACT(YEAR FROM r.date_rdv) = EXTRACT(YEAR FROM CURRENT_DATE)
+                AND EXTRACT(MONTH FROM r.date_rdv) = EXTRACT(MONTH FROM CURRENT_DATE) 
+                THEN 1 END) as consultations_mois,
+            COUNT(CASE WHEN r.statut = 'termine' 
+                AND r.date_rdv >= date_trunc('week', CURRENT_DATE)
+                AND r.date_rdv <= date_trunc('week', CURRENT_DATE) + interval '6 days'
+                THEN 1 END) as consultations_semaine,
+            MAX(CASE WHEN r.statut = 'termine' THEN r.date_rdv END) as derniere_consultation
+        FROM medecins m
+        LEFT JOIN rendez_vous r ON m.id = r.medecin_id
+        WHERE m.id = %s AND m.structure_id = %s
+        GROUP BY m.id, m.nom, m.prenom, m.titre, m.specialite, m.qualification,
+                 m.telephone, m.email, m.honoraire_consultation, m.actif
+    """, (id, structure_id))
+    
+    if not result or len(result) == 0:
+        return jsonify({'error': 'Medecin non trouve'}), 404
+    
+    if isinstance(result[0], dict):
+        r = result[0]
+        return jsonify({
+            'id': r.get('id'),
+            'nom': r.get('nom'),
+            'prenom': r.get('prenom'),
+            'titre': r.get('titre', 'Dr'),
+            'specialite': r.get('specialite'),
+            'qualification': r.get('qualification') or r.get('specialite'),
+            'telephone': r.get('telephone'),
+            'email': r.get('email'),
+            'honoraire_consultation': float(r.get('honoraire_consultation', 0)),
+            'actif': r.get('actif', True),
+            'total_consultations': int(r.get('total_consultations', 0)),
+            'consultations_mois': int(r.get('consultations_mois', 0)),
+            'consultations_semaine': int(r.get('consultations_semaine', 0)),
+            'derniere_consultation': r.get('derniere_consultation').isoformat() 
+                if r.get('derniere_consultation') and hasattr(r.get('derniere_consultation'), 'isoformat') 
+                else None
+        })
+    else:
+        r = result[0]
+        return jsonify({
+            'id': r[0],
+            'nom': r[1],
+            'prenom': r[2],
+            'titre': r[3] if len(r) > 3 else 'Dr',
+            'specialite': r[4] if len(r) > 4 else '',
+            'qualification': r[5] if len(r) > 5 else (r[4] if len(r) > 4 else ''),
+            'telephone': r[6] if len(r) > 6 else '',
+            'email': r[7] if len(r) > 7 else '',
+            'honoraire_consultation': float(r[8] if len(r) > 8 else 0),
+            'actif': r[9] if len(r) > 9 else True,
+            'total_consultations': int(r[10]) if len(r) > 10 and r[10] else 0,
+            'consultations_mois': int(r[11]) if len(r) > 11 and r[11] else 0,
+            'consultations_semaine': int(r[12]) if len(r) > 12 and r[12] else 0,
+            'derniere_consultation': r[13].isoformat() if len(r) > 13 and r[13] and hasattr(r[13], 'isoformat') else None
+        })
+
+@app.route('/api/medecins/<int:id>/consultations', methods=['GET'])
+@login_required
+def get_medecin_consultations(id):
+    """Recupere l'historique des consultations d'un medecin"""
+    structure_id = session.get('structure_id')
+    
+    rendez_vous = db.execute_query("""
+        SELECT r.id, r.date_rdv, r.heure_rdv, r.patient_nom, 
+               r.patient_telephone, r.motif, r.statut, r.duree
+        FROM rendez_vous r
+        WHERE r.medecin_id = %s AND r.structure_id = %s
+        ORDER BY r.date_rdv DESC, r.heure_rdv DESC
+    """, (id, structure_id))
+    
+    result = []
+    for r in rendez_vous:
+        if isinstance(r, dict):
+            result.append({
+                'id': r.get('id'),
+                'date_rendez_vous': r.get('date_rdv').isoformat() if r.get('date_rdv') else None,
+                'heure_rendez_vous': r.get('heure_rdv'),
+                'patient_nom': r.get('patient_nom'),
+                'patient_telephone': r.get('patient_telephone'),
+                'motif': r.get('motif'),
+                'statut': r.get('statut'),
+                'duree': r.get('duree', 30)
+            })
+        else:
+            result.append({
+                'id': r[0],
+                'date_rendez_vous': r[1].isoformat() if r[1] else None,
+                'heure_rendez_vous': r[2],
+                'patient_nom': r[3],
+                'patient_telephone': r[4],
+                'motif': r[5],
+                'statut': r[6],
+                'duree': r[7] if len(r) > 7 else 30
+            })
+    
+    return jsonify(result)
+
+
+@app.route('/api/medecins/<int:id>/disponibilites', methods=['GET'])
+@login_required
+def get_medecin_disponibilites(id):
+    """Verifie la disponibilite d'un medecin"""
+    structure_id = session.get('structure_id')
+    date_str = request.args.get('date')
+    
+    if not date_str:
+        return jsonify({'error': 'Date requise'}), 400
+    
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Format de date invalide'}), 400
+    
+    # Verifier si le medecin est actif
+    medecin = db.execute_query("""
+        SELECT actif FROM medecins 
+        WHERE id = %s AND structure_id = %s
+    """, (id, structure_id))
+    
+    if not medecin or len(medecin) == 0:
+        return jsonify({'error': 'Medecin non trouve'}), 404
+    
+    actif = medecin[0][0] if medecin[0] else True
+    if not actif:
+        return jsonify({'disponible': False, 'motif': 'Medecin inactif'})
+    
+    # Verifier les rendez-vous existants pour cette date
+    rdvs = db.execute_query("""
+        SELECT COUNT(*) FROM rendez_vous 
+        WHERE medecin_id = %s AND date_rdv = %s 
+        AND statut IN ('programme', 'confirme')
+    """, (id, date_obj))
+    nb_rdvs = rdvs[0][0] if rdvs else 0
+    
+    # 16 creneaux max (8h-17h avec 30 min)
+    if nb_rdvs >= 16:
+        return jsonify({'disponible': False, 'motif': 'Complet pour ce jour'})
+    
+    # Generer les creneaux disponibles
+    creneaux = []
+    for h in range(8, 17):
+        for m in [0, 30]:
+            heure_str = f"{h:02d}:{m:02d}"
+            existe = db.execute_query("""
+                SELECT COUNT(*) FROM rendez_vous 
+                WHERE medecin_id = %s AND date_rdv = %s 
+                AND heure_rdv = %s AND statut IN ('programme', 'confirme')
+            """, (id, date_obj, heure_str))
+            existe = existe[0][0] if existe else 0
+            
+            if existe == 0:
+                creneaux.append({'heure': heure_str})
+    
+    return jsonify({
+        'disponible': len(creneaux) > 0,
+        'creneaux': creneaux[:10]
+    })
+@app.route('/api/motifs', methods=['GET'])
+@login_required
+def get_motifs():
+    """Recupere la liste des motifs de rendez-vous"""
+    structure_id = session.get('structure_id')
+    
+    motifs = db.execute_query("""
+        SELECT id, nom, description, ordre
+        FROM motifs_rendez_vous
+        WHERE structure_id = %s AND actif = TRUE
+        ORDER BY ordre, nom
+    """, (structure_id,))
+    
+    motifs_list = []
+    for m in motifs:
+        if isinstance(m, dict):
+            motifs_list.append({
+                'id': m.get('id'),
+                'nom': m.get('nom'),
+                'description': m.get('description')
+            })
+        else:
+            motifs_list.append({
+                'id': m[0],
+                'nom': m[1],
+                'description': m[2] if len(m) > 2 else ''
+            })
+    
+    # Ajouter l'option "Autre"
+    motifs_list.append({
+        'id': -1,
+        'nom': 'Autre',
+        'description': 'Saisir un motif personnalise'
+    })
+    
+    return jsonify(motifs_list)
+# ============================================================
+# ROUTE RENDEZ_VOUS AVEC FILTRES PAR INTERVALLE
+# ============================================================
+
 @app.route('/rendez_vous')
 @login_required
 def rendez_vous():
-    """Page de gestion des rendez-vous avec données depuis Neon"""
+    """Page de gestion des rendez-vous avec filtres par intervalle"""
     structure_id = session.get('structure_id')
     
-    # 🔥 Récupérer les patients depuis NEON
+    # Recuperer les parametres de filtrage
+    filtre_date = request.args.get('filtre_date', 'aujourdhui')  # aujourdhui, semaine, mois, personnalise
+    date_debut = request.args.get('date_debut')
+    date_fin = request.args.get('date_fin')
+    
+    today = datetime.now().date()
+    
+    # Definir l'intervalle selon le filtre
+    if filtre_date == 'aujourdhui':
+        date_debut = today
+        date_fin = today
+        libelle_filtre = "Aujourd'hui"
+    elif filtre_date == 'semaine':
+        # Du lundi au dimanche
+        date_debut = today - timedelta(days=today.weekday())
+        date_fin = date_debut + timedelta(days=6)
+        libelle_filtre = "Cette semaine"
+    elif filtre_date == 'mois':
+        # Du 1er au dernier jour du mois
+        date_debut = date(today.year, today.month, 1)
+        if today.month == 12:
+            date_fin = date(today.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            date_fin = date(today.year, today.month + 1, 1) - timedelta(days=1)
+        libelle_filtre = "Ce mois"
+    else:  # personnalise
+        if date_debut:
+            date_debut = datetime.strptime(date_debut, '%Y-%m-%d').date()
+        else:
+            date_debut = today
+        if date_fin:
+            date_fin = datetime.strptime(date_fin, '%Y-%m-%d').date()
+        else:
+            date_fin = today
+        libelle_filtre = "Personnalise"
+    
+    # Recuperer les patients
     patients = db.execute_query("""
         SELECT id, nom, prenom, telephone 
         FROM patients 
@@ -2781,17 +3528,48 @@ def rendez_vous():
         if isinstance(p, dict):
             patients_list.append({
                 'ID': p.get('id'),
-                'nom': f"{p.get('nom', '')} {p.get('prenom', '')}".strip(),
+                'nom': p.get('nom'),
+                'prenom': p.get('prenom'),
                 'telephone': p.get('telephone', '')
             })
         else:
             patients_list.append({
                 'ID': p[0],
-                'nom': f"{p[1]} {p[2]}".strip(),
+                'nom': p[1],
+                'prenom': p[2],
                 'telephone': p[3] if len(p) > 3 else ''
             })
     
-    # 🔥 Récupérer les rendez-vous depuis NEON
+    # Recuperer les medecins
+    medecins = db.execute_query("""
+        SELECT id, nom, prenom, titre, specialite, actif
+        FROM medecins 
+        WHERE structure_id = %s 
+        ORDER BY nom
+    """, (structure_id,))
+    
+    medecins_list = []
+    for m in medecins:
+        if isinstance(m, dict):
+            medecins_list.append({
+                'id': m.get('id'),
+                'nom': m.get('nom'),
+                'prenom': m.get('prenom'),
+                'titre': m.get('titre', 'Dr'),
+                'specialite': m.get('specialite'),
+                'actif': m.get('actif', True)
+            })
+        else:
+            medecins_list.append({
+                'id': m[0],
+                'nom': m[1],
+                'prenom': m[2],
+                'titre': m[3] if len(m) > 3 else 'Dr',
+                'specialite': m[4] if len(m) > 4 else '',
+                'actif': m[5] if len(m) > 5 else True
+            })
+    
+    # Recuperer les rendez-vous avec filtre par intervalle
     rendez_vous = db.execute_query("""
         SELECT 
             r.id, 
@@ -2800,248 +3578,375 @@ def rendez_vous():
             r.heure_rdv, 
             r.motif, 
             r.statut,
+            r.medecin_id,
             p.nom,
             p.prenom,
-            p.telephone
+            p.telephone,
+            m.nom as medecin_nom,
+            m.prenom as medecin_prenom,
+            m.titre as medecin_titre
         FROM rendez_vous r
         LEFT JOIN patients p ON r.patient_id = p.id
+        LEFT JOIN medecins m ON r.medecin_id = m.id
         WHERE r.structure_id = %s
-        ORDER BY r.date_rdv DESC, r.heure_rdv DESC
-    """, (structure_id,))
+        AND r.date_rdv >= %s
+        AND r.date_rdv <= %s
+        ORDER BY r.date_rdv ASC, r.heure_rdv ASC
+    """, (structure_id, date_debut, date_fin))
     
     rdv_list = []
     for r in rendez_vous:
         if isinstance(r, dict):
+            medecin_nom = ""
+            if r.get('medecin_titre'):
+                medecin_nom = f"{r.get('medecin_titre')} {r.get('medecin_nom', '')}".strip()
+            elif r.get('medecin_nom'):
+                medecin_nom = r.get('medecin_nom')
+            
             rdv_list.append({
                 'ID': r.get('id'),
                 'patient_id': r.get('patient_id'),
                 'patient_nom': f"{r.get('nom', '')} {r.get('prenom', '')}".strip(),
                 'patient_telephone': r.get('telephone', ''),
+                'medecin_id': r.get('medecin_id'),
+                'medecin_nom': medecin_nom,
                 'date_rendez_vous': r.get('date_rdv'),
                 'heure_rendez_vous': r.get('heure_rdv'),
                 'motif': r.get('motif', ''),
                 'statut': r.get('statut', 'programme')
             })
         else:
+            medecin_nom = ""
+            if len(r) > 13 and r[12]:
+                medecin_nom = f"{r[12]} {r[11] or ''}".strip() if r[12] else r[12]
+            elif len(r) > 11 and r[10]:
+                medecin_nom = r[10]
+            
             rdv_list.append({
                 'ID': r[0],
                 'patient_id': r[1],
-                'patient_nom': f"{r[6]} {r[7]}".strip() if len(r) > 7 else 'Patient',
-                'patient_telephone': r[8] if len(r) > 8 else '',
+                'patient_nom': f"{r[7]} {r[8]}".strip() if len(r) > 8 else 'Patient',
+                'patient_telephone': r[9] if len(r) > 9 else '',
+                'medecin_id': r[6] if len(r) > 6 else None,
+                'medecin_nom': medecin_nom,
                 'date_rendez_vous': r[2],
                 'heure_rendez_vous': r[3],
                 'motif': r[4] if len(r) > 4 else '',
                 'statut': r[5] if len(r) > 5 else 'programme'
             })
     
-    # 🔥 Récupérer les infos de la structure pour le template
-    structures = sheets_helper.get_all_records('structures', use_prefix=False)
-    structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
+    # Statistiques par statut pour l'intervalle
+    stats = {
+        'total': len(rdv_list),
+        'programme': len([r for r in rdv_list if r['statut'] == 'programme']),
+        'confirme': len([r for r in rdv_list if r['statut'] == 'confirme']),
+        'termine': len([r for r in rdv_list if r['statut'] == 'termine']),
+        'annule': len([r for r in rdv_list if r['statut'] == 'annule']),
+        'reporte': len([r for r in rdv_list if r['statut'] == 'reporte'])
+    }
+    
+    # Recuperer les specialites distinctes
+    specialites = db.execute_query("""
+        SELECT DISTINCT specialite FROM medecins 
+        WHERE structure_id = %s AND specialite IS NOT NULL AND specialite != ''
+        ORDER BY specialite
+    """, (structure_id,))
+    
+    specialites_list = []
+    if specialites:
+        for s in specialites:
+            if isinstance(s, dict):
+                spec = s.get('specialite')
+                if spec:
+                    specialites_list.append(spec)
+            else:
+                specialites_list.append(s[0])
     
     return render_template('rendez_vous.html', 
-                         patients=patients_list, 
+                         patients=patients_list,
+                         medecins=medecins_list,
+                         specialites=specialites_list,
                          rendez_vous=rdv_list,
-                         structure_logo=structure_info.get('logo_url', ''),
-                         structure_email=structure_info.get('email', ''),
-                         structure_telephone=structure_info.get('telephone', ''),
-                         structure_nom=structure_info.get('nom', 'Medilogic-GHP'))
+                         stats=stats,
+                         filtre_date=filtre_date,
+                         date_debut=date_debut.isoformat() if date_debut else None,
+                         date_fin=date_fin.isoformat() if date_fin else None,
+                         libelle_filtre=libelle_filtre,
+                         today=datetime.now().strftime('%Y-%m-%d'))
+
+# ============================================================
+# ROUTE POUR IMPRIMER LE CALENDRIER
+# ============================================================
+
+@app.route('/rendez_vous/print')
+@login_required
+def print_rendez_vous():
+    """Imprime le calendrier des rendez-vous selon le filtre actuel"""
+    structure_id = session.get('structure_id')
+    
+    # Recuperer les parametres de filtrage
+    filtre_date = request.args.get('filtre_date', 'aujourdhui')
+    date_debut_str = request.args.get('date_debut')
+    date_fin_str = request.args.get('date_fin')
+    vue = request.args.get('vue', 'semaine')  # jour, semaine, mois
+    
+    today = datetime.now().date()
+    
+    # Definir l'intervalle selon le filtre
+    if filtre_date == 'aujourdhui':
+        date_debut = today
+        date_fin = today
+        libelle_filtre = "Aujourd'hui"
+    elif filtre_date == 'semaine':
+        date_debut = today - timedelta(days=today.weekday())
+        date_fin = date_debut + timedelta(days=6)
+        libelle_filtre = "Cette semaine"
+    elif filtre_date == 'mois':
+        date_debut = date(today.year, today.month, 1)
+        if today.month == 12:
+            date_fin = date(today.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            date_fin = date(today.year, today.month + 1, 1) - timedelta(days=1)
+        libelle_filtre = "Ce mois"
+    else:  # personnalise
+        if date_debut_str:
+            date_debut = datetime.strptime(date_debut_str, '%Y-%m-%d').date()
+        else:
+            date_debut = today
+        if date_fin_str:
+            date_fin = datetime.strptime(date_fin_str, '%Y-%m-%d').date()
+        else:
+            date_fin = today
+        libelle_filtre = f"Du {date_debut.strftime('%d/%m/%Y')} au {date_fin.strftime('%d/%m/%Y')}"
+    
+    # Recuperer les rendez-vous pour l'intervalle
+    rendez_vous = db.execute_query("""
+        SELECT 
+            r.id, 
+            r.patient_id, 
+            r.date_rdv, 
+            r.heure_rdv, 
+            r.motif, 
+            r.statut,
+            r.medecin_id,
+            p.nom,
+            p.prenom,
+            p.telephone,
+            m.nom as medecin_nom,
+            m.prenom as medecin_prenom,
+            m.titre as medecin_titre,
+            m.specialite
+        FROM rendez_vous r
+        LEFT JOIN patients p ON r.patient_id = p.id
+        LEFT JOIN medecins m ON r.medecin_id = m.id
+        WHERE r.structure_id = %s
+        AND r.date_rdv >= %s
+        AND r.date_rdv <= %s
+        AND r.statut NOT IN ('annule')
+        ORDER BY r.date_rdv ASC, r.heure_rdv ASC
+    """, (structure_id, date_debut, date_fin))
+    
+    # Organiser les rendez-vous par jour
+    rdv_par_jour = {}
+    for r in rendez_vous:
+        if isinstance(r, dict):
+            date_rdv = r.get('date_rdv')
+            if date_rdv:
+                date_str = date_rdv.isoformat()
+                if date_str not in rdv_par_jour:
+                    rdv_par_jour[date_str] = []
+                
+                medecin_nom = ""
+                if r.get('medecin_titre'):
+                    medecin_nom = f"{r.get('medecin_titre')} {r.get('medecin_nom', '')}".strip()
+                elif r.get('medecin_nom'):
+                    medecin_nom = r.get('medecin_nom')
+                
+                rdv_par_jour[date_str].append({
+                    'id': r.get('id'),
+                    'heure': r.get('heure_rdv'),
+                    'patient_nom': f"{r.get('nom', '')} {r.get('prenom', '')}".strip(),
+                    'patient_telephone': r.get('telephone', ''),
+                    'medecin_nom': medecin_nom,
+                    'motif': r.get('motif', ''),
+                    'statut': r.get('statut', 'programme')
+                })
+        else:
+            date_rdv = r[2]
+            if date_rdv:
+                date_str = date_rdv.isoformat()
+                if date_str not in rdv_par_jour:
+                    rdv_par_jour[date_str] = []
+                
+                medecin_nom = ""
+                if len(r) > 13 and r[12]:
+                    medecin_nom = f"{r[12]} {r[11] or ''}".strip() if r[12] else r[12]
+                elif len(r) > 11 and r[10]:
+                    medecin_nom = r[10]
+                
+                rdv_par_jour[date_str].append({
+                    'id': r[0],
+                    'heure': r[3],
+                    'patient_nom': f"{r[7]} {r[8]}".strip() if len(r) > 8 else 'Patient',
+                    'patient_telephone': r[9] if len(r) > 9 else '',
+                    'medecin_nom': medecin_nom,
+                    'motif': r[4] if len(r) > 4 else '',
+                    'statut': r[5] if len(r) > 5 else 'programme'
+                })
+    
+    # Generer la liste des jours
+    jours_liste = []
+    current = date_debut
+    while current <= date_fin:
+        jours_liste.append(current)
+        current += timedelta(days=1)
+    
+    # Recuperer les infos de la structure
+    structure = db.execute_query("""
+        SELECT nom, adresse, telephone, email, logo_url 
+        FROM structures WHERE id = %s
+    """, (structure_id,))
+    
+    structure_info = {}
+    if structure and len(structure) > 0:
+        s = structure[0]
+        if isinstance(s, dict):
+            structure_info = s
+        else:
+            structure_info = {
+                'nom': s[0] if len(s) > 0 else 'Mon Etablissement',
+                'adresse': s[1] if len(s) > 1 else '',
+                'telephone': s[2] if len(s) > 2 else '',
+                'email': s[3] if len(s) > 3 else '',
+                'logo_url': s[4] if len(s) > 4 else ''
+            }
+    
+    # Statistiques
+    stats = {
+        'total': sum(len(v) for v in rdv_par_jour.values()),
+        'jours_avec_rdv': len([j for j in rdv_par_jour.values() if j]),
+        'jours_total': len(jours_liste)
+    }
+
+    today = datetime.now().date()  # Deja present normalement
+    now = datetime.now()       
+    
+    return render_template('print_calendrier.html',
+                         rdv_par_jour=rdv_par_jour,
+                         jours_liste=jours_liste,
+                         date_debut=date_debut,
+                         date_fin=date_fin,
+                         libelle_filtre=libelle_filtre,
+                         structure_info=structure_info,
+                         stats=stats,
+                         vue=vue,
+                         today=today,
+                         now=now)
+
 
 @app.route('/api/rendez_vous', methods=['POST'])
 @login_required
 def api_add_rendez_vous():
-    """Ajouter un rendez-vous dans Neon"""
+    """Ajouter un rendez-vous avec medecin"""
     try:
         data = request.json
         structure_id = session.get('structure_id')
         
-        print("=" * 60)
-        print("📅 AJOUT RENDEZ-VOUS DANS NEON")
-        print(f"Patient ID: {data.get('patient_id')}")
-        print(f"Date: {data.get('date')}")
-        print(f"Heure: {data.get('heure')}")
-        print("=" * 60)
-        
         if not structure_id:
-            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
+            return jsonify({'success': False, 'error': 'Structure non trouvee'}), 400
         
-        # 🔥 Insérer dans Neon
+        # Verifier que le medecin existe
+        if data.get('medecin_id'):
+            medecin = db.execute_query("""
+                SELECT id FROM medecins 
+                WHERE id = %s AND structure_id = %s
+            """, (data.get('medecin_id'), structure_id))
+            if not medecin or len(medecin) == 0:
+                return jsonify({'success': False, 'error': 'Medecin non trouve'}), 404
+        
+        # Verifier les doublons
+        existant = db.execute_query("""
+            SELECT id FROM rendez_vous 
+            WHERE medecin_id = %s 
+            AND date_rdv = %s 
+            AND heure_rdv = %s 
+            AND statut IN ('programme', 'confirme')
+        """, (data.get('medecin_id'), data.get('date'), data.get('heure')))
+        
+        if existant and len(existant) > 0:
+            return jsonify({'success': False, 'error': 'Creneau deja occupe'}), 400
+        
+        # Insérer le rendez-vous
         result = db.execute_query("""
             INSERT INTO rendez_vous (
                 patient_id, 
                 structure_id, 
+                medecin_id,
                 date_rdv, 
                 heure_rdv, 
                 motif, 
-                statut
+                statut,
+                patient_nom,
+                patient_telephone,
+                duree
             )
-            VALUES (%s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             data.get('patient_id'),
             structure_id,
+            data.get('medecin_id'),
             data.get('date'),
             data.get('heure'),
             data.get('motif', 'Consultation'),
-            'programme'
+            'programme',
+            data.get('patient_nom'),
+            data.get('patient_telephone'),
+            data.get('duree', 30)
         ))
         
         if result and len(result) > 0:
             rdv_id = result[0]['id'] if isinstance(result[0], dict) else result[0][0]
-            print(f"✅ Rendez-vous ajouté avec ID: {rdv_id}")
             return jsonify({'success': True, 'id': rdv_id})
         else:
             return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
             
     except Exception as e:
-        print(f"❌ Erreur: {e}")
+        print(f"Erreur: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/rendez_vous/reporter', methods=['POST'])
+@app.route('/api/rendez_vous/<int:rdv_id>/terminer', methods=['POST'])
 @login_required
-def api_reporter_rendez_vous():
-    """Reporter un rendez-vous avec notification WhatsApp"""
+def api_terminer_rendez_vous(rdv_id):
+    """Marquer un rendez-vous comme termine"""
     try:
-        data = request.json
-        rdv_id = data.get('rdv_id')
-        nouvelle_date = data.get('nouvelle_date')
-        nouvelle_heure = data.get('nouvelle_heure')
-        nouveau_motif = data.get('motif', '')
-        envoyer_rappel = data.get('envoyer_rappel', True)
-        
         structure_id = session.get('structure_id')
         
-        # 🔥 Récupérer le rendez-vous depuis Neon
+        # Verifier que le rendez-vous existe
         rdv = db.execute_query("""
-            SELECT r.*, p.nom, p.prenom, p.telephone
-            FROM rendez_vous r
-            JOIN patients p ON r.patient_id = p.id
-            WHERE r.id = %s AND r.structure_id = %s
+            SELECT statut FROM rendez_vous 
+            WHERE id = %s AND structure_id = %s
         """, (rdv_id, structure_id))
         
         if not rdv or len(rdv) == 0:
-            return jsonify({'success': False, 'error': 'Rendez-vous non trouvé'}), 404
+            return jsonify({'success': False, 'error': 'Rendez-vous non trouve'}), 404
         
-        if isinstance(rdv[0], dict):
-            r = rdv[0]
-            patient_nom = f"{r.get('nom', '')} {r.get('prenom', '')}".strip()
-            patient_tel = r.get('telephone', '')
-            ancienne_date = r.get('date_rdv')
-            ancienne_heure = r.get('heure_rdv')
-        else:
-            r = rdv[0]
-            patient_nom = f"{r[8]} {r[9]}".strip() if len(r) > 9 else 'Patient'
-            patient_tel = r[10] if len(r) > 10 else ''
-            ancienne_date = r[3]
-            ancienne_heure = r[4]
+        statut = rdv[0][0] if rdv[0] else 'programme'
+        if statut in ['annule', 'termine']:
+            return jsonify({'success': False, 'error': f'Rendez-vous deja {statut}'}), 400
         
-        # Récupérer les infos de la structure
-        structures = sheets_helper.get_all_records('structures', use_prefix=False)
-        structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
-        structure_nom = structure_info.get('nom', 'Medilogic-GHP')
-        structure_tel = structure_info.get('telephone', '')
-        
-        # 🔥 Mettre à jour dans Neon
         db.execute_query("""
             UPDATE rendez_vous 
-            SET date_rdv = %s, 
-                heure_rdv = %s, 
-                motif = %s, 
-                statut = 'programme'
+            SET statut = 'termine'
             WHERE id = %s AND structure_id = %s
-        """, (nouvelle_date, nouvelle_heure, nouveau_motif or 'Consultation', rdv_id, structure_id))
-        
-        # Envoyer WhatsApp si demandé
-        whatsapp_url = None
-        if envoyer_rappel and patient_tel:
-            tel = str(patient_tel).replace(' ', '').replace('+', '')
-            if not tel.startswith('228') and not tel.startswith('229') and not tel.startswith('221'):
-                tel = '228' + tel
-            
-            message = f"🔄 *REPORT DE RENDEZ-VOUS* 🔄%0A%0A"
-            message += f"🏥 *{structure_nom}*%0A"
-            if structure_tel:
-                message += f"📞 {structure_tel}%0A%0A"
-            message += f"Bonjour *{patient_nom}*,%0A%0A"
-            message += f"Votre rendez-vous initialement prévu le *{ancienne_date}* à *{ancienne_heure}*%0A"
-            message += f"a été reporté au :%0A"
-            message += f"📅 *{nouvelle_date}*%0A"
-            message += f"⏰ *{nouvelle_heure}*%0A%0A"
-            if nouveau_motif:
-                message += f"📋 Nouveau motif : {nouveau_motif}%0A%0A"
-            message += f"📞 Pour toute question : {structure_tel}%0A%0A"
-            message += f"Merci de votre compréhension. 🙏"
-            
-            whatsapp_url = f"https://wa.me/{tel}?text={message}"
-        
-        return jsonify({'success': True, 'whatsapp_url': whatsapp_url})
-        
-    except Exception as e:
-        print(f"❌ Erreur report: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/rendez_vous/<int:rdv_id>/rappel', methods=['POST'])
-@login_required
-def api_envoyer_rappel(rdv_id):
-    """Envoyer un rappel WhatsApp"""
-    try:
-        structure_id = session.get('structure_id')
-        
-        # 🔥 Récupérer le rendez-vous depuis Neon
-        rdv = db.execute_query("""
-            SELECT r.*, p.nom, p.prenom, p.telephone
-            FROM rendez_vous r
-            JOIN patients p ON r.patient_id = p.id
-            WHERE r.id = %s AND r.structure_id = %s
         """, (rdv_id, structure_id))
         
-        if not rdv or len(rdv) == 0:
-            return jsonify({'success': False, 'error': 'Rendez-vous non trouvé'}), 404
-        
-        if isinstance(rdv[0], dict):
-            r = rdv[0]
-            patient_nom = f"{r.get('nom', '')} {r.get('prenom', '')}".strip()
-            patient_tel = r.get('telephone', '')
-            date_rdv = r.get('date_rdv')
-            heure_rdv = r.get('heure_rdv')
-            motif = r.get('motif', 'Consultation')
-        else:
-            r = rdv[0]
-            patient_nom = f"{r[8]} {r[9]}".strip() if len(r) > 9 else 'Patient'
-            patient_tel = r[10] if len(r) > 10 else ''
-            date_rdv = r[3]
-            heure_rdv = r[4]
-            motif = r[5] if len(r) > 5 else 'Consultation'
-        
-        # Récupérer les infos de la structure
-        structures = sheets_helper.get_all_records('structures', use_prefix=False)
-        structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
-        structure_nom = structure_info.get('nom', 'Medilogic-GHP')
-        
-        tel = str(patient_tel).replace(' ', '').replace('+', '')
-        if not tel.startswith('228') and not tel.startswith('229') and not tel.startswith('221'):
-            tel = '228' + tel
-        
-        message = f"🔔 *RAPPEL DE RENDEZ-VOUS* 🔔%0A%0A"
-        message += f"🏥 *{structure_nom}*%0A%0A"
-        message += f"Cher(e) *{patient_nom}*,%0A%0A"
-        message += f"Nous vous rappelons votre rendez-vous :%0A"
-        message += f"📅 Date : *{date_rdv}*%0A"
-        message += f"⏰ Heure : *{heure_rdv}*%0A"
-        message += f"📋 Motif : *{motif}*%0A%0A"
-        message += f"Merci de votre ponctualité ! 🙏"
-        
-        whatsapp_url = f"https://wa.me/{tel}?text={message}"
-        
-        return jsonify({'success': True, 'whatsapp_url': whatsapp_url})
+        return jsonify({'success': True, 'message': 'Rendez-vous termine'})
         
     except Exception as e:
-        print(f"❌ Erreur rappel: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -3052,14 +3957,25 @@ def api_confirmer_rendez_vous(rdv_id):
     try:
         structure_id = session.get('structure_id')
         
-        # 🔥 Mettre à jour dans Neon
+        rdv = db.execute_query("""
+            SELECT statut FROM rendez_vous 
+            WHERE id = %s AND structure_id = %s
+        """, (rdv_id, structure_id))
+        
+        if not rdv or len(rdv) == 0:
+            return jsonify({'success': False, 'error': 'Rendez-vous non trouve'}), 404
+        
+        statut = rdv[0][0] if rdv[0] else 'programme'
+        if statut != 'programme':
+            return jsonify({'success': False, 'error': 'Impossible de confirmer ce rendez-vous'}), 400
+        
         db.execute_query("""
             UPDATE rendez_vous 
             SET statut = 'confirme'
             WHERE id = %s AND structure_id = %s
         """, (rdv_id, structure_id))
         
-        return jsonify({'success': True, 'message': 'Rendez-vous confirmé'})
+        return jsonify({'success': True, 'message': 'Rendez-vous confirme'})
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -3072,37 +3988,127 @@ def api_annuler_rendez_vous(rdv_id):
     try:
         structure_id = session.get('structure_id')
         
-        # 🔥 Mettre à jour dans Neon
+        rdv = db.execute_query("""
+            SELECT statut FROM rendez_vous 
+            WHERE id = %s AND structure_id = %s
+        """, (rdv_id, structure_id))
+        
+        if not rdv or len(rdv) == 0:
+            return jsonify({'success': False, 'error': 'Rendez-vous non trouve'}), 404
+        
+        statut = rdv[0][0] if rdv[0] else 'programme'
+        if statut in ['annule', 'termine']:
+            return jsonify({'success': False, 'error': f'Rendez-vous deja {statut}'}), 400
+        
         db.execute_query("""
             UPDATE rendez_vous 
             SET statut = 'annule'
             WHERE id = %s AND structure_id = %s
         """, (rdv_id, structure_id))
         
-        return jsonify({'success': True, 'message': 'Rendez-vous annulé'})
+        return jsonify({'success': True, 'message': 'Rendez-vous annule'})
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/rendez_vous/<int:rdv_id>/terminer', methods=['POST'])
+@app.route('/api/rendez_vous/reporter', methods=['POST'])
 @login_required
-def api_terminer_rendez_vous(rdv_id):
-    """Marquer un rendez-vous comme terminé"""
+def api_reporter_rendez_vous():
+    """Reporter un rendez-vous"""
     try:
+        data = request.json
+        rdv_id = data.get('rdv_id')
+        nouvelle_date = data.get('nouvelle_date')
+        nouvelle_heure = data.get('nouvelle_heure')
+        message = data.get('message')
+        
         structure_id = session.get('structure_id')
         
-        # 🔥 Mettre à jour dans Neon
-        db.execute_query("""
-            UPDATE rendez_vous 
-            SET statut = 'termine'
-            WHERE id = %s AND structure_id = %s
+        # Recuperer le rendez-vous
+        rdv = db.execute_query("""
+            SELECT r.*, p.nom, p.prenom, p.telephone
+            FROM rendez_vous r
+            JOIN patients p ON r.patient_id = p.id
+            WHERE r.id = %s AND r.structure_id = %s
         """, (rdv_id, structure_id))
         
-        return jsonify({'success': True, 'message': 'Rendez-vous terminé'})
+        if not rdv or len(rdv) == 0:
+            return jsonify({'success': False, 'error': 'Rendez-vous non trouve'}), 404
+        
+        if isinstance(rdv[0], dict):
+            r = rdv[0]
+            patient_nom = f"{r.get('nom', '')} {r.get('prenom', '')}".strip()
+            patient_tel = r.get('telephone', '')
+            ancienne_date = r.get('date_rdv')
+            ancienne_heure = r.get('heure_rdv')
+            medecin_id = r.get('medecin_id')
+        else:
+            r = rdv[0]
+            patient_nom = f"{r[8]} {r[9]}".strip() if len(r) > 9 else 'Patient'
+            patient_tel = r[10] if len(r) > 10 else ''
+            ancienne_date = r[3]
+            ancienne_heure = r[4]
+            medecin_id = r[6] if len(r) > 6 else None
+        
+        # Verifier que le nouveau creneau est libre
+        existant = db.execute_query("""
+            SELECT id FROM rendez_vous 
+            WHERE medecin_id = %s 
+            AND date_rdv = %s 
+            AND heure_rdv = %s 
+            AND id != %s
+            AND statut IN ('programme', 'confirme')
+        """, (medecin_id, nouvelle_date, nouvelle_heure, rdv_id))
+        
+        if existant and len(existant) > 0:
+            return jsonify({'success': False, 'error': 'Creneau deja occupe'}), 400
+        
+        # Mettre a jour
+        db.execute_query("""
+            UPDATE rendez_vous 
+            SET date_rdv = %s, 
+                heure_rdv = %s, 
+                statut = 'reporte'
+            WHERE id = %s AND structure_id = %s
+        """, (nouvelle_date, nouvelle_heure, rdv_id, structure_id))
+        
+        # Envoyer WhatsApp si message fourni
+        whatsapp_url = None
+        if message and patient_tel:
+            tel = str(patient_tel).replace(' ', '').replace('+', '')
+            if not tel.startswith('228') and not tel.startswith('229') and not tel.startswith('221'):
+                tel = '228' + tel
+            whatsapp_url = f"https://wa.me/{tel}?text={message}"
+        
+        return jsonify({
+            'success': True,
+            'message': 'Rendez-vous reporte avec succes',
+            'whatsapp_url': whatsapp_url
+        })
         
     except Exception as e:
+        print(f"Erreur report: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/structure/nom', methods=['GET'])
+@login_required
+def get_structure_nom():
+    """Recupere le nom de la structure"""
+    structure_id = session.get('structure_id')
+    
+    structure = db.execute_query("""
+        SELECT nom FROM structures WHERE id = %s
+    """, (structure_id,))
+    
+    if structure and len(structure) > 0:
+        nom = structure[0][0] if structure[0] else 'Notre etablissement'
+        return jsonify({'nom': nom})
+    
+    return jsonify({'nom': 'Notre etablissement'})
 
 @app.route('/mes_rendez_vous')
 @login_required

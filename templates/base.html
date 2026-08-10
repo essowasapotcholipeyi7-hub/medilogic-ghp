@@ -144,18 +144,13 @@
             transform: rotate(-5deg) scale(1.05);
         }
         
-        .structure-brand .structure-name {
-            font-weight: 700;
-            font-size: 14px;
-            color: #dc3545;
-            letter-spacing: 0.3px;
-            white-space: nowrap;
-            background: linear-gradient(135deg, #dc3545, #a71d2a);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
+.structure-brand .structure-name {
+    font-weight: 700;
+    font-size: 14px;
+    color: #0056a7;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
         .structure-brand .structure-badge {
             font-size: 8px;
             font-weight: 700;
@@ -829,7 +824,7 @@ body {
 <nav class="navbar navbar-expand-lg">
     <div class="container">
         <a class="navbar-brand" href="{{ url_for('dashboard' if session.user_id else 'index') }}">
-            SSoftOne<span style="color: #667eea;">-V10</span>
+            <span style="color: #667eea;"></span>
         </a>
         
 <!-- NOM DE LA STRUCTURE AVEC LOGO -->
@@ -860,7 +855,6 @@ body {
             <!-- Horloge temps réel -->
             <div class="d-none d-md-block" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 8px 18px; border-radius: 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
                 <div id="horloge" class="d-flex align-items-center gap-2">
-                    <i class="fas fa-calendar-alt text-primary"></i>
                     <span id="dateActuelle" style="font-size: 13px; font-weight: 500; color: #4a5568;"></span>
                     <i class="fas fa-clock text-primary ms-1"></i>
                     <span id="heureActuelle" style="font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"></span>
