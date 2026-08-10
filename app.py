@@ -8433,23 +8433,59 @@ def api_convertir_proforma():
             """, (structure_id, montant_effectif, vente_id, f'Vente depuis proforma #{proforma_id} - {data.get("patient_nom", "Patient")} - Encaissé: {montant_effectif} FCFA', user_name))
             print(f"✅ Recette patient ajoutée: {montant_effectif} FCFA")
         
-        # 🔥 Si reste à payer > 0, créer une facture
+        # 🔥🔥🔥 CORRECTION : Si reste à payer > 0, créer une facture AVEC LES BONNES COLONNES 🔥🔥🔥
         if reste_a_payer > 0:
             date_echeance = datetime.now() + timedelta(days=7)
+            
+            # 🔥 Générer un numéro de facture
+            numero_facture = f"FAC-{datetime.now().strftime('%Y%m%d')}-{vente_id}"
+            
             db.execute_query("""
-                INSERT INTO factures (structure_id, vente_id, patient_id, patient_nom, montant_total, montant_paye, montant_restant, date_echeance, statut, type_facture, notes, created_by)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'en_attente', 'patient', %s, %s)
+                INSERT INTO factures (
+                    structure_id, 
+                    vente_id, 
+                    patient_id, 
+                    patient_nom, 
+                    patient_telephone,
+                    numero_facture,
+                    sous_total, 
+                    net_a_payer, 
+                    montant_paye, 
+                    reste_a_payer,
+                    taux_assurance,
+                    prise_en_charge,
+                    taux_assurance2,
+                    prise_en_charge2,
+                    base_remboursement,
+                    date_echeance, 
+                    statut, 
+                    mode_paiement,
+                    notes, 
+                    created_by,
+                    articles
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'en_attente', %s, %s, %s, %s::jsonb)
             """, (
                 structure_id,
                 vente_id,
                 data.get('patient_id'),
                 data.get('patient_nom', 'Patient'),
+                data.get('patient_telephone', ''),
+                numero_facture,
+                sous_total,
                 net_a_payer,
                 montant_effectif,
                 reste_a_payer,
+                taux_assurance,
+                prise_en_charge,
+                taux_assurance2,
+                prise_en_charge2,
+                base_remboursement,
                 date_echeance,
+                data.get('mode_paiement', 'especes'),
                 f'Facture depuis proforma #{proforma_id} - Reste à payer: {reste_a_payer} FCFA',
-                user_name
+                user_name,
+                json.dumps(articles_transformes, ensure_ascii=False)
             ))
             print(f"📋 Facture créée pour le reste à payer: {reste_a_payer} FCFA")
         
