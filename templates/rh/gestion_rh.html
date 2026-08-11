@@ -240,9 +240,9 @@
                                 <div class="col-md-3">
                                     <select class="form-select form-select-sm" id="filtreStatut" onchange="filtrerEmployes()">
                                         <option value="">Tous les statuts</option>
-                                        <option value="Actif">✅ Actif</option>
-                                        <option value="En conge">📅 En congé</option>
-                                        <option value="Inactif">⛔ Inactif</option>
+                                        <option value="Actif">Actif</option>
+                                        <option value="En conge">En congé</option>
+                                        <option value="Inactif">Inactif</option>
                                     </select>
                                 </div>
                                 <div class="col-md-2 text-end">
@@ -309,9 +309,9 @@
                                 <div class="col-md-3">
                                     <select class="form-select form-select-sm" id="filtreStatutConge" onchange="filtrerConges()">
                                         <option value="">Tous les statuts</option>
-                                        <option value="en_attente">⏳ En attente</option>
-                                        <option value="approuve">✅ Approuvé</option>
-                                        <option value="refuse">❌ Refusé</option>
+                                        <option value="en_attente">En attente</option>
+                                        <option value="approuve">Approuvé</option>
+                                        <option value="refuse">Refusé</option>
                                     </select>
                                 </div>
                                 <div class="col-md-3">
@@ -388,9 +388,9 @@
                                 <div class="col-md-3">
                                     <select class="form-select form-select-sm" id="filtreStatutPermission" onchange="filtrerPermissions()">
                                         <option value="">Tous les statuts</option>
-                                        <option value="en_attente">⏳ En attente</option>
-                                        <option value="approuve">✅ Approuvé</option>
-                                        <option value="refuse">❌ Refusé</option>
+                                        <option value="en_attente">En attente</option>
+                                        <option value="approuve">Approuvé</option>
+                                        <option value="refuse">Refusé</option>
                                     </select>
                                 </div>
                                 <div class="col-md-5 text-end">
@@ -440,19 +440,19 @@
                                 <div class="col-md-3 col-6">
                                     <div class="stat-card bg-success text-white">
                                         <div class="number" id="statActifs">0</div>
-                                        <div class="label">✅ Actifs</div>
+                                        <div class="label">Actifs</div>
                                     </div>
                                 </div>
                                 <div class="col-md-3 col-6">
                                     <div class="stat-card bg-warning text-dark">
                                         <div class="number" id="statEnConge">0</div>
-                                        <div class="label">📅 En congé</div>
+                                        <div class="label">En congé</div>
                                     </div>
                                 </div>
                                 <div class="col-md-3 col-6">
                                     <div class="stat-card bg-danger text-white">
                                         <div class="number" id="statDemandesAttente">0</div>
-                                        <div class="label">⏳ Demandes en attente</div>
+                                        <div class="label">Demandes en attente</div>
                                     </div>
                                 </div>
                             </div>
@@ -653,9 +653,9 @@
                                         <div class="col-md-12">
                                             <label class="form-label small">Statut</label>
                                             <select class="form-select form-select-sm" id="empStatut">
-                                                <option value="Actif">✅ Actif</option>
-                                                <option value="En conge">📅 En congé</option>
-                                                <option value="Inactif">⛔ Inactif</option>
+                                                <option value="Actif">Actif</option>
+                                                <option value="En conge">En congé</option>
+                                                <option value="Inactif">Inactif</option>
                                             </select>
                                         </div>
                                     </div>
@@ -865,11 +865,11 @@ let pageConges = 1;
 // ============================================
 function showLoader(message = 'Chargement...') {
     // Implémentez votre loader ici
-    console.log('🔄', message);
+    console.log('.', message);
 }
 
 function hideLoader() {
-    console.log('✅ Chargement terminé');
+    console.log('Chargement terminé');
 }
 
 function getDateFr(dateStr) {
@@ -890,10 +890,10 @@ function getStatutBadge(statut) {
         'termine': 'bg-secondary'
     };
     const labels = {
-        'en_attente': '⏳ En attente',
-        'approuve': '✅ Approuvé',
-        'refuse': '❌ Refusé',
-        'termine': '✔️ Terminé'
+        'en_attente': 'En attente',
+        'approuve': 'Approuvé',
+        'refuse': 'Refusé',
+        'termine': 'Terminé'
     };
     return `<span class="badge ${classes[statut] || 'bg-secondary'} badge-status">${labels[statut] || statut}</span>`;
 }
@@ -1082,13 +1082,13 @@ function afficherEmployes() {
     pageData.forEach(e => {
         const solde = e.solde_conges || 0;
         let soldeClass = 'text-success';
-        let soldeIcon = '✅';
+        let soldeIcon = '.';
         if (solde <= 0) {
             soldeClass = 'text-danger';
-            soldeIcon = '⚠️';
+            soldeIcon = '.';
         } else if (solde < 5) {
             soldeClass = 'text-warning';
-            soldeIcon = '⚡';
+            soldeIcon = '.';
         }
         
         tbody.innerHTML += `
@@ -1276,7 +1276,7 @@ function modifierEmploye(id) {
     if (!btn) return;
     
     boutonAvecLoader(btn, function(reactiver) {
-        console.log('🔵 Modification employé ID:', id);
+        console.log('Modification employé ID:', id);
         
         fetch(`/rh/api/employes/${id}`)
             .then(response => response.json())
@@ -1352,7 +1352,7 @@ function supprimerEmploye(id) {
     const employe = tousEmployes.find(e => e.id === id);
     if (!employe) return;
     
-    if (!confirm(`⚠️ Voulez-vous vraiment supprimer l'employé ${employe.nom} ${employe.prenom} (${employe.matricule}) ?\n\nCette action est irréversible.`)) {
+    if (!confirm(`Voulez-vous vraiment supprimer l'employé ${employe.nom} ${employe.prenom} (${employe.matricule}) ?\n\nCette action est irréversible.`)) {
         return;
     }
     
@@ -1360,7 +1360,7 @@ function supprimerEmploye(id) {
         .then(r => r.json())
         .then(result => {
             if (result.success) {
-                alert('✅ Employé supprimé avec succès !');
+                alert('Employé supprimé avec succès !');
                 chargerEmployes();
             } else {
                 alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
@@ -1408,7 +1408,7 @@ function sauvegarderEmploye() {
     .then(r => r.json())
     .then(result => {
         if (result.success) {
-            alert(isEdit ? '✅ Employé modifié avec succès !' : '✅ Employé ajouté avec succès !');
+            alert(isEdit ? 'Employé modifié avec succès !' : 'Employé ajouté avec succès !');
             bootstrap.Modal.getInstance(document.getElementById('employeModal')).hide();
             chargerEmployes();
         } else {
@@ -1429,7 +1429,7 @@ function mettreAJourStatuts() {
         .then(result => {
             hideLoader();
             if (result.success) {
-                alert(`✅ ${result.message}\nStatuts: ${JSON.stringify(result.stats)}`);
+                alert(`${result.message}\nStatuts: ${JSON.stringify(result.stats)}`);
                 chargerEmployes();
             } else {
                 alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
@@ -1605,7 +1605,7 @@ function calculerJoursConge() {
     const d2 = new Date(fin);
     
     if (d2 < d1) {
-        document.getElementById('congeJours').value = '⚠️ Date invalide';
+        document.getElementById('congeJours').value = 'Date invalide';
         document.getElementById('congeReprise').value = '';
         return;
     }
@@ -1630,7 +1630,7 @@ function sauvegarderConge() {
     const signataire = document.getElementById('congeSignataire').value.trim();
     
     if (!signataire) {
-        alert('⚠️ Le nom du signataire est obligatoire.');
+        alert('Le nom du signataire est obligatoire.');
         document.getElementById('congeSignataire').focus();
         return;
     }
@@ -1645,17 +1645,17 @@ function sauvegarderConge() {
     };
     
     if (!data.employe_id) {
-        alert('⚠️ Veuillez sélectionner un employé');
+        alert('Veuillez sélectionner un employé');
         return;
     }
     
     if (!data.date_debut || !data.date_fin) {
-        alert('⚠️ Veuillez remplir les dates de début et de fin');
+        alert('Veuillez remplir les dates de début et de fin');
         return;
     }
     
     if (data.date_debut > data.date_fin) {
-        alert('⚠️ La date de fin doit être après la date de début');
+        alert('La date de fin doit être après la date de début');
         return;
     }
     
@@ -1671,7 +1671,7 @@ function sauvegarderConge() {
         hideLoader();
         
         if (result.success) {
-            alert(`✅ Demande de congé soumise avec succès !\nSolde restant: ${result.solde_restant} jours`);
+            alert(`Demande de congé soumise avec succès !\nSolde restant: ${result.solde_restant} jours`);
             bootstrap.Modal.getInstance(document.getElementById('congeModal')).hide();
             chargerConges();
         } else if (result.solde_insuffisant && result.annees_futures) {
@@ -1712,7 +1712,7 @@ function sauvegarderConge() {
                     .then(result2 => {
                         hideLoader();
                         if (result2.success) {
-                            alert(`✅ Demande de congé soumise avec succès (sur ${anneeChoisie}) !`);
+                            alert(`Demande de congé soumise avec succès (sur ${anneeChoisie}) !`);
                             bootstrap.Modal.getInstance(document.getElementById('congeModal')).hide();
                             chargerConges();
                         } else {
@@ -1749,7 +1749,7 @@ function changerStatutConge(id, statut) {
     .then(r => r.json())
     .then(result => {
         if (result.success) {
-            alert(`✅ Statut mis à jour en "${statut}"`);
+            alert(`Statut mis à jour en "${statut}"`);
             chargerConges();
             chargerDashboard();
         } else {
@@ -1796,16 +1796,16 @@ function afficherPermissions() {
         let jours = '-';
         
         if (p.type_permission === 'heures') {
-            typeLabel = '⏰ Heures';
+            typeLabel = 'Heures';
             periode = p.date_permission || '-';
             heures = `${p.heure_debut || '-'} → ${p.heure_fin || '-'}`;
             jours = '1';
         } else if (p.type_permission === 'journee') {
-            typeLabel = '📅 Journée';
+            typeLabel = 'Journée';
             periode = p.date_debut || '-';
             jours = '1';
         } else if (p.type_permission === 'plusieurs_jours') {
-            typeLabel = '📆 Plusieurs jours';
+            typeLabel = 'Plusieurs jours';
             periode = `${p.date_debut || '-'} → ${p.date_fin || '-'}`;
             jours = p.nombre_jours || '-';
         }
@@ -1945,7 +1945,7 @@ function calculerJoursPermission() {
     const d2 = new Date(dateFin);
     
     if (d2 < d1) {
-        document.getElementById('permNbJours').value = '⚠️ Date invalide';
+        document.getElementById('permNbJours').value = 'Date invalide';
         return;
     }
     
@@ -1958,7 +1958,7 @@ function sauvegarderPermission() {
     const signataire = document.getElementById('permSignataire').value.trim();
     
     if (!signataire) {
-        alert('⚠️ Le nom du signataire est obligatoire.');
+        alert('Le nom du signataire est obligatoire.');
         document.getElementById('permSignataire').focus();
         return;
     }
@@ -1972,12 +1972,12 @@ function sauvegarderPermission() {
     };
     
     if (!data.employe_id) {
-        alert('⚠️ Veuillez sélectionner un employé');
+        alert('Veuillez sélectionner un employé');
         return;
     }
     
     if (!data.motif) {
-        alert('⚠️ Veuillez saisir le motif');
+        alert('Veuillez saisir le motif');
         document.getElementById('permMotif').focus();
         return;
     }
@@ -1988,7 +1988,7 @@ function sauvegarderPermission() {
         data.heure_fin = document.getElementById('permHeureFin').value;
         
         if (!data.date_permission || !data.heure_debut || !data.heure_fin) {
-            alert('⚠️ Veuillez remplir tous les champs (date et heures)');
+            alert('Veuillez remplir tous les champs (date et heures)');
             return;
         }
     } else {
@@ -1996,7 +1996,7 @@ function sauvegarderPermission() {
         data.date_fin = document.getElementById('permDateFin').value;
         
         if (!data.date_debut || !data.date_fin) {
-            alert('⚠️ Veuillez remplir les dates de début et de fin');
+            alert('Veuillez remplir les dates de début et de fin');
             return;
         }
     }
@@ -2012,7 +2012,7 @@ function sauvegarderPermission() {
     .then(result => {
         hideLoader();
         if (result.success) {
-            alert('✅ Demande de permission soumise avec succès !');
+            alert('Demande de permission soumise avec succès !');
             bootstrap.Modal.getInstance(document.getElementById('permissionModal')).hide();
             chargerPermissions();
         } else {
@@ -2036,7 +2036,7 @@ function changerStatutPermission(id, statut) {
     .then(r => r.json())
     .then(result => {
         if (result.success) {
-            alert(`✅ Statut mis à jour en "${statut}"`);
+            alert(`Statut mis à jour en "${statut}"`);
             chargerPermissions();
             chargerDashboard();
         } else {
@@ -2087,7 +2087,7 @@ function chargerAlertes() {
             // Demandes en attente
             const nbAttentes = attentes ? attentes.length : 0;
             if (nbAttentes > 0) {
-                alertes.push(`⏳ ${nbAttentes} demande(s) de congé en attente d'approbation`);
+                alertes.push(`${nbAttentes} demande(s) de congé en attente d'approbation`);
             }
             
             return fetch('/rh/api/conges?statut=approuve')
@@ -2105,7 +2105,7 @@ function chargerAlertes() {
                     });
                     
                     congesEnCours.forEach(c => {
-                        alertes.push(`📅 ${c.employe_nom} est en congé jusqu'au ${c.date_fin}`);
+                        alertes.push(`${c.employe_nom} est en congé jusqu'au ${c.date_fin}`);
                     });
                     
                     // Congés à venir (dans 3 jours)
@@ -2118,11 +2118,11 @@ function chargerAlertes() {
                         const dateDebut = c.date_debut.split('/').reverse().join('-');
                         return dateDebut > todayStr && dateDebut <= dans3JoursStr;
                     }).forEach(c => {
-                        alertes.push(`📅 ${c.employe_nom} commence son congé le ${c.date_debut}`);
+                        alertes.push(`${c.employe_nom} commence son congé le ${c.date_debut}`);
                     });
                     
                     if (alertes.length === 0) {
-                        container.innerHTML = '<div class="text-success text-center">✅ Aucune alerte à signaler</div>';
+                        container.innerHTML = '<div class="text-success text-center">Aucune alerte à signaler</div>';
                     } else {
                         container.innerHTML = alertes.map(a => 
                             `<div class="alert alert-warning py-1 mb-1" style="font-size:13px;">${a}</div>`
@@ -2132,7 +2132,7 @@ function chargerAlertes() {
         })
         .catch(error => {
             console.error('Erreur alertes:', error);
-            container.innerHTML = '<div class="text-muted text-center">⚠️ Impossible de charger les alertes</div>';
+            container.innerHTML = '<div class="text-muted text-center">Impossible de charger les alertes</div>';
         });
 }
 
@@ -2188,7 +2188,7 @@ function boutonAvecLoader(btn, callback) {
 let donneesChargees = false;
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Initialisation du module RH...');
+    console.log('Initialisation du module RH...');
     
     const now = new Date();
     document.getElementById('heureMiseAJour').textContent = now.toLocaleTimeString('fr-FR');

@@ -198,7 +198,7 @@ function sauvegarderModification() {
     .then(r => r.json())
     .then(result => {
         if (result.success) {
-            alert('✅ Employé modifié avec succès !');
+            alert('Employé modifié avec succès !');
             window.location.href = `/rh/employe/${id}`;
         } else {
             alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));

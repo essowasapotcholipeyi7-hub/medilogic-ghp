@@ -1155,3 +1155,174 @@ class RendezVousStats(db.Model):
         db.session.commit()
         return stat_record
 
+
+# models.py - À ajouter dans la section COMPTABILITE, après Cloture
+
+class SequencePiece(db.Model):
+    """
+    Gestion des séquences de numéros de pièce comptable
+    Chaque structure a ses propres séquences par type de pièce et par année
+    """
+    __tablename__ = 'sequences_piece'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False, index=True)
+    
+    # Type de pièce (ecriture, facture, avoir, bon, etc.)
+    type_piece = db.Column(db.String(50), nullable=False, index=True)
+    
+    # Préfixe (ex: ECR, FAC, AVO, BON)
+    prefixe = db.Column(db.String(10), nullable=False)
+    
+    # Numéro actuel (incrémenté automatiquement)
+    numero_actuel = db.Column(db.Integer, default=0, nullable=False)
+    
+    # Année de référence
+    annee = db.Column(db.Integer, nullable=False, index=True)
+    
+    # Format d'affichage
+    # Exemple: {prefixe}-{annee}-{numero:06d} -> ECR-2026-000042
+    format_affichage = db.Column(db.String(100), default='{prefixe}-{annee}-{numero:06d}')
+    
+    # Dates
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Contrainte d'unicité
+    __table_args__ = (
+        db.UniqueConstraint('structure_id', 'type_piece', 'annee', name='uq_sequence_structure_type_annee'),
+    )
+    
+    @classmethod
+    def get_next_number(cls, structure_id, type_piece, prefixe=None):
+        """
+        Récupère et incrémente le prochain numéro de pièce
+        
+        Args:
+            structure_id: ID de la structure
+            type_piece: Type de pièce (ecriture, facture, etc.)
+            prefixe: Préfixe personnalisé (optionnel)
+        
+        Returns:
+            str: Numéro de pièce formaté
+        """
+        now = datetime.now()
+        annee = now.year
+        
+        # Déterminer le préfixe par défaut selon le type
+        prefixes_par_defaut = {
+            'ecriture': 'ECR',
+            'facture': 'FAC',
+            'avoir': 'AVO',
+            'bon': 'BON',
+            'paiement': 'PAI',
+            'recette': 'REC',
+            'depense': 'DEP'
+        }
+        
+        if not prefixe:
+            prefixe = prefixes_par_defaut.get(type_piece, 'PCE')
+        
+        # Chercher la séquence existante
+        sequence = cls.query.filter_by(
+            structure_id=structure_id,
+            type_piece=type_piece,
+            annee=annee
+        ).first()
+        
+        if not sequence:
+            # Créer une nouvelle séquence pour l'année
+            sequence = cls(
+                structure_id=structure_id,
+                type_piece=type_piece,
+                prefixe=prefixe,
+                annee=annee,
+                numero_actuel=0
+            )
+            db.session.add(sequence)
+            db.session.flush()
+        
+        # Incrémenter le numéro
+        sequence.numero_actuel += 1
+        sequence.updated_at = datetime.utcnow()
+        
+        # Formater le numéro
+        numero_formate = sequence.format_affichage.format(
+            prefixe=sequence.prefixe,
+            annee=sequence.annee,
+            numero=sequence.numero_actuel
+        )
+        
+        db.session.commit()
+        
+        return numero_formate
+    
+    @classmethod
+    def get_current_number(cls, structure_id, type_piece, annee=None):
+        """Récupère le numéro actuel sans l'incrémenter"""
+        if not annee:
+            annee = datetime.now().year
+        
+        sequence = cls.query.filter_by(
+            structure_id=structure_id,
+            type_piece=type_piece,
+            annee=annee
+        ).first()
+        
+        if not sequence:
+            return None
+        
+        return sequence.format_affichage.format(
+            prefixe=sequence.prefixe,
+            annee=sequence.annee,
+            numero=sequence.numero_actuel
+        )
+    
+    @classmethod
+    def reset_sequence(cls, structure_id, type_piece, annee=None):
+        """Réinitialise une séquence à zéro (à utiliser avec précaution)"""
+        if not annee:
+            annee = datetime.now().year
+        
+        sequence = cls.query.filter_by(
+            structure_id=structure_id,
+            type_piece=type_piece,
+            annee=annee
+        ).first()
+        
+        if sequence:
+            sequence.numero_actuel = 0
+            sequence.updated_at = datetime.utcnow()
+            db.session.commit()
+            return True
+        return False
+    
+    @classmethod
+    def get_info(cls, structure_id, type_piece, annee=None):
+        """Retourne les informations de la séquence"""
+        if not annee:
+            annee = datetime.now().year
+        
+        sequence = cls.query.filter_by(
+            structure_id=structure_id,
+            type_piece=type_piece,
+            annee=annee
+        ).first()
+        
+        if not sequence:
+            return None
+        
+        return {
+            'id': sequence.id,
+            'type_piece': sequence.type_piece,
+            'prefixe': sequence.prefixe,
+            'annee': sequence.annee,
+            'numero_actuel': sequence.numero_actuel,
+            'prochain_numero': sequence.format_affichage.format(
+                prefixe=sequence.prefixe,
+                annee=sequence.annee,
+                numero=sequence.numero_actuel + 1
+            ),
+            'format_affichage': sequence.format_affichage
+        }
+
