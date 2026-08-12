@@ -4,96 +4,337 @@
 
 {% block extra_css %}
 <style>
-    @media print {
-        .no-print { display: none; }
-        body { font-size: 11pt; }
+    /* ===== STYLES GÉNÉRAUX ===== */
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
     }
-    .container {
-        font-family: 'Times New Roman', serif;
-        padding: 25px 35px;
+    
+    body {
+        font-family: 'Times New Roman', 'Georgia', serif;
+        background: #f0f2f5;
+        padding: 30px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+    }
+    
+    .document-container {
         max-width: 750px;
+        width: 100%;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+        padding: 35px 45px;
         margin: 0 auto;
+        page-break-inside: avoid;
     }
+    
+    /* ===== EN-TÊTE ===== */
     .header {
         text-align: center;
-        border-bottom: 2px solid #333;
-        padding-bottom: 8px;
+        border-bottom: 3px solid #1a2a6c;
+        padding-bottom: 12px;
         margin-bottom: 15px;
     }
+    
     .header .logo {
-        font-size: 20px;
-        font-weight: bold;
+        font-size: 22px;
+        font-weight: 700;
         text-transform: uppercase;
+        color: #1a2a6c;
+        letter-spacing: 1px;
     }
+    
     .header .sub {
+        font-size: 13px;
+        color: #555;
+        font-weight: 500;
+        margin-top: 2px;
+    }
+    
+    .header .contact {
+        font-size: 11px;
+        color: #6c7a89;
+        margin-top: 4px;
+    }
+    
+    /* ===== NUMÉRO ===== */
+    .numero {
+        text-align: right;
         font-size: 12px;
         color: #555;
+        font-weight: 600;
+        margin-bottom: 8px;
     }
-    .header .contact {
-        font-size: 10px;
-        color: #666;
-    }
+    
+    /* ===== TITRE ===== */
     .title {
         text-align: center;
-        font-size: 17px;
-        font-weight: bold;
+        font-size: 20px;
+        font-weight: 700;
+        text-transform: uppercase;
         text-decoration: underline;
-        margin: 15px 0;
+        margin: 10px 0 18px 0;
+        color: #1a2a6c;
+        letter-spacing: 2px;
     }
+    
+    /* ===== CONTENU ===== */
     .content {
-        font-size: 13px;
-        line-height: 1.7;
-        text-align: justify;
-    }
-    .content .nom {
         font-size: 14px;
-        font-weight: bold;
-        text-align: center;
-        margin: 8px 0;
+        line-height: 1.8;
+        text-align: justify;
+        color: #1a2a3a;
     }
+    
+    .content p {
+        margin-bottom: 8px;
+    }
+    
+    .content .nom {
+        font-size: 16px;
+        font-weight: 700;
+        text-align: center;
+        margin: 10px 0 5px 0;
+        color: #1a2a6c;
+    }
+    
+    .content .nom .matricule {
+        font-size: 12px;
+        font-weight: 400;
+        color: #555;
+        display: block;
+        margin-top: 3px;
+    }
+    
     .content .details {
         text-align: center;
-        font-weight: bold;
-        margin: 8px 0;
+        font-weight: 600;
+        margin: 12px 0;
+        padding: 12px 20px;
+        background: #f8faff;
+        border-radius: 6px;
+        border-left: 4px solid #1a2a6c;
     }
+    
+    .content .details .periode {
+        font-size: 16px;
+        color: #1a2a6c;
+    }
+    
+    .content .details .sous-details {
+        font-size: 13px;
+        font-weight: 400;
+        color: #555;
+    }
+    
+    .content .motif {
+        margin: 10px 0;
+        padding: 8px 15px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        border-left: 3px solid #28a745;
+    }
+    
+    .content .motif strong {
+        color: #1a2a6c;
+    }
+    
+    /* ===== SIGNATURES ===== */
     .signatures {
         margin-top: 25px;
+        padding-top: 15px;
+        border-top: 2px solid #e6ebf2;
     }
+    
     .signatures table {
         width: 100%;
         border-collapse: collapse;
     }
+    
     .signatures td {
-        width: 33%;
+        width: 33.33%;
         text-align: center;
-        padding: 20px 5px 5px 5px;
-        border-top: 1px solid #333;
+        padding: 18px 8px 6px 8px;
+        border-top: 1px solid #1a2a6c;
         font-size: 11px;
+        color: #3d4f60;
+        vertical-align: top;
     }
+    
+    .signatures td strong {
+        font-size: 12px;
+        color: #1a2a3a;
+        display: block;
+        margin-bottom: 6px;
+    }
+    
+    .signatures td .line {
+        margin-top: 4px;
+        font-size: 10px;
+        color: #8e9aaf;
+    }
+    
+    /* ===== CACHET ===== */
+    .cachet-section {
+        text-align: center;
+        margin-top: 15px;
+        padding-top: 10px;
+        border-top: 1px dashed #dce3ed;
+    }
+    
+    .cachet-section .cachet-box {
+        display: inline-block;
+        padding: 10px 40px;
+        border: 2px dashed #1a2a6c;
+        border-radius: 8px;
+        font-size: 12px;
+        color: #1a2a6c;
+        font-weight: 600;
+        letter-spacing: 2px;
+        min-width: 200px;
+    }
+    
+    /* ===== FOOTER ===== */
     .footer {
         text-align: center;
         font-size: 10px;
-        color: #777;
-        margin-top: 15px;
-        border-top: 1px solid #ddd;
-        padding-top: 6px;
-    }
-    .numero {
-        text-align: right;
-        font-size: 11px;
-        color: #555;
+        color: #8e9aaf;
+        margin-top: 18px;
+        border-top: 1px solid #e6ebf2;
+        padding-top: 8px;
+        letter-spacing: 0.5px;
     }
     
+    .footer .generated {
+        font-size: 9px;
+        color: #b0b8c5;
+    }
+    
+    /* ===== BOUTONS ===== */
+    .no-print {
+        text-align: center;
+        margin-top: 20px;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+    }
+    
+    .btn-print {
+        padding: 8px 30px;
+        background: #1a2a6c;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-family: 'Arial', sans-serif;
+    }
+    
+    .btn-print:hover {
+        background: #2d4373;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(26, 42, 108, 0.3);
+    }
+    
+    .btn-close {
+        padding: 8px 30px;
+        background: #6c7a89;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-family: 'Arial', sans-serif;
+    }
+    
+    .btn-close:hover {
+        background: #5a6775;
+    }
+    
+    /* ===== PRINT ===== */
     @media print {
-        .no-print { display: none; }
-        body { font-size: 11pt; }
+        body {
+            background: white;
+            padding: 0;
+            margin: 0;
+            display: block;
+        }
+        
+        .document-container {
+            border-radius: 0;
+            box-shadow: none;
+            padding: 30px 40px;
+            max-width: 100%;
+        }
+        
+        .header {
+            border-bottom-color: #1a2a6c;
+        }
+        
+        .signatures td {
+            border-top-color: #1a2a6c;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        
+        .content .details {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        
+        .content .motif {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        
+        .no-print {
+            display: none !important;
+        }
+    }
+    
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 600px) {
+        .document-container {
+            padding: 20px 25px;
+        }
+        .header .logo {
+            font-size: 18px;
+        }
+        .title {
+            font-size: 17px;
+        }
+        .signatures td {
+            font-size: 10px;
+            padding: 12px 4px 4px 4px;
+        }
+        .content {
+            font-size: 13px;
+        }
+        .content .nom {
+            font-size: 14px;
+        }
+        .no-print {
+            flex-direction: column;
+            align-items: center;
+        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container">
-    <!-- 🔥 Infos structure -->
+<div class="document-container">
+    <!-- ===== EN-TÊTE ===== -->
     {% set structure_nom = session.get('structure_nom') or 'Centre Medical' %}
     {% set structure_telephone = session.get('structure_telephone') or '+228 90 00 00 00' %}
     {% set structure_email = session.get('structure_email') or 'contact@medilogic-ghp.com' %}
@@ -102,20 +343,25 @@
     <div class="header">
         <div class="logo">{{ structure_nom }}</div>
         <div class="contact">
-            Tel: {{ structure_telephone }} | Email: {{ structure_email }}<br>
-            {{ structure_adresse }}
+            {{ structure_adresse }}<br>
+            Tél: {{ structure_telephone }} | Email: {{ structure_email }}
         </div>
     </div>
 
-    <div class="numero">N° ORDRE : {{ numero_ordre }}</div>
-
-    <div class="title">
-        AUTORISATION D'ABSENCE
+    <!-- ===== NUMÉRO ===== -->
+    <div class="numero">
+        N° ORDRE : <strong>{{ numero_ordre }}</strong>
     </div>
 
+    <!-- ===== TITRE ===== -->
+    <div class="title">
+        Autorisation d'absence
+    </div>
+
+    <!-- ===== CONTENU ===== -->
     <div class="content">
         <p>
-            Je soussigné(e), <strong>{{ signataire }}</strong>, {{ structure_nom }},
+            Je soussigné(e), <strong>{{ signataire }}</strong>, <strong>{{ structure_nom }}</strong>,
         </p>
 
         <p>
@@ -123,8 +369,8 @@
         </p>
 
         <div class="nom">
-            {{ employe.nom }} {{ employe.prenom }}<br>
-            <span style="font-size: 11px; font-weight: normal;">
+            {{ employe.nom }} {{ employe.prenom }}
+            <span class="matricule">
                 Matricule : {{ employe.matricule }} | Service : {{ employe.service.nom if employe.service else '-' }} | Poste : {{ employe.poste }}
             </span>
         </div>
@@ -133,67 +379,107 @@
             à s'absenter de son poste de travail,
         </p>
 
-<div class="details">
-    {% if permission.type_permission == 'heures' %}
-        LE : {{ permission.date_permission.strftime('%d/%m/%Y') if permission.date_permission else '-' }}<br>
-        DE : {{ permission.heure_debut.strftime('%H:%M') if permission.heure_debut else '-' }}<br>
-        A  : {{ permission.heure_fin.strftime('%H:%M') if permission.heure_fin else '-' }}
-    {% else %}
-        DU : {{ permission.date_debut.strftime('%d/%m/%Y') if permission.date_debut else '-' }}<br>
-        AU : {{ permission.date_fin.strftime('%d/%m/%Y') if permission.date_fin else '-' }} INCLUS
-        <br>
-        <span style="font-size: 12px; font-weight: normal;">
-            ({{ permission.nombre_jours }} jours)
-        </span>
-    {% endif %}
-</div>
+        <!-- ===== DÉTAILS DE LA PERMISSION ===== -->
+        <div class="details">
+            {% if permission.type_permission == 'heures' %}
+                <div class="periode">
+                    {{ permission.date_permission.strftime('%d/%m/%Y') if permission.date_permission else '-' }}
+                </div>
+                <div class="sous-details">
+                    De : <strong>{{ permission.heure_debut.strftime('%H:%M') if permission.heure_debut else '-' }}</strong>
+                    à : <strong>{{ permission.heure_fin.strftime('%H:%M') if permission.heure_fin else '-' }}</strong>
+                </div>
+            {% else %}
+                <div class="periode">
+                    Du <strong>{{ permission.date_debut.strftime('%d/%m/%Y') if permission.date_debut else '-' }}</strong>
+                    au <strong>{{ permission.date_fin.strftime('%d/%m/%Y') if permission.date_fin else '-' }}</strong> inclus
+                </div>
+                <div class="sous-details">
+                    ({{ permission.nombre_jours }} jours)
+                </div>
+            {% endif %}
+        </div>
 
-        <p>
+        <!-- ===== MOTIF ===== -->
+        <div class="motif">
             <strong>Motif :</strong> {{ permission.motif }}
-        </p>
-
-        <p>
-            Le present document est delivre a l'interesse pour servir et valoir ce que de droit.
-        </p>
-
-        <div class="signatures">
-            <table>
-                <tr>
-                    <td>
-                        <strong>Visa du Chef de service</strong><br>
-                        Signature : ......................<br>
-                        Nom : ......................<br>
-                        Date : {{ date_actuelle }}
-                    </td>
-                    <td>
-                        <strong>Visa du Responsable GRH</strong><br>
-                        Signature : ......................<br>
-                        Nom : ......................<br>
-                        Date : {{ date_actuelle }}
-                    </td>
-                    <td>
-                        <strong>Visa du Directeur General</strong><br>
-                        Signature : ......................<br>
-                        Nom : {{ signataire }}<br>
-                        Date : {{ date_actuelle }}
-                    </td>
-                </tr>
-            </table>
         </div>
 
-        <div style="text-align: center; margin-top: 12px;">
-            <strong>Cachet de l'etablissement</strong><br><br>
-            [               ]
+        <p style="font-style: italic; color: #555; font-size: 13px; margin-top: 10px;">
+            Le présent document est délivré à l'intéressé pour servir et valoir ce que de droit.
+        </p>
+    </div>
+
+    <!-- ===== SIGNATURES ===== -->
+    <div class="signatures">
+        <table>
+            <tr>
+                <td>
+                    <strong>Visa du Chef de service</strong>
+                    <div class="line">Signature : ......................</div>
+                    <div class="line">Nom : ......................</div>
+                    <div class="line">Date : {{ date_actuelle }}</div>
+                </td>
+                <td>
+                    <strong>Visa du Responsable GRH</strong>
+                    <div class="line">Signature : ......................</div>
+                    <div class="line">Nom : ......................</div>
+                    <div class="line">Date : {{ date_actuelle }}</div>
+                </td>
+                <td>
+                    <strong>Visa du Directeur Général</strong>
+                    <div class="line">Signature : ......................</div>
+                    <div class="line">Nom : {{ signataire }}</div>
+                    <div class="line">Date : {{ date_actuelle }}</div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- ===== CACHET ===== -->
+    <div class="cachet-section">
+        <div class="cachet-box">
+            CACHET DE L'ÉTABLISSEMENT
         </div>
     </div>
 
+    <!-- ===== FOOTER ===== -->
     <div class="footer">
-        Document genere par SSoftoneV10 le {{ date_actuelle }}
-    </div>
-
-    <div class="text-center no-print" style="margin-top: 15px;">
-        <button onclick="window.print()" class="btn btn-primary btn-sm">Imprimer</button>
-        <button onclick="window.close()" class="btn btn-secondary btn-sm">Fermer</button>
+        <div>Document généré par Medilogic-GHP le {{ date_actuelle }}</div>
+        <div class="generated">SSoftoneV10 - Système de gestion des ressources humaines</div>
     </div>
 </div>
+
+<!-- ===== BOUTONS ===== -->
+<div class="no-print">
+    <button class="btn-print" onclick="imprimerDocument()">
+        <i class="fas fa-print"></i> Imprimer
+    </button>
+    <button class="btn-close" onclick="fermerFenetre()">
+        <i class="fas fa-times"></i> Fermer
+    </button>
+</div>
+
+<script>
+    function imprimerDocument() {
+        window.print();
+    }
+    
+    function fermerFenetre() {
+        if (confirm('Voulez-vous fermer cette fenêtre ?')) {
+            window.close();
+        }
+    }
+    
+    // Raccourci clavier: Ctrl+P pour imprimer, Echap pour fermer
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.key === 'p') {
+            e.preventDefault();
+            imprimerDocument();
+        }
+        if (e.key === 'Escape') {
+            fermerFenetre();
+        }
+    });
+</script>
 {% endblock %}
