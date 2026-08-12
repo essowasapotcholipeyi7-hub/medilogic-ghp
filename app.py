@@ -1887,7 +1887,13 @@ def recu(vente_id, type):
             
             quantite = int(item.get('quantite', 1))
             total_article = prix_unitaire * quantite
-            pbr_article = float(item.get('pbr', prix_unitaire))
+
+            pbr_article = item.get('pbr')
+            if pbr_article is None or pbr_article == '':
+                pbr_article = prix_unitaire
+            else:
+                pbr_article = float(pbr_article)
+
             
             prise_amu = item.get('prise_en_charge_amu', True)
             prise_cac = item.get('prise_en_charge_cac', True)
@@ -1899,11 +1905,12 @@ def recu(vente_id, type):
             else:
                 type_article = 'acte'
             
-            if prise_amu:
+            # 🔥 SEULEMENT SI PBR > 0, on calcule l'AMU et la CAC
+            if prise_amu and pbr_article > 0:
                 sous_total_amu += total_article
                 pbr_total_amu += min(prix_unitaire, pbr_article) * quantite
             
-            # 🔥 CALCUL DE LA CAC
+            # CALCUL DE LA CAC
             if prise_cac:
                 if est_assure and assurance_principale_active:
                     if prise_amu:
@@ -4826,6 +4833,9 @@ def api_get_produits():
                     # A=0: ID, B=1: nom, C=2: prix_vente, D=3: pbr, 
                     # E=4: prix_achat, F=5: quantite_stock, G=6: seuil_alerte, 
                     # H=7: unite, I=8: date_peremption, J=9: lot, K=10: structure_id
+                    # L=11: prise_en_charge_amu, M=12: commentaire_amu,
+                    # N=13: prise_en_charge_cac, O=14: commentaire_cac
+                    
                     produit_id = row[0] if len(row) > 0 else None
                     nom = row[1].strip() if len(row) > 1 and row[1] else ''
                     prix_vente = float(row[2]) if len(row) > 2 and row[2] else 0
@@ -4845,6 +4855,18 @@ def api_get_produits():
                     lot = row[9] if len(row) > 9 and row[9] else ''
                     struct_id = row[10] if len(row) > 10 else None
                     
+                    # 🔥🔥🔥 RÉCUPÉRER LES CHAMPS COLONNES L, M, N, O 🔥🔥🔥
+                    prise_en_charge_amu = row[11] if len(row) > 11 and row[11] else True
+                    commentaire_amu = row[12] if len(row) > 12 and row[12] else ''
+                    prise_en_charge_cac = row[13] if len(row) > 13 and row[13] else True
+                    commentaire_cac = row[14] if len(row) > 14 and row[14] else ''
+                    
+                    # 🔥 Convertir les valeurs "FALSE" / "TRUE" en booléens
+                    if isinstance(prise_en_charge_amu, str):
+                        prise_en_charge_amu = prise_en_charge_amu.upper() == 'TRUE'
+                    if isinstance(prise_en_charge_cac, str):
+                        prise_en_charge_cac = prise_en_charge_cac.upper() == 'TRUE'
+                    
                     if struct_id is None or str(struct_id) == str(structure_id):
                         if nom:
                             produits_liste.append({
@@ -4857,7 +4879,12 @@ def api_get_produits():
                                 'seuil_alerte': seuil_alerte,
                                 'unite': unite,
                                 'date_peremption': date_peremption,
-                                'lot': lot
+                                'lot': lot,
+                                # 🔥🔥🔥 NOUVEAUX CHAMPS 🔥🔥🔥
+                                'prise_en_charge_amu': prise_en_charge_amu,
+                                'commentaire_amu': commentaire_amu,
+                                'prise_en_charge_cac': prise_en_charge_cac,
+                                'commentaire_cac': commentaire_cac
                             })
                 except Exception as e:
                     print(f"⚠️ Erreur ligne {i}: {e}")
@@ -4874,6 +4901,15 @@ def api_get_produits():
             for p in produits:
                 if str(p.get('structure_id')) == str(structure_id):
                     try:
+                        # 🔥 Récupérer les champs avec fallback
+                        prise_amu = p.get('prise_en_charge_amu', True)
+                        if isinstance(prise_amu, str):
+                            prise_amu = prise_amu.upper() == 'TRUE'
+                        
+                        prise_cac = p.get('prise_en_charge_cac', True)
+                        if isinstance(prise_cac, str):
+                            prise_cac = prise_cac.upper() == 'TRUE'
+                        
                         produits_liste.append({
                             'id': p.get('ID'),
                             'nom': p.get('nom', ''),
@@ -4884,7 +4920,12 @@ def api_get_produits():
                             'seuil_alerte': int(float(p.get('seuil_alerte', 10))),
                             'unite': p.get('unite', 'unité'),
                             'date_peremption': p.get('date_peremption', ''),
-                            'lot': p.get('lot', '')
+                            'lot': p.get('lot', ''),
+                            # 🔥🔥🔥 NOUVEAUX CHAMPS 🔥🔥🔥
+                            'prise_en_charge_amu': prise_amu,
+                            'commentaire_amu': p.get('commentaire_amu', ''),
+                            'prise_en_charge_cac': prise_cac,
+                            'commentaire_cac': p.get('commentaire_cac', '')
                         })
                     except:
                         continue
@@ -4927,16 +4968,36 @@ def api_produits_search():
                     # A=0: ID, B=1: nom, C=2: prix_vente, D=3: pbr, 
                     # E=4: prix_achat, F=5: quantite_stock, G=6: seuil_alerte, 
                     # H=7: unite, I=8: date_peremption, J=9: lot, K=10: structure_id
+                    # L=11: prise_en_charge_amu, M=12: commentaire_amu,
+                    # N=13: prise_en_charge_cac, O=14: commentaire_cac
+                    
                     produit_id = row[0] if len(row) > 0 else None
                     nom = row[1].strip() if len(row) > 1 and row[1] else ''
                     prix_vente = float(row[2]) if len(row) > 2 and row[2] else 0
-                    # 🔥 AJOUTER PBR (colonne D)
                     pbr = float(row[3]) if len(row) > 3 and row[3] else prix_vente
                     prix_achat = float(row[4]) if len(row) > 4 and row[4] else 0
                     quantite_stock = int(float(row[5])) if len(row) > 5 and row[5] else 0
                     seuil_alerte = int(float(row[6])) if len(row) > 6 and row[6] else 10
                     unite = row[7] if len(row) > 7 else 'unité'
+                    date_peremption = row[8] if len(row) > 8 and row[8] else ''
+                    lot = row[9] if len(row) > 9 and row[9] else ''
                     struct_id = row[10] if len(row) > 10 else None
+                    
+                    # 🔥🔥🔥 AJOUTER LES CHAMPS MANQUANTS 🔥🔥🔥
+                    # Colonne L (index 11) : prise_en_charge_amu
+                    prise_en_charge_amu = row[11] if len(row) > 11 and row[11] else True
+                    # Colonne M (index 12) : commentaire_amu
+                    commentaire_amu = row[12] if len(row) > 12 and row[12] else ''
+                    # Colonne N (index 13) : prise_en_charge_cac
+                    prise_en_charge_cac = row[13] if len(row) > 13 and row[13] else True
+                    # Colonne O (index 14) : commentaire_cac
+                    commentaire_cac = row[14] if len(row) > 14 and row[14] else ''
+                    
+                    # 🔥 Convertir les valeurs "FALSE" / "TRUE" en booléens
+                    if isinstance(prise_en_charge_amu, str):
+                        prise_en_charge_amu = prise_en_charge_amu.upper() == 'TRUE'
+                    if isinstance(prise_en_charge_cac, str):
+                        prise_en_charge_cac = prise_en_charge_cac.upper() == 'TRUE'
                     
                     if struct_id is None or str(struct_id) == str(structure_id):
                         if nom:
@@ -4944,12 +5005,19 @@ def api_produits_search():
                                 'id': produit_id,
                                 'nom': nom,
                                 'prix_vente': prix_vente,
-                                'pbr': pbr,  # 🔥 NOUVEAU
+                                'pbr': pbr,
                                 'prix_achat': prix_achat,
                                 'quantite_stock': quantite_stock,
                                 'seuil_alerte': seuil_alerte,
                                 'unite': unite,
-                                'structure_id': struct_id
+                                'date_peremption': date_peremption,
+                                'lot': lot,
+                                'structure_id': struct_id,
+                                # 🔥🔥🔥 NOUVEAUX CHAMPS 🔥🔥🔥
+                                'prise_en_charge_amu': prise_en_charge_amu,
+                                'commentaire_amu': commentaire_amu,
+                                'prise_en_charge_cac': prise_en_charge_cac,
+                                'commentaire_cac': commentaire_cac
                             })
                 except Exception as e:
                     continue
@@ -4979,17 +5047,34 @@ def api_produits_search():
             for p in produits:
                 if str(p.get('structure_id')) == str(structure_id):
                     prix_vente = float(p.get('prix_vente', 0))
-                    pbr = float(p.get('pbr', prix_vente))  # 🔥 AJOUTER PBR
+                    pbr = float(p.get('pbr', prix_vente))
+                    
+                    # 🔥 Récupérer les champs avec fallback
+                    prise_amu = p.get('prise_en_charge_amu', True)
+                    if isinstance(prise_amu, str):
+                        prise_amu = prise_amu.upper() == 'TRUE'
+                    
+                    prise_cac = p.get('prise_en_charge_cac', True)
+                    if isinstance(prise_cac, str):
+                        prise_cac = prise_cac.upper() == 'TRUE'
+                    
                     produits_liste.append({
                         'id': p.get('ID'),
                         'nom': p.get('nom', ''),
                         'prix_vente': prix_vente,
-                        'pbr': pbr,  # 🔥 NOUVEAU
+                        'pbr': pbr,
                         'prix_achat': float(p.get('prix_achat', 0)),
                         'quantite_stock': int(p.get('quantite_stock', 0)),
                         'seuil_alerte': int(p.get('seuil_alerte', 10)),
                         'unite': p.get('unite', 'unité'),
-                        'structure_id': p.get('structure_id')
+                        'date_peremption': p.get('date_peremption', ''),
+                        'lot': p.get('lot', ''),
+                        'structure_id': p.get('structure_id'),
+                        # 🔥🔥🔥 NOUVEAUX CHAMPS 🔥🔥🔥
+                        'prise_en_charge_amu': prise_amu,
+                        'commentaire_amu': p.get('commentaire_amu', ''),
+                        'prise_en_charge_cac': prise_cac,
+                        'commentaire_cac': p.get('commentaire_cac', '')
                     })
             
             if search:
@@ -5013,6 +5098,7 @@ def api_produits_search():
         import traceback
         traceback.print_exc()
         return jsonify({'data': [], 'total': 0, 'error': str(e)}), 500
+
 
 # ========== GESTION PRODUITS (Google Sheets) ==========
 
@@ -7908,10 +7994,37 @@ def api_creer_proforma():
         # 🔥 Récupérer les articles
         articles = data.get('articles', [])
         
+        # 🔥🔥🔥 CORRECTION : Convertir les valeurs de prise en charge 🔥🔥🔥
+        for article in articles:
+            # Conversion de prise_en_charge_amu
+            amu_val = article.get('prise_en_charge_amu', True)
+            if isinstance(amu_val, str):
+                amu_val = amu_val.lower() == 'true'
+            elif isinstance(amu_val, bool):
+                amu_val = amu_val
+            else:
+                amu_val = True
+            article['prise_en_charge_amu'] = amu_val
+            
+            # Conversion de prise_en_charge_cac
+            cac_val = article.get('prise_en_charge_cac', True)
+            if isinstance(cac_val, str):
+                cac_val = cac_val.lower() == 'true'
+            elif isinstance(cac_val, bool):
+                cac_val = cac_val
+            else:
+                cac_val = True
+            article['prise_en_charge_cac'] = cac_val
+            
+            print(f"🔍 {article.get('nom')}: AMU={amu_val}, CAC={cac_val}")
+        
         # 🔥 Calculer les totaux avec PBR
         sous_total = 0
         pbr_total_amu = 0
         sous_total_amu = 0
+        base_cac_articles = 0  # 🔥 Base CAC calculée article par article
+        
+        taux_assurance = float(data.get('taux_assurance', 0))
         
         for article in articles:
             prix = float(article.get('prix', article.get('prix_unitaire', 0)))
@@ -7924,18 +8037,43 @@ def api_creer_proforma():
             article['pbr'] = pbr
             sous_total += total
             
-            # 🔥 Si l'article est pris en charge par AMU
             prise_amu = article.get('prise_en_charge_amu', True)
-            if prise_amu:
+            prise_cac = article.get('prise_en_charge_cac', True)
+            
+            # 🔥 AMU
+            if prise_amu and pbr > 0:
                 sous_total_amu += total
                 pbr_total_amu += min(prix, pbr) * quantite
+            
+            # 🔥🔥🔥 CAC article par article 🔥🔥🔥
+            if prise_cac:
+                if prise_amu and pbr > 0 and taux_assurance > 0:
+                    # 🔥 Article avec AMU → CAC sur le reste après AMU
+                    base_amu_article = min(prix, pbr) * quantite
+                    prise_amu_article = (base_amu_article * taux_assurance) / 100
+                    reste = total - prise_amu_article
+                    if reste > 0:
+                        base_cac_articles += reste
+                else:
+                    # 🔥 Article sans AMU → CAC sur le prix total
+                    base_cac_articles += total
+                
+                print(f"🔍 {article.get('nom')}: Base CAC={base_cac_articles}")
+        
+        # 🔥 Vérifier si tous les articles sont non pris en charge
+        tout_non_pris = all(
+            a.get('prise_en_charge_amu') == False and a.get('prise_en_charge_cac') == False
+            for a in articles
+        )
+        
+        print(f"📊 Tout non pris en charge: {tout_non_pris}")
+        print(f"📊 Base CAC calculée: {base_cac_articles}")
         
         # 🔥 Vérifier si le patient a une assurance principale
         assurance_nom = data.get('assurance_nom', 'Non assuré')
         est_assure = assurance_nom and assurance_nom != 'Non assuré'
         
-        # 🔥 Calcul de l'AMU sur le PBR
-        taux_assurance = float(data.get('taux_assurance', 0))
+        # 🔥 Calcul de l'AMU
         prise_en_charge = 0
         base_remboursement = 0
         
@@ -7944,32 +8082,39 @@ def api_creer_proforma():
             if base_remboursement > 0:
                 prise_en_charge = (base_remboursement * taux_assurance) / 100
         
-        # 🔥 Reste après AMU
+        # 🔥 Reste après AMU (pour le calcul global)
         reste_apres_principal = sous_total - prise_en_charge
         
-        # 🔥 ASSURANCE COMPLÉMENTAIRE (sur le reste après AMU)
+        # 🔥🔥🔥 ASSURANCE COMPLÉMENTAIRE (CAC) - Utilise base_cac_articles 🔥🔥🔥
         assurance2_active = data.get('assurance2_active', False)
         assurance2_nom = data.get('assurance2_nom', '')
         taux_assurance2 = float(data.get('taux_assurance2', 0)) if assurance2_active else 0
         prise_en_charge2 = 0
         
-        if assurance2_active and taux_assurance2 > 0 and reste_apres_principal > 0:
-            prise_en_charge2 = reste_apres_principal * (taux_assurance2 / 100)
+        if assurance2_active and taux_assurance2 > 0 and base_cac_articles > 0:
+            prise_en_charge2 = base_cac_articles * (taux_assurance2 / 100)
+            print(f"📊 CAC appliquée sur base: {base_cac_articles} x {taux_assurance2}% = {prise_en_charge2} FCFA")
         
         # 🔥 TAUX MODIFIÉ
         taux_modifie = data.get('taux_modifie', False)
         taux_original = float(data.get('taux_original', 0))
         
-        net_a_payer = sous_total - prise_en_charge - prise_en_charge2
-        if net_a_payer < 0:
-            net_a_payer = 0
+        # 🔥 Net à payer
+        if tout_non_pris:
+            net_a_payer = sous_total
+            prise_en_charge = 0
+            prise_en_charge2 = 0
+            print("📊 Tout non pris en charge → patient paye la totalité")
+        else:
+            net_a_payer = sous_total - prise_en_charge - prise_en_charge2
+            if net_a_payer < 0:
+                net_a_payer = 0
         
         print(f"📊 Sous-total clinique: {sous_total} FCFA")
         print(f"📊 Base remboursement (PBR): {base_remboursement} FCFA")
         print(f"📊 Prise en charge AMU: {prise_en_charge} FCFA")
-        print(f"📊 Reste après AMU: {reste_apres_principal} FCFA")
-        if assurance2_active:
-            print(f"📊 Prise en charge {assurance2_nom}: {prise_en_charge2} FCFA")
+        print(f"📊 Base CAC: {base_cac_articles} FCFA")
+        print(f"📊 Prise en charge {assurance2_nom}: {prise_en_charge2} FCFA")
         print(f"📊 Net à payer: {net_a_payer} FCFA")
         
         expires_at = datetime.now() + timedelta(days=7)
@@ -8029,9 +8174,10 @@ def api_creer_proforma():
                 created_by,
                 expires_at,
                 numero_proforma,
-                assurances_data
+                assurances_data,
+                base_cac
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
             RETURNING id
         """, (
             structure_id,
@@ -8053,12 +8199,13 @@ def api_creer_proforma():
             prise_en_charge,
             prise_en_charge2,
             net_a_payer,
-            base_remboursement,  # 🔥 NOUVEAU
+            base_remboursement,
             data.get('notes', ''),
             user_name,
             expires_at,
             prochain_numero,
-            json.dumps(assurances_data, ensure_ascii=False)
+            json.dumps(assurances_data, ensure_ascii=False),
+            base_cac_articles  # 🔥 NOUVEAU
         ))
         
         proforma_id = result[0]['id']
@@ -8074,6 +8221,7 @@ def api_creer_proforma():
             'prise_en_charge': prise_en_charge,
             'prise_en_charge2': prise_en_charge2,
             'base_remboursement': base_remboursement,
+            'base_cac': base_cac_articles,  # 🔥 NOUVEAU
             'assurance2_nom': assurance2_nom if assurance2_active else '',
             'taux_assurance2': taux_assurance2 if assurance2_active else 0,
             'taux_modifie': taux_modifie,
@@ -8265,11 +8413,45 @@ def api_convertir_proforma():
         # 🔥 Récupérer les articles
         articles = data.get('articles', [])
         
+        # 🔥🔥🔥 CORRECTION : Convertir les valeurs de prise en charge 🔥🔥🔥
+        for a in articles:
+            # Conversion de prise_en_charge_amu
+            amu_val = a.get('prise_en_charge_amu', True)
+            if isinstance(amu_val, str):
+                amu_val = amu_val.lower() == 'true'
+            elif isinstance(amu_val, bool):
+                amu_val = amu_val
+            else:
+                amu_val = True
+            a['prise_en_charge_amu'] = amu_val
+            
+            # Conversion de prise_en_charge_cac
+            cac_val = a.get('prise_en_charge_cac', True)
+            if isinstance(cac_val, str):
+                cac_val = cac_val.lower() == 'true'
+            elif isinstance(cac_val, bool):
+                cac_val = cac_val
+            else:
+                cac_val = True
+            a['prise_en_charge_cac'] = cac_val
+            
+            print(f"🔍 {a.get('nom')}: AMU={amu_val}, CAC={cac_val}")
+
+        # 🔥 Récupérer les données d'assurance de la proforma
+        assurance_nom = proforma.get('assurance_nom', 'Non assuré')
+        est_assure = assurance_nom and assurance_nom != 'Non assuré'
+        taux_assurance = float(proforma.get('taux_assurance', 0))
+        
+        assurance2_active = proforma.get('assurance2_active', False)
+        assurance2_nom = proforma.get('assurance2_nom', '')
+        taux_assurance2 = float(proforma.get('taux_assurance2', 0))
+
         # 🔥🔥🔥 RECALCULER LES TOTAUX AVEC PBR 🔥🔥🔥
         sous_total = 0
         pbr_total_amu = 0
         sous_total_amu = 0
         montant_non_amu = 0
+        base_cac = 0
         
         articles_transformes = []
         for a in articles:
@@ -8280,7 +8462,7 @@ def api_convertir_proforma():
             
             sous_total += total
             
-            # 🔥 Vérifier la prise en charge AMU
+            # 🔥 Utiliser les valeurs converties
             prise_amu = a.get('prise_en_charge_amu', True)
             prise_cac = a.get('prise_en_charge_cac', True)
             
@@ -8298,14 +8480,27 @@ def api_convertir_proforma():
                 'type': a.get('type', 'acte')
             }
             
-            if prise_amu:
+            # 🔥 AMU
+            if prise_amu and pbr > 0:
                 sous_total_amu += total
                 pbr_total_amu += min(prix, pbr) * quantite
             else:
                 montant_non_amu += total
             
+            # 🔥 CAC article par article
+            if prise_cac:
+                if prise_amu and pbr > 0:
+                    base_amu = min(prix, pbr) * quantite
+                    prise_amu_article = (base_amu * taux_assurance) / 100
+                    reste = total - prise_amu_article
+                    if reste > 0:
+                        base_cac += reste
+                else:
+                    base_cac += total
+            
             articles_transformes.append(article)
         
+
         # 🔥 Séparer actes et produits
         actes_data = [a for a in articles_transformes if a.get('type') != 'produit']
         produits_data = [a for a in articles_transformes if a.get('type') == 'produit']
@@ -8318,16 +8513,8 @@ def api_convertir_proforma():
         types = set(a.get('type', 'acte') for a in articles_transformes)
         type_vente = 'mixte' if len(types) > 1 else ('pharmacie' if 'produit' in types else 'actes')
         
-        # 🔥 Récupérer les données d'assurance de la proforma
-        assurance_nom = proforma.get('assurance_nom', 'Non assuré')
-        est_assure = assurance_nom and assurance_nom != 'Non assuré'
-        taux_assurance = float(proforma.get('taux_assurance', 0))
         
-        assurance2_active = proforma.get('assurance2_active', False)
-        assurance2_nom = proforma.get('assurance2_nom', '')
-        taux_assurance2 = float(proforma.get('taux_assurance2', 0))
-        
-        # 🔥🔥🔥 RECALCUL DE L'AMU SUR LE PBR 🔥🔥🔥
+        # 🔥🔥🔥 AMU 🔥🔥🔥
         prise_en_charge = 0
         base_remboursement = 0
         
@@ -8336,13 +8523,10 @@ def api_convertir_proforma():
             if base_remboursement > 0:
                 prise_en_charge = (base_remboursement * taux_assurance) / 100
         
-        # 🔥 Reste après AMU
-        reste_apres_amu = sous_total - prise_en_charge
-        
-        # 🔥🔥🔥 RECALCUL DE LA CAC SUR LE RESTE APRÈS AMU 🔥🔥🔥
+        # 🔥🔥🔥 CAC 🔥🔥🔥
         prise_en_charge2 = 0
-        if assurance2_active and taux_assurance2 > 0 and reste_apres_amu > 0:
-            prise_en_charge2 = (reste_apres_amu * taux_assurance2) / 100
+        if assurance2_active and taux_assurance2 > 0 and base_cac > 0:
+            prise_en_charge2 = (base_cac * taux_assurance2) / 100
         
         # 🔥 Net à payer
         net_a_payer = sous_total - prise_en_charge - prise_en_charge2
@@ -8353,7 +8537,7 @@ def api_convertir_proforma():
         print(f"   Sous-total: {sous_total} FCFA")
         print(f"   Base remboursement (PBR): {base_remboursement} FCFA")
         print(f"   AMU ({taux_assurance}%): {prise_en_charge} FCFA")
-        print(f"   Reste après AMU: {reste_apres_amu} FCFA")
+        print(f"   Base CAC: {base_cac} FCFA")
         if assurance2_active:
             print(f"   CAC {assurance2_nom} ({taux_assurance2}%): {prise_en_charge2} FCFA")
         print(f"   Net à payer: {net_a_payer} FCFA")
@@ -8433,11 +8617,10 @@ def api_convertir_proforma():
             """, (structure_id, montant_effectif, vente_id, f'Vente depuis proforma #{proforma_id} - {data.get("patient_nom", "Patient")} - Encaissé: {montant_effectif} FCFA', user_name))
             print(f"✅ Recette patient ajoutée: {montant_effectif} FCFA")
         
-        # 🔥🔥🔥 CORRECTION : Si reste à payer > 0, créer une facture AVEC LES BONNES COLONNES 🔥🔥🔥
+        # 🔥 Si reste à payer > 0, créer une facture
         if reste_a_payer > 0:
             date_echeance = datetime.now() + timedelta(days=7)
             
-            # 🔥 Générer un numéro de facture
             numero_facture = f"FAC-{datetime.now().strftime('%Y%m%d')}-{vente_id}"
             
             db.execute_query("""
@@ -8488,6 +8671,52 @@ def api_convertir_proforma():
                 json.dumps(articles_transformes, ensure_ascii=False)
             ))
             print(f"📋 Facture créée pour le reste à payer: {reste_a_payer} FCFA")
+        
+        # ========== 🔥🔥🔥 METTRE À JOUR LE STOCK (UNIQUEMENT POUR LES PRODUITS) 🔥🔥🔥 ==========
+        try:
+            sheet_name = f"struct_{structure_id}_produits"
+            print(f"   📂 Accès à la feuille: {sheet_name}")
+            
+            worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+            
+            # 🔥 Filtrer uniquement les produits
+            produits_vendus = [a for a in articles_transformes if a.get('type') == 'produit' and a.get('id')]
+            
+            if produits_vendus:
+                print(f"📦 {len(produits_vendus)} produit(s) à mettre à jour dans le stock")
+                
+                for article in produits_vendus:
+                    produit_id = str(article.get('id'))
+                    quantite_vendue = int(article.get('quantite', 0))
+                    produit_nom = article.get('nom', 'Inconnu')
+                    
+                    print(f"   🔍 Recherche du produit ID: {produit_id} - {produit_nom}")
+                    
+                    # Chercher le produit dans la feuille
+                    cell = worksheet.find(produit_id, in_column=1)
+                    if cell:
+                        row_num = cell.row
+                        current_row = worksheet.row_values(row_num)
+                        # Stock est en colonne F (index 5)
+                        stock_actuel = int(current_row[5]) if len(current_row) > 5 else 0
+                        nouveau_stock = stock_actuel - quantite_vendue
+                        
+                        if nouveau_stock < 0:
+                            print(f"   ⚠️ Stock négatif! {produit_nom}: {stock_actuel} - {quantite_vendue} = {nouveau_stock}")
+                            nouveau_stock = 0
+                        
+                        print(f"   📊 Stock: {stock_actuel} → {nouveau_stock}")
+                        worksheet.update_cell(row_num, 6, nouveau_stock)  # Colonne F = index 6
+                        print(f"   ✅ Stock Sheets mis à jour pour {produit_nom}")
+                    else:
+                        print(f"   ❌ Produit ID {produit_id} non trouvé dans Sheets!")
+            else:
+                print("ℹ️ Aucun produit à mettre à jour (seulement des actes)")
+                    
+        except Exception as e:
+            print(f"   ❌ ERREUR mise à jour stock Sheets: {e}")
+            import traceback
+            traceback.print_exc()
         
         # 🔥 Mettre à jour le solde de caisse
         try:

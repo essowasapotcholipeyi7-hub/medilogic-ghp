@@ -196,37 +196,40 @@
     <strong>Paiement :</strong> {{ mode_paiement }}
 </div>
 
-                <!-- TABLEAU DES ARTICLES -->
-                <table style="width:100%; border-collapse: collapse; font-size: 10px;">
-                    <thead>
-                        <tr style="background:#f8f9fa; border-bottom: 2px solid #dee2e6;">
-                            <th style="padding:4px; text-align:left; width:32%;">Article</th>
-                            <th style="padding:4px; text-align:center; width:10%;">Qté</th>
-                            <th style="padding:4px; text-align:right; width:16%;">Prix</th>
-                            <th style="padding:4px; text-align:right; width:16%;">PBR</th>
-                            <th style="padding:4px; text-align:right; width:18%;">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for article in articles %}
-                        <tr style="border-bottom:1px solid #eee;">
-                            <td style="padding:4px; font-weight:500; font-size:9px;">
-                                {{ article.nom }}
-                            </td>
-                            <td style="text-align:center; font-size:9px;">{{ article.quantite }}</td>
-                            <td style="text-align:right; font-size:9px;">{{ article.prix_unitaire|default(0)|round(0)|int }} F</td>
-                            <td style="text-align:right; font-size:9px;">
-                                {% if article.pbr and article.pbr > 0 %}
-                                    {{ article.pbr|round(0)|int }} F
-                                {% else %}
-                                    <span style="color:#6c757d;">-</span>
-                                {% endif %}
-                            </td>
-                            <td style="text-align:right; font-weight:600; font-size:9px;">{{ article.total|default(0)|round(0)|int }} F</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+<!-- TABLEAU DES ARTICLES -->
+<table style="width:100%; border-collapse: collapse; font-size: 10px;">
+    <thead>
+        <tr style="background:#f8f9fa; border-bottom: 2px solid #dee2e6;">
+            <th style="padding:4px; text-align:left; width:32%;">Article</th>
+            <th style="padding:4px; text-align:center; width:10%;">Qté</th>
+            <th style="padding:4px; text-align:right; width:16%;">Prix</th>
+            <th style="padding:4px; text-align:right; width:16%;">PBR</th>
+            <th style="padding:4px; text-align:right; width:18%;">Total</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for article in articles %}
+        <tr style="border-bottom:1px solid #eee;">
+            <td style="padding:4px; font-weight:500; font-size:9px;">
+                {{ article.nom }}
+            </td>
+            <td style="text-align:center; font-size:9px;">{{ article.quantite }}</td>
+            <td style="text-align:right; font-size:9px;">{{ article.prix_unitaire|default(0)|round(0)|int }} F</td>
+            <td style="text-align:right; font-size:9px;">
+                {% if article.prise_en_charge_amu == false %}
+                    <span style="color:#6c757d;">0</span>
+                {% elif article.pbr and article.pbr > 0 %}
+                    {{ article.pbr|round(0)|int }} F
+                {% else %}
+                    <span style="color:#6c757d;">-</span>
+                {% endif %}
+            </td>
+            <td style="text-align:right; font-weight:600; font-size:9px;">{{ article.total|default(0)|round(0)|int }} F</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
 
                 <hr style="margin:6px 0;">
 

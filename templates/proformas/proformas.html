@@ -691,17 +691,80 @@ function remplirListeProduits(search = '', append = false, hasMore = false) {
         const pbr = p.pbr || prix;
         const id = p.id || p.ID;
         const stock = p.quantite_stock || 0;
+        const datePeremption = p.date_peremption || '';
+        const lot = p.lot || '';
+        const prixAchat = p.prix_achat || 0;
         
-        select.innerHTML += `
-            <option value="${id}" 
-                    data-prix="${prix}" 
-                    data-pbr="${pbr}" 
-                    data-nom="${nom}"
-                    data-prise-en-charge-amu="true"
-                    data-prise-en-charge-cac="true">
-                ${nom} - ${prix} FCFA (PBR: ${pbr} F) [Stock: ${stock}]
-            </option>
-        `;
+        // 🔥 Récupérer les valeurs de prise en charge
+        let amuValue = p.prise_en_charge_amu;
+        if (amuValue === null || amuValue === undefined || amuValue === '') {
+            amuValue = true;
+        } else if (typeof amuValue === 'string') {
+            amuValue = amuValue.toLowerCase() === 'true';
+        }
+        
+        let cacValue = p.prise_en_charge_cac;
+        if (cacValue === null || cacValue === undefined || cacValue === '') {
+            cacValue = true;
+        } else if (typeof cacValue === 'string') {
+            cacValue = cacValue.toLowerCase() === 'true';
+        }
+        
+        const commentaireAMU = p.commentaire_amu || '';
+        const commentaireCAC = p.commentaire_cac || '';
+        
+        // 🔥 Construction de l'option avec TOUS les attributs
+        const option = document.createElement('option');
+        option.value = id;
+        option.setAttribute('data-prix', prix);
+        option.setAttribute('data-pbr', pbr);
+        option.setAttribute('data-nom', nom);
+        option.setAttribute('data-stock', stock);
+        option.setAttribute('data-date-peremption', datePeremption);
+        option.setAttribute('data-lot', lot);
+        option.setAttribute('data-prix-achat', prixAchat);
+        option.setAttribute('data-prise-en-charge-amu', amuValue);
+        option.setAttribute('data-prise-en-charge-cac', cacValue);
+        option.setAttribute('data-commentaire-amu', commentaireAMU);
+        option.setAttribute('data-commentaire-cac', commentaireCAC);
+        
+        // 🔥 Label
+        let label = `${nom} - ${prix.toLocaleString()} FCFA`;
+        if (pbr > 0 && pbr !== prix) {
+            label += ` (PBR: ${pbr.toLocaleString()} F)`;
+        } else if (pbr === 0) {
+            label += ` (PBR: 0 - Non pris en charge)`;
+        }
+        label += ` [Stock: ${stock}]`;
+        
+        // 🔥 Indicateur de péremption
+        if (datePeremption) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const perempDate = new Date(datePeremption);
+            perempDate.setHours(0, 0, 0, 0);
+            
+            if (perempDate < today) {
+                label += ' 🔴 PÉRIMÉ';
+            } else if ((perempDate - today) / (1000 * 60 * 60 * 24) < 30) {
+                label += ' ⚠️ Bientôt périmé';
+            }
+        }
+        
+        // 🔥 Indicateur de prise en charge
+        const isAMU = amuValue === true || amuValue === 'true';
+        const isCAC = cacValue === true || cacValue === 'true';
+        
+        if (!isAMU && !isCAC) {
+            label = `🚫 ${label} - NON PRIS EN CHARGE (AMU & CAC)`;
+        } else if (!isAMU) {
+            label = `⚠️ ${label} - NON PRIS EN CHARGE AMU`;
+        } else if (!isCAC) {
+            label = `⚠️ ${label} - NON PRIS EN CHARGE CAC`;
+        }
+        
+        option.textContent = label;
+        select.appendChild(option);
     });
     
     const total = produitsTotal || produitsList.length;
@@ -722,7 +785,6 @@ function remplirListeProduits(search = '', append = false, hasMore = false) {
         `;
     }
 }
-
 // ============================================
 // FILTRAGE
 // ============================================
@@ -921,7 +983,7 @@ function resetTauxAssurance2() {
 }
 
 // ============================================
-// GESTION ARTICLES (CORRIGÉE AVEC PRIX)
+// GESTION ARTICLES (CORRIGÉE AVEC PRIX + PÉREMPTION)
 // ============================================
 
 function ajouterArticleSelectionne() {
@@ -935,28 +997,65 @@ function ajouterArticleSelectionne() {
         if (!opt.value || opt.disabled) continue;
         const nom = opt.dataset.nom || opt.text.split(' - ')[0];
         const prix = parseFloat(opt.dataset.prix) || 0;
-        const pbr = parseFloat(opt.dataset.pbr) || prix;
+        const pbr = parseFloat(opt.dataset.pbr);
+        const pbrValue = (pbr !== undefined && pbr !== null && !isNaN(pbr)) ? pbr : 0;
         const priseEnChargeAMU = opt.dataset.priseEnChargeAmu !== 'false';
         const priseEnChargeCAC = opt.dataset.priseEnChargeCac !== 'false';
         
         if (prix > 0) {
-            ajouterAuPanierComplet(nom, 'acte', prix, pbr, qte, priseEnChargeAMU, priseEnChargeCAC);
+            ajouterAuPanierComplet(nom, 'acte', prix, pbrValue, qte, priseEnChargeAMU, priseEnChargeCAC);
             added++;
         }
         opt.selected = false;
     }
     
-    // 🔥 Parcourir les produits sélectionnés
+    // 🔥🔥🔥 Parcourir les produits sélectionnés (avec vérifications) 🔥🔥🔥
     for (let opt of produitSelect.selectedOptions) {
         if (!opt.value || opt.disabled) continue;
+        
         const nom = opt.dataset.nom || opt.text.split(' - ')[0];
         const prix = parseFloat(opt.dataset.prix) || 0;
-        const pbr = parseFloat(opt.dataset.pbr) || prix;
+        const pbr = parseFloat(opt.dataset.pbr);
+        const pbrValue = (pbr !== undefined && pbr !== null && !isNaN(pbr)) ? pbr : 0;
         const priseEnChargeAMU = opt.dataset.priseEnChargeAmu !== 'false';
         const priseEnChargeCAC = opt.dataset.priseEnChargeCac !== 'false';
         
+        // 🔥 VÉRIFICATION DU STOCK
+        const stock = parseInt(opt.dataset.stock) || 0;
+        if (stock <= 0) {
+            alert(`❌ Le produit "${nom}" est en rupture de stock.`);
+            opt.selected = false;
+            continue;
+        }
+        
+        // 🔥 VÉRIFICATION DE LA PÉREMPTION
+        const datePeremption = opt.dataset.datePeremption || '';
+        if (datePeremption) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const perempDate = new Date(datePeremption);
+            perempDate.setHours(0, 0, 0, 0);
+            
+            // Vérifier si la date est valide
+            if (!isNaN(perempDate.getTime())) {
+                if (perempDate < today) {
+                    alert(`❌ Le produit "${nom}" est PÉRIMÉ depuis le ${datePeremption}.\n\nImpossible de l'ajouter.`);
+                    opt.selected = false;
+                    continue;
+                }
+                
+                const joursRestants = Math.ceil((perempDate - today) / (1000 * 60 * 60 * 24));
+                if (joursRestants <= 7 && joursRestants > 0) {
+                    if (!confirm(`⚠️ Attention ! Le produit "${nom}" expire dans ${joursRestants} jour(s) (${datePeremption}).\n\nVoulez-vous quand même l'ajouter ?`)) {
+                        opt.selected = false;
+                        continue;
+                    }
+                }
+            }
+        }
+        
         if (prix > 0) {
-            ajouterAuPanierComplet(nom, 'produit', prix, pbr, qte, priseEnChargeAMU, priseEnChargeCAC);
+            ajouterAuPanierComplet(nom, 'produit', prix, pbrValue, qte, priseEnChargeAMU, priseEnChargeCAC);
             added++;
         }
         opt.selected = false;
@@ -985,6 +1084,9 @@ function ajouterArticlePersonnalise() {
 function ajouterAuPanierComplet(nom, type, prix, pbr, qte, priseEnChargeAMU, priseEnChargeCAC) {
     const existing = panierArticles.find(item => item.nom === nom && item.type === type && item.prix === prix);
     
+    // 🔥 CORRECTION : Garder 0 si le PBR est 0
+    const pbrValue = (pbr !== undefined && pbr !== null && pbr !== '') ? pbr : 0;
+    
     if (existing) {
         existing.quantite += qte;
         existing.total = existing.quantite * existing.prix;
@@ -994,7 +1096,7 @@ function ajouterAuPanierComplet(nom, type, prix, pbr, qte, priseEnChargeAMU, pri
             type: type,
             prix: prix,
             prix_unitaire: prix,
-            pbr: pbr || prix,
+            pbr: pbrValue,  // 🔥 Garde 0 si c'est 0
             quantite: qte,
             total: prix * qte,
             prise_en_charge_amu: priseEnChargeAMU !== false,
@@ -1004,7 +1106,6 @@ function ajouterAuPanierComplet(nom, type, prix, pbr, qte, priseEnChargeAMU, pri
     
     afficherPanier();
 }
-
 function ajouterAuPanier(nom, type, prix, qte) {
     const existing = panierArticles.find(item => item.nom === nom && item.type === type && item.prix === prix);
     
@@ -1122,53 +1223,58 @@ function calculerTotal() {
     let sousTotal = 0;
     let pbrTotalAMU = 0;
     let sousTotalAMU = 0;
-    let montantNonPriseEnChargeAMU = 0;
+    let baseCAC = 0;  // 🔥 Base CAC calculée article par article
     
-    // 🔥 1. Calculer les bases
+    // 🔥 1. Calculer les bases article par article
     for (const item of panierArticles) {
         const prix = item.prix || 0;
-        const pbr = item.pbr || prix;
+        const pbr = (item.pbr !== undefined && item.pbr !== null) ? item.pbr : 0;
         const quantite = item.quantite || 1;
         const total = prix * quantite;
         
         sousTotal += total;
         
-        // 🔥 Si l'article est pris en charge par AMU
-        if (item.prise_en_charge_amu !== false) {
+        // 🔥 AMU
+        if (item.prise_en_charge_amu !== false && pbr > 0) {
             sousTotalAMU += total;
-            // ⭐ Règle PBR : on prend le minimum entre prix et pbr
             pbrTotalAMU += Math.min(prix, pbr) * quantite;
-        } else {
-            montantNonPriseEnChargeAMU += total;
+        }
+        
+        // 🔥🔥🔥 CORRECTION : CAC article par article 🔥🔥🔥
+        if (item.prise_en_charge_cac !== false) {
+            if (item.prise_en_charge_amu !== false && pbr > 0) {
+                // Article avec AMU → CAC sur le reste après AMU
+                const baseAMU = Math.min(prix, pbr) * quantite;
+                const tauxPrincipal = parseFloat(document.getElementById('tauxAssurance').value) || 0;
+                const priseAMU = (baseAMU * tauxPrincipal) / 100;
+                const reste = total - priseAMU;
+                if (reste > 0) {
+                    baseCAC += reste;
+                }
+            } else {
+                // Article sans AMU → CAC sur le prix total
+                baseCAC += total;
+            }
         }
     }
     
     // 🔥 2. Vérifier si le patient a une assurance principale
     const typeAssurance = document.getElementById('assuranceNom').value;
     const estAssure = typeAssurance && typeAssurance !== '' && typeAssurance !== 'Non assuré';
-    
     let tauxPrincipal = parseFloat(document.getElementById('tauxAssurance').value) || 0;
+    
+    // 🔥 3. AMU
     let priseEnChargeAMU = 0;
     let baseRemboursement = 0;
     
-    // 🔥🔥🔥 CAS 1: Patient ASSURÉ → AMU sur le PBR 🔥🔥🔥
     if (estAssure && tauxPrincipal > 0) {
         baseRemboursement = Math.min(sousTotalAMU, pbrTotalAMU);
         if (baseRemboursement > 0) {
             priseEnChargeAMU = (baseRemboursement * tauxPrincipal) / 100;
         }
-        console.log('📊 Patient assuré - Base PBR:', baseRemboursement);
-    } else {
-        // 🔥 CAS 2: Patient NON ASSURÉ → AMU = 0
-        priseEnChargeAMU = 0;
-        baseRemboursement = 0;
-        console.log('📊 Patient non assuré - Pas d\'AMU');
     }
     
-    // 🔥 3. Reste après AMU
-    let resteApresAMU = sousTotal - priseEnChargeAMU;
-    
-    // 🔥 4. Calcul de la CAC (complémentaire)
+    // 🔥 4. CAC
     let priseEnChargeCAC = 0;
     let tauxComplementaire = 0;
     
@@ -1184,9 +1290,9 @@ function calculerTotal() {
             document.getElementById('tauxModifieBadge').style.display = 'none';
         }
         
-        // 🔥🔥🔥 CAC s'applique sur le RESTE après AMU 🔥🔥🔥
-        if (tauxComplementaire > 0 && resteApresAMU > 0) {
-            priseEnChargeCAC = (resteApresAMU * tauxComplementaire) / 100;
+        // 🔥🔥🔥 CAC sur la BASE CAC calculée article par article 🔥🔥🔥
+        if (tauxComplementaire > 0 && baseCAC > 0) {
+            priseEnChargeCAC = (baseCAC * tauxComplementaire) / 100;
         }
         
         document.getElementById('assurance2TauxProforma').textContent = tauxComplementaire + '%';
@@ -1209,15 +1315,10 @@ function calculerTotal() {
         const modifText = tauxModifie ? ' 🔄' : '';
         priseEnCharge2Display.textContent = `${assurance2Nom} (${tauxComplementaire}%) : - ${priseEnChargeCAC.toLocaleString()} FCFA${modifText}`;
         priseEnCharge2Row.style.display = '';
-    } else if (assurance2Active && tauxComplementaire > 0) {
-        priseEnCharge2Display.textContent = `${assurance2Nom} (${tauxComplementaire}%) : 0 FCFA (reste à charge nul)`;
-        priseEnCharge2Row.style.display = '';
     } else {
         priseEnCharge2Row.style.display = 'none';
     }
 }
-
-
 // ============================================
 // SAUVEGARDER PROFORMA (CORRIGÉ)
 // ============================================
@@ -1232,17 +1333,19 @@ function sauvegarderProforma() {
         return;
     }
     
-    // 🔥 CORRECTION: Envoyer les articles avec prix et pbr
+    // 🔥 CORRECTION: Envoyer les articles avec les vraies valeurs
     const articles = panierArticles.map(item => ({
         nom: item.nom,
         type: item.type,
         quantite: item.quantite,
         prix_unitaire: item.prix,
         prix: item.prix,
-        pbr: item.pbr || item.prix,
+        pbr: (item.pbr !== undefined && item.pbr !== null) ? item.pbr : 0,
         total: item.total,
-        prise_en_charge_amu: true,
-        prise_en_charge_cac: true
+        prise_en_charge_amu: item.prise_en_charge_amu !== false,
+        prise_en_charge_cac: item.prise_en_charge_cac !== false,
+        commentaire_amu: item.commentaire_amu || '',
+        commentaire_cac: item.commentaire_cac || ''
     }));
     
     let tauxComplementaire = 0;
@@ -1250,12 +1353,56 @@ function sauvegarderProforma() {
         tauxComplementaire = parseFloat(document.getElementById('assurance2TauxApplique').value) || 0;
     }
     
+    // 🔥 Calculer le sous-total
+    let sousTotal = panierArticles.reduce((sum, item) => sum + (item.prix * item.quantite), 0);
+    
+    // 🔥🔥🔥 CALCUL DE LA BASE CAC (article par article) 🔥🔥🔥
+    let tauxPrincipal = parseFloat(document.getElementById('tauxAssurance').value) || 0;
+    let baseCAC = 0;
+    
+    for (const item of panierArticles) {
+        // 🔥 Si l'article est pris en charge par CAC
+        if (item.prise_en_charge_cac !== false) {
+            const prix = item.prix || 0;
+            const pbr = (item.pbr !== undefined && item.pbr !== null) ? item.pbr : 0;
+            const quantite = item.quantite || 1;
+            const total = prix * quantite;
+            
+            // 🔥 Si l'article a AMU, CAC sur le reste après AMU
+            if (item.prise_en_charge_amu !== false && pbr > 0 && tauxPrincipal > 0) {
+                const baseAMU = Math.min(prix, pbr) * quantite;
+                const priseAMU = (baseAMU * tauxPrincipal) / 100;
+                const reste = total - priseAMU;
+                if (reste > 0) {
+                    baseCAC += reste;
+                }
+            } else {
+                // 🔥 Si l'article n'a pas AMU, CAC sur le prix total
+                baseCAC += total;
+            }
+        }
+    }
+    
+    // 🔥 Calculer la CAC
+    let priseEnChargeCAC = 0;
+    if (assurance2Active && tauxComplementaire > 0 && baseCAC > 0) {
+        priseEnChargeCAC = (baseCAC * tauxComplementaire) / 100;
+    }
+    
+    // 🔥 Vérifier si tous les articles sont non pris en charge
+    const toutNonPrisEnCharge = panierArticles.every(item => 
+        item.prise_en_charge_amu === false && item.prise_en_charge_cac === false
+    );
+    
+    console.log('📊 Base CAC calculée:', baseCAC);
+    console.log('📊 Prise en charge CAC:', priseEnChargeCAC);
+    
     const data = {
         patient_id: parseInt(patientId),
         patient_nom: document.getElementById('patientNom').value,
         patient_telephone: document.getElementById('patientTelephone').value || '',
         assurance_nom: document.getElementById('assuranceNom').value || 'Non assuré',
-        taux_assurance: parseFloat(document.getElementById('tauxAssurance').value) || 0,
+        taux_assurance: tauxPrincipal,
         numero_assure: document.getElementById('numeroAssure').value || '',
         assurance2_nom: assurance2Active ? assurance2Nom : '',
         taux_assurance2: assurance2Active ? tauxComplementaire : 0,
@@ -1265,10 +1412,18 @@ function sauvegarderProforma() {
         taux_original: assurance2TauxOriginal,
         articles: articles,
         notes: document.getElementById('proformaNotes').value,
-        type: 'mixte'
+        type: 'mixte',
+        sous_total: sousTotal,
+        tout_non_pris_en_charge: toutNonPrisEnCharge,
+        // 🔥🔥🔥 AJOUTER LA BASE CAC POUR LE BACKEND 🔥🔥🔥
+        base_cac: baseCAC,
+        prise_en_charge_cac_calculee: priseEnChargeCAC
     };
     
     console.log('📦 Données proforma:', data);
+    console.log('📊 Sous-total:', sousTotal);
+    console.log('📊 Base CAC:', baseCAC);
+    console.log('📊 CAC calculée:', priseEnChargeCAC);
     
     showLoader('Enregistrement de la proforma...');
     
@@ -1456,7 +1611,7 @@ function convertirEnVente(proformaId) {
             
             proformaConversionData = data;
             
-            // 🔥🔥🔥 CORRECTION : Récupérer les articles avec PBR 🔥🔥🔥
+            // 🔥 Récupérer les articles avec PBR
             panierConversion = data.articles ? data.articles.map(a => ({
                 id: a.id || null,
                 nom: a.nom,
@@ -1464,7 +1619,7 @@ function convertirEnVente(proformaId) {
                 quantite: a.quantite || 1,
                 prix: a.prix || a.prix_unitaire || 0,
                 prix_unitaire: a.prix_unitaire || a.prix || 0,
-                pbr: a.pbr || a.prix_unitaire || a.prix || 0,  // 🔥 PBR
+                pbr: (a.pbr !== undefined && a.pbr !== null) ? a.pbr : 0,
                 total: (a.prix || a.prix_unitaire || 0) * (a.quantite || 1),
                 prise_en_charge_amu: a.prise_en_charge_amu !== false,
                 prise_en_charge_cac: a.prise_en_charge_cac !== false
@@ -1654,8 +1809,9 @@ function afficherModalConversion(data) {
 }
 
 // ============================================
-// FONCTIONS DE CALCUL POUR LA CONVERSION
+// FONCTIONS DE CALCUL POUR LA CONVERSION (CORRIGÉES)
 // ============================================
+
 function calculeSousTotalConversion() {
     return panierConversion.reduce((sum, item) => sum + (item.prix * item.quantite), 0);
 }
@@ -1664,18 +1820,17 @@ function calculePriseEnChargeConversion() {
     const sousTotal = calculeSousTotalConversion();
     const taux = proformaConversionData ? proformaConversionData.taux_assurance || 0 : 0;
     
-    // 🔥🔥🔥 CORRECTION : Utiliser le PBR pour le calcul AMU 🔥🔥🔥
     let pbrTotal = 0;
     let sousTotalAMU = 0;
     
     for (const item of panierConversion) {
         const prix = item.prix || 0;
-        const pbr = item.pbr || prix;
+        const pbr = (item.pbr !== undefined && item.pbr !== null) ? item.pbr : 0;
         const quantite = item.quantite || 1;
         const total = prix * quantite;
         
-        // Si l'article est pris en charge par AMU
-        if (item.prise_en_charge_amu !== false) {
+        // Si l'article est pris en charge par AMU ET PBR > 0
+        if (item.prise_en_charge_amu !== false && pbr > 0) {
             sousTotalAMU += total;
             pbrTotal += Math.min(prix, pbr) * quantite;
         }
@@ -1689,22 +1844,53 @@ function calculePriseEnChargeConversion() {
     return 0;
 }
 
+// 🔥🔥🔥 CORRECTION : CAC article par article 🔥🔥🔥
 function calculePriseEnCharge2Conversion() {
     const sousTotal = calculeSousTotalConversion();
     const priseEnCharge = calculePriseEnChargeConversion();
-    
-    // 🔥 Reste après AMU
-    const reste = sousTotal - priseEnCharge;
-    
+    const tauxAMU = proformaConversionData ? proformaConversionData.taux_assurance || 0 : 0;
     const taux2 = proformaConversionData && proformaConversionData.assurance2_active ? 
                   proformaConversionData.taux_assurance2 || 0 : 0;
     
-    // 🔥 CAC sur le reste après AMU
-    if (taux2 > 0 && reste > 0) {
-        return (reste * taux2) / 100;
+    if (!proformaConversionData || !proformaConversionData.assurance2_active || taux2 <= 0) {
+        return 0;
+    }
+    
+    // 🔥 Calcul de la base CAC article par article
+    let baseCAC = 0;
+    
+    for (const item of panierConversion) {
+        // 🔥 Seulement si l'article est pris en charge par CAC
+        if (item.prise_en_charge_cac === false) {
+            continue;
+        }
+        
+        const prix = item.prix || 0;
+        const pbr = (item.pbr !== undefined && item.pbr !== null) ? item.pbr : 0;
+        const quantite = item.quantite || 1;
+        const total = prix * quantite;
+        
+        // 🔥 Si l'article a AMU, CAC sur le reste après AMU
+        if (item.prise_en_charge_amu !== false && pbr > 0) {
+            const baseAMU = Math.min(prix, pbr) * quantite;
+            const priseAMU = (baseAMU * tauxAMU) / 100;
+            const reste = total - priseAMU;
+            if (reste > 0) {
+                baseCAC += reste;
+            }
+        } else {
+            // 🔥 Si l'article n'a pas AMU, CAC sur le prix total
+            baseCAC += total;
+        }
+    }
+    
+    // 🔥 Appliquer le taux CAC sur la base calculée
+    if (baseCAC > 0 && taux2 > 0) {
+        return (baseCAC * taux2) / 100;
     }
     return 0;
 }
+
 function calculeNetAPayerConversion() {
     const sousTotal = calculeSousTotalConversion();
     const priseEnCharge = calculePriseEnChargeConversion();
@@ -1712,6 +1898,7 @@ function calculeNetAPayerConversion() {
     let net = sousTotal - priseEnCharge - priseEnCharge2;
     return net < 0 ? 0 : net;
 }
+
 function mettreAJourTotauxConversion() {
     const sousTotal = calculeSousTotalConversion();
     const priseEnCharge = calculePriseEnChargeConversion();
@@ -1905,7 +2092,7 @@ function finaliserConversionVente() {
         return;
     }
     
-    // 🔥 CORRECTION: Préparer les données avec les bonnes clés pour la vente
+    // 🔥🔥🔥 CORRECTION : Préparer les articles avec les vraies valeurs 🔥🔥🔥
     const articles = panierConversion.map(item => ({
         id: item.id,
         nom: item.nom,
@@ -1913,30 +2100,39 @@ function finaliserConversionVente() {
         quantite: item.quantite,
         prix_unitaire: item.prix,
         prix: item.prix,
-        pbr: item.pbr || item.prix,
+        pbr: (item.pbr !== undefined && item.pbr !== null) ? item.pbr : 0,  // 🔥 Garde 0
         total: item.prix * item.quantite,
-        prise_en_charge_amu: true,
-        prise_en_charge_cac: true
+        prise_en_charge_amu: item.prise_en_charge_amu !== false,  // 🔥 TRUE/FALSE réel
+        prise_en_charge_cac: item.prise_en_charge_cac !== false   // 🔥 TRUE/FALSE réel
     }));
+    
+    // 🔥 Calculer les totaux avec les bonnes valeurs
+    const sousTotal = calculeSousTotalConversion();
+    const priseEnCharge = calculePriseEnChargeConversion();
+    const priseEnCharge2 = calculePriseEnCharge2Conversion();
     
     const data = {
         proforma_id: proformaConversionData.id,
         patient_id: proformaConversionData.patient_id,
         patient_nom: proformaConversionData.patient_nom,
+        patient_telephone: proformaConversionData.patient_telephone || '',
         articles: articles,
-        sous_total: calculeSousTotalConversion(),
-        prise_en_charge: calculePriseEnChargeConversion(),
-        prise_en_charge2: calculePriseEnCharge2Conversion(),
+        sous_total: sousTotal,
+        prise_en_charge: priseEnCharge,
+        prise_en_charge2: priseEnCharge2,
         net_a_payer: netAPayer,
         mode_paiement: modePaiement,
         taux_assurance: proformaConversionData.taux_assurance || 0,
         assurance2_nom: proformaConversionData.assurance2_active ? proformaConversionData.assurance2_nom : '',
         taux_assurance2: proformaConversionData.assurance2_active ? proformaConversionData.taux_assurance2 || 0 : 0,
         assurance2_active: proformaConversionData.assurance2_active || false,
+        assurance_principale_active: proformaConversionData.assurance_principale_active !== false,
         montant_donne: montantDonne,
         type_document: typeDocument,
         notes: proformaConversionData.notes || '',
-        assurance_principale_active: true
+        base_remboursement: proformaConversionData.base_remboursement || 0,
+        taux_aide: proformaConversionData.taux_aide || 0,
+        aide_hospitaliere: proformaConversionData.aide_hospitaliere || 0
     };
     
     console.log('📦 Données conversion:', data);
@@ -1958,8 +2154,7 @@ function finaliserConversionVente() {
             
             if (response.vente_id) {
                 const format = '80mm';
-                // 🔥 Utiliser le type retourné par la route
-                const type = response.type || 'actes';
+                const type = response.type || 'mixte';
                 const url = `/recu/${response.vente_id}/${type}?format=${format}&montant_donne=${montantDonne}`;
                 window.open(url, '_blank');
             }
