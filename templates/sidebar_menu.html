@@ -15,19 +15,19 @@
             </a>
         </li>
         <a class="nav-link" href="{{ url_for('actes_vente') }}">
-            LABO/RADIO/Actes & Vente
+            Labo/Radio/Hospi/Actes&Vente
         </a>
         <a class="nav-link" href="{{ url_for('pharma_vente') }}">
-            Pharmacie
+            Pharmacie&Vente
         </a>
         <a class="nav-link" href="{{ url_for('factures') }}">
-            Factures clients
+            Factures clients&Créances
         </a>
         
         <!-- Référentiels AMU avec sous-menu -->
         <div class="dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="amuDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                Référentiels AMU
+                Référentiels AMU 
             </a>
             <ul class="dropdown-menu" aria-labelledby="amuDropdown">
                 <li>
@@ -45,19 +45,19 @@
 
 <!-- Historique et Rendez-vous -->
 <a class="nav-link" href="{{ url_for('historique_ventes') }}">
-    Historique
+    Historique des ventes
 </a>
 
 <a class="nav-link" href="{{ url_for('gestion_medecins') }}">
-    Medecins
+    Medecins&Activités
 </a>
 
 <a class="nav-link" href="{{ url_for('rendez_vous') }}">
-    Rendez-vous
+    Programmer Rendez-vous
 </a>
 
 <a class="nav-link" href="{{ url_for('rappels_rendez_vous') }}">
-    Rappels
+    Rappels des rendez-vous
 </a>
 
         <!-- Factures Proforma -->
@@ -85,22 +85,22 @@
         <!-- Administration -->
         {% if session.is_admin %}
         <a class="nav-link" href="{{ url_for('admin_finances') }}">
-            Finances
+            Finances/Caisse&Charge
         </a>
         <a class="nav-link" href="{{ url_for('statistiques_ventes') }}">
             Statistiques ventes/assurances
         </a>
         <a class="nav-link" href="{{ url_for('historique_annulations') }}">
-            Annulations
+            Historiques Annulations
         </a>
         <a class="nav-link" href="{{ url_for('rh.gestion_rh') }}">
-            GRH
+            Gestion Ressources humaines
         </a>
         <a class="nav-link" href="{{ url_for('comptabilite.index') }}">
-            Comptabilite
+            COMPTABILITE
         </a>
         <a class="nav-link" href="{{ url_for('admin_structure') }}">
-            Administration
+            ADMINISTRATION GENERALE
         </a>
         {% endif %}
     </div>
