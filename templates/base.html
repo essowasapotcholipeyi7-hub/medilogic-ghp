@@ -1209,6 +1209,212 @@
             padding-left: 15px;
             padding-right: 15px;
         }
+
+
+/* ============================================
+   SIDEBAR COLLAPSIBLE - NOUVEAU
+   ============================================ */
+
+/* Layout principal */
+.app-layout {
+    display: flex;
+    gap: 20px;
+    padding: 0 15px;
+    min-height: 100vh;
+}
+
+/* Sidebar wrapper */
+.sidebar-wrapper {
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+    padding: 10px 0 10px 0;
+    position: sticky;
+    top: 72px;
+    height: calc(100vh - 72px);
+}
+
+/* Sidebar */
+.sidebar {
+    width: 260px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 24px;
+    padding: 20px;
+    transition: all 0.3s ease;
+    overflow: hidden;
+    height: calc(100vh - 90px);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+}
+
+/* Sidebar réduit */
+.sidebar.collapsed {
+    width: 70px;
+}
+
+.sidebar.collapsed .menu-text {
+    display: none;
+}
+
+.sidebar.collapsed .menu-title {
+    font-size: 0;
+}
+
+.sidebar.collapsed .menu-title i {
+    font-size: 18px;
+    margin-right: 0;
+}
+
+.sidebar.collapsed .nav-link {
+    justify-content: center;
+    padding: 10px 5px;
+}
+
+.sidebar.collapsed .nav-link i {
+    margin-right: 0;
+    font-size: 18px;
+}
+
+.sidebar.collapsed .badge {
+    display: none !important;
+}
+
+.sidebar.collapsed .dropdown-toggle::after {
+    display: none;
+}
+
+/* Bouton toggle */
+.sidebar-toggle-btn {
+    position: absolute;
+    top: 15px;
+    right: -12px;
+    z-index: 100;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    color: white;
+    border: 2px solid rgba(255,255,255,0.3);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    padding: 0;
+}
+
+.sidebar-toggle-btn:hover {
+    transform: scale(1.1);
+    border-color: white;
+}
+
+/* Effet hover sur le menu réduit */
+.sidebar.collapsed:hover {
+    width: 260px;
+}
+
+.sidebar.collapsed:hover .menu-text {
+    display: inline-block;
+}
+
+.sidebar.collapsed:hover .menu-title {
+    font-size: 0.65rem;
+}
+
+.sidebar.collapsed:hover .menu-title i {
+    font-size: 14px;
+    margin-right: 8px;
+}
+
+.sidebar.collapsed:hover .nav-link {
+    justify-content: flex-start;
+    padding: 10px 16px;
+}
+
+.sidebar.collapsed:hover .nav-link i {
+    margin-right: 12px;
+    font-size: 16px;
+}
+
+.sidebar.collapsed:hover .badge {
+    display: inline-block !important;
+}
+
+.sidebar.collapsed:hover .dropdown-toggle::after {
+    display: inline-block;
+}
+
+/* Contenu principal */
+.main-content {
+    flex: 1;
+    min-width: 0;
+    padding: 0 0 0 15px;
+    transition: all 0.3s ease;
+}
+
+/* Responsive */
+@media (max-width: 992px) {
+    .app-layout {
+        flex-direction: column;
+        padding: 0 10px;
+    }
+
+    .sidebar-wrapper {
+        padding: 0;
+        height: auto;
+        position: relative;
+        top: 0;
+    }
+
+    .sidebar {
+        width: 100% !important;
+        height: auto;
+        max-height: 60vh !important;
+        position: relative;
+        top: 0;
+        border-radius: 16px;
+    }
+
+    .sidebar.collapsed {
+        width: 100% !important;
+        max-height: 60px !important;
+        overflow: hidden;
+    }
+
+    .sidebar.collapsed:hover {
+        max-height: 60vh !important;
+        width: 100% !important;
+    }
+
+    .sidebar-toggle-btn {
+        right: 15px;
+        top: 15px;
+    }
+
+    .main-content {
+        padding: 0;
+    }
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        border-radius: 12px;
+        padding: 15px;
+    }
+
+    .sidebar .nav-link {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+
+    .main-content {
+        padding: 0;
+    }
+}
+
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -1306,7 +1512,7 @@
     <ul class="nav-group">
         <li class="nav-item nav-item-accueil">
             <a class="nav-link-top" href="{{ url_for('dashboard') }}">
-                <i class="fas fa-tachometer-alt me-1"></i> Accueil
+                Accueil
             </a>
         </li>
         <li class="nav-item nav-item-patients">
@@ -1315,13 +1521,13 @@
             </a>
             <div class="mega-menu">
                 <a class="menu-item" href="{{ url_for('patients') }}">
-                    <i class="fas fa-users"></i> Liste des patients
+                    Liste des patients
                 </a>
                 <a class="menu-item" href="{{ url_for('rendez_vous') }}">
-                    <i class="fas fa-calendar-alt"></i> Rendez-vous
+                    Programmer Rendez-vous
                 </a>
                 <a class="menu-item" href="{{ url_for('rappels_rendez_vous') }}">
-                    <i class="fas fa-bell"></i> Rappels
+                    Rappels des rendez-vous
                 </a>
             </div>
         </li>
@@ -1331,13 +1537,13 @@
             </a>
             <div class="mega-menu large">
                 <a class="menu-item" href="{{ url_for('consultation') }}">
-                    <i class="fas fa-stethoscope"></i> Consultation
+                    Consultation
                 </a>
                 <a class="menu-item" href="{{ url_for('actes_vente') }}">
-                    <i class="fas fa-vial"></i> LABO/RADIO/Actes
+                    Labo/Radio/Hospi/Actes
                 </a>
                 <a class="menu-item" href="{{ url_for('prescriptions_recues') }}">
-                    <i class="fas fa-prescription-bottle"></i> Prescriptions reçues
+                    Prescriptions reçues
                 </a>
             </div>
         </li>
@@ -1347,10 +1553,10 @@
             </a>
             <div class="mega-menu">
                 <a class="menu-item" href="{{ url_for('pharma_vente') }}">
-                    <i class="fas fa-pills"></i> Vente pharmacie
+                    Vente pharmacie
                 </a>
                 <a class="menu-item" href="{{ url_for('gestion_stock') }}">
-                    <i class="fas fa-boxes"></i> Gestion des stocks
+                    Gestion des stocks
                 </a>
             </div>
         </li>
@@ -1360,36 +1566,36 @@
             </span>
             <div class="mega-menu">
                 <a class="menu-item" href="{{ url_for('factures') }}">
-                    <i class="fas fa-file-invoice"></i> Factures clients
+                    Factures clients&Créances
                 </a>
                 <a class="menu-item" href="{{ url_for('proformas') }}">
-                    <i class="fas fa-file-invoice"></i> Factures Proforma
+                    Factures Proforma
                 </a>
                 {% if session.is_admin %}
                 <a class="menu-item" href="{{ url_for('admin_finances') }}">
-                    <i class="fas fa-coins"></i> Finances
+                    Finances&Caisse&Charges
                 </a>
                 <a class="menu-item" href="{{ url_for('statistiques_ventes') }}">
-                    <i class="fas fa-chart-bar"></i> Statistiques
+                    Statistiques des ventes
                 </a>
                 {% endif %}
             </div>
         </li>
         <li class="nav-item nav-item-historique">
             <a class="nav-link-top" href="{{ url_for('historique_ventes') }}">
-                <i class="fas fa-history me-1"></i> Historique
+                Historique des ventes
             </a>
         </li>
         <li class="nav-item nav-item-referentiels">
             <span class="nav-link-top">
-                Référentiels <i class="fas fa-chevron-down arrow"></i>
+                Référentiels AMU <i class="fas fa-chevron-down arrow"></i>
             </span>
             <div class="mega-menu">
                 <a class="menu-item" href="https://referentiels.amu.tg/#/providers" target="_blank">
-                    <i class="fas fa-hospital"></i> AMU-CNSS
+                    AMU-CNSS
                 </a>
                 <a class="menu-item" href="https://prestaplus.inam.tg/Vue/index.php" target="_blank">
-                    <i class="fas fa-file-invoice"></i> AMU-INAM
+                    AMU-INAM
                 </a>
             </div>
         </li>
@@ -1403,13 +1609,13 @@
                     <i class="fas fa-cog"></i> Administration
                 </a>
                 <a class="menu-item" href="{{ url_for('rh.gestion_rh') }}">
-                    <i class="fas fa-users-cog"></i> GRH
+                    Gestion Ressources Humaines
                 </a>
                 <a class="menu-item" href="{{ url_for('comptabilite.index') }}">
-                    <i class="fas fa-calculator"></i> Comptabilité
+                    Comptabilité
                 </a>
                 <a class="menu-item" href="{{ url_for('historique_annulations') }}">
-                    <i class="fas fa-ban"></i> Annulations
+                    Historique Annulations
                 </a>
             </div>
         </li>
@@ -1446,22 +1652,47 @@
 {% endif %}
 
 <!-- ============================================
-     CONTENU PRINCIPAL
+     LAYOUT AVEC SIDEBAR COLLAPSIBLE
      ============================================ -->
-<div class="container-fluid px-0 mt-2">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm fade-in" role="alert">
-                    <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-triangle' if category == 'danger' else 'info-circle' }} me-2"></i>
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
+<div class="app-layout">
+    
+    <!-- ===== SIDEBAR ===== -->
+    <div class="sidebar-wrapper">
+        <div class="sidebar" id="sidebarMenu">
+            <!-- Bouton toggle -->
+            <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Afficher/Masquer le menu">
+                <i class="fas fa-chevron-left" id="toggleIcon"></i>
+            </button>
+            
+            <!-- Contenu du sidebar -->
+            <div style="overflow-y: auto; flex: 1;">
+                {% include 'sidebar_menu.html' %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- ===== CONTENU PRINCIPAL ===== -->
+    <div class="main-content" id="mainContent">
+        
+        <!-- ===== FLASH MESSAGES ===== -->
+        <div class="container-fluid px-0 mt-2">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm fade-in" role="alert">
+                            <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-triangle' if category == 'danger' else 'info-circle' }} me-2"></i>
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+        </div>
 
-    {% block content %}{% endblock %}
+        <!-- ===== CONTENU ===== -->
+        {% block content %}{% endblock %}
+        
+    </div>
 </div>
 
 <!-- ============================================
@@ -1708,6 +1939,50 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     });
+});
+
+
+// ============================================
+// TOGGLE SIDEBAR - NOUVEAU
+// ============================================
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebarMenu');
+    const icon = document.getElementById('toggleIcon');
+    
+    if (!sidebar) return;
+    
+    sidebar.classList.toggle('collapsed');
+    
+    if (sidebar.classList.contains('collapsed')) {
+        icon.className = 'fas fa-chevron-right';
+        localStorage.setItem('sidebarCollapsed', 'true');
+    } else {
+        icon.className = 'fas fa-chevron-left';
+        localStorage.setItem('sidebarCollapsed', 'false');
+    }
+}
+
+function restoreSidebarState() {
+    const sidebar = document.getElementById('sidebarMenu');
+    const icon = document.getElementById('toggleIcon');
+    
+    if (!sidebar) return;
+    
+    const collapsed = localStorage.getItem('sidebarCollapsed');
+    
+    if (collapsed === 'true') {
+        sidebar.classList.add('collapsed');
+        if (icon) icon.className = 'fas fa-chevron-right';
+    } else {
+        sidebar.classList.remove('collapsed');
+        if (icon) icon.className = 'fas fa-chevron-left';
+    }
+}
+
+// Restaurer l'état au chargement
+document.addEventListener('DOMContentLoaded', function() {
+    restoreSidebarState();
 });
 
 // ============================================

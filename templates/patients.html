@@ -3,21 +3,15 @@
 {% block title %}Gestion des patients{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-3 mb-4">
-        {% include 'sidebar_menu.html' %}
-    </div>
-
-    <div class="col-md-9">
         <div class="card">
             <div class="card-header bg-info text-white d-flex justify-content-between align-items-center flex-wrap">
-                <h5 class="mb-0"><i class="fas fa-users"></i> Liste des patients</h5>
+                <h5 class="mb-0"> Liste des patients</h5>
                 <div class="mt-2 mt-md-0">
                     <button class="btn btn-light btn-sm me-2" onclick="exportToCSV()">
-                        <i class="fas fa-file-excel"></i> Exporter
+                        Exporter Liste patient
                     </button>
                     <button class="btn btn-light btn-sm" onclick="showAddModal()">
-                        <i class="fas fa-plus"></i> Nouveau patient
+                        <i class="fas fa-plus"></i> Enrégistrer patient
                     </button>
                 </div>
             </div>
@@ -159,10 +153,10 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
                 <button class="btn btn-success" onclick="selectionnerDepuisDetails()" id="btnSelectFromDetail">
-                    <i class="fas fa-check"></i> Sélectionner
+                    Sélectionner
                 </button>
                 <button class="btn btn-warning" onclick="modifierDepuisDetails()" id="btnEditFromDetail">
-                    <i class="fas fa-edit"></i> Modifier
+                    Modifier
                 </button>
             </div>
         </div>
@@ -266,7 +260,6 @@
                                         <option value="non_assure">Non assuré (0%)</option>
                                         <option value="amu_cnss">AMU-CNSS (80%)</option>
                                         <option value="amu_inam">AMU-INAM (80%)</option>
-                                        <option value="autre">Autre assurance</option>
                                     </select>
                                 </div>
                                 <div class="col-md-4 mb-2" id="taux_div">
@@ -1374,7 +1367,6 @@ function showPatientDestinationModal(id, nom, assurance, taux, assurance2, taux2
                                             onmouseover="this.style.transform='scale(1.03)'" 
                                             onmouseout="this.style.transform='scale(1)'"
                                             onclick="redirigerVers('actes', ${id})">
-                                        <i class="fas fa-stethoscope" style="font-size: 32px; display: block; margin-bottom: 10px;"></i>
                                         <span style="font-size: 18px; font-weight: 600;">Actes</span>
                                         <br>
                                         <small class="text-muted">Vente d'actes médicaux</small>
@@ -1388,7 +1380,6 @@ function showPatientDestinationModal(id, nom, assurance, taux, assurance2, taux2
                                             onmouseover="this.style.transform='scale(1.03)'" 
                                             onmouseout="this.style.transform='scale(1)'"
                                             onclick="redirigerVers('pharma', ${id})">
-                                        <i class="fas fa-pills" style="font-size: 32px; display: block; margin-bottom: 10px;"></i>
                                         <span style="font-size: 18px; font-weight: 600;">Pharmacie</span>
                                         <br>
                                         <small class="text-muted">Vente de médicaments</small>
@@ -1402,7 +1393,6 @@ function showPatientDestinationModal(id, nom, assurance, taux, assurance2, taux2
                                             onmouseover="this.style.transform='scale(1.03)'" 
                                             onmouseout="this.style.transform='scale(1)'"
                                             onclick="redirigerVers('prescriptions', ${id})">
-                                        <i class="fas fa-prescription-bottle" style="font-size: 32px; display: block; margin-bottom: 10px;"></i>
                                         <span style="font-size: 18px; font-weight: 600;">Prescriptions</span>
                                         <br>
                                         <small class="text-muted">Voir les prescriptions reçues</small>
