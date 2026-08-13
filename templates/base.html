@@ -1212,45 +1212,44 @@
 
 
 /* ============================================
-   SIDEBAR COLLAPSIBLE - NOUVEAU
+   LAYOUT AVEC SIDEBAR COLLAPSIBLE
    ============================================ */
 
-/* Layout principal */
 .app-layout {
     display: flex;
     gap: 20px;
     padding: 0 15px;
     min-height: 100vh;
+    align-items: flex-start;  /* ⭐ Aligner en haut */
 }
 
-/* Sidebar wrapper */
+/* ===== SIDEBAR ===== */
 .sidebar-wrapper {
     flex-shrink: 0;
-    transition: all 0.3s ease;
-    padding: 10px 0 10px 0;
-    position: sticky;
-    top: 72px;
-    height: calc(100vh - 72px);
+    display: flex;
+    align-items: stretch;
 }
 
-/* Sidebar */
 .sidebar {
-    width: 260px;
+    width: 250px;
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border-radius: 24px;
-    padding: 20px;
+    color: white;
+    border-radius: 10px;
+    padding: 15px 0;
     transition: all 0.3s ease;
-    overflow: hidden;
-    height: calc(100vh - 90px);
-    position: relative;
     display: flex;
     flex-direction: column;
+    position: sticky;
+    top: 20px;
+    height: calc(100vh - 40px);
+    max-height: calc(100vh - 40px);
     box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+    overflow: hidden;
 }
 
 /* Sidebar réduit */
 .sidebar.collapsed {
-    width: 70px;
+    width: 60px;
 }
 
 .sidebar.collapsed .menu-text {
@@ -1284,36 +1283,156 @@
     display: none;
 }
 
-/* Bouton toggle */
+/* ===== CONTENU SCROLLABLE ===== */
+.sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 5px 10px 0;
+    margin-right: 3px;
+}
+
+/* ===== TITRE DU MENU ===== */
+.menu-title {
+    padding: 0 15px 15px 15px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    margin-bottom: 5px;
+    color: white;
+    font-size: 14px;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* ===== LIENS ===== */
+.sidebar .nav-link {
+    color: rgba(255,255,255,0.7);
+    padding: 8px 15px;
+    border-radius: 0;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    text-decoration: none;
+    border-left: 3px solid transparent;
+    flex-shrink: 0;
+}
+
+.sidebar .nav-link:hover {
+    background: rgba(255,255,255,0.1);
+    color: white;
+}
+
+.sidebar .nav-link.active {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border-left-color: #667eea;
+}
+
+.sidebar .nav-link i {
+    width: 20px;
+    margin-right: 10px;
+    font-size: 16px;
+    text-align: center;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+}
+
+.sidebar .nav-link .menu-text {
+    font-size: 13px;
+    transition: all 0.3s ease;
+}
+
+.sidebar .nav-link .badge {
+    margin-left: auto;
+    transition: all 0.3s ease;
+}
+
+/* ===== BOUTON TOGGLE ===== */
 .sidebar-toggle-btn {
     position: absolute;
-    top: 15px;
-    right: -12px;
+    top: 10px;
+    right: -15px;
     z-index: 100;
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    background: #1a2a6c;
     color: white;
-    border: 2px solid rgba(255,255,255,0.3);
+    border: 2px solid white;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
+    font-size: 14px;
     transition: all 0.3s ease;
     box-shadow: 0 2px 10px rgba(0,0,0,0.2);
     padding: 0;
 }
 
-.sidebar-toggle-btn:hover {
-    transform: scale(1.1);
-    border-color: white;
+/* ===== CONTENU PRINCIPAL ===== */
+.main-content {
+    flex: 1;
+    min-width: 0;
+    padding: 0 0 0 15px;
+    transition: all 0.3s ease;
 }
 
-/* Effet hover sur le menu réduit */
+/* ===== SCROLLBAR ===== */
+.sidebar-content::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.25);
+    border-radius: 10px;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 992px) {
+    .app-layout {
+        flex-direction: column;
+        padding: 0 10px;
+    }
+    
+    .sidebar {
+        width: 100% !important;
+        height: auto !important;
+        max-height: 60vh !important;
+        position: relative;
+        top: 0;
+        border-radius: 10px;
+    }
+    
+    .sidebar.collapsed {
+        max-height: 60px !important;
+        overflow: hidden;
+    }
+    
+    .sidebar.collapsed:hover {
+        max-height: 60vh !important;
+        width: 100% !important;
+    }
+    
+    .sidebar-toggle-btn {
+        right: 10px;
+        top: 15px;
+    }
+    
+    .main-content {
+        padding: 0;
+    }
+}
+
+/* ===== EFFET HOVER ===== */
 .sidebar.collapsed:hover {
-    width: 260px;
+    width: 250px;
 }
 
 .sidebar.collapsed:hover .menu-text {
@@ -1321,7 +1440,7 @@
 }
 
 .sidebar.collapsed:hover .menu-title {
-    font-size: 0.65rem;
+    font-size: 14px;
 }
 
 .sidebar.collapsed:hover .menu-title i {
@@ -1331,90 +1450,17 @@
 
 .sidebar.collapsed:hover .nav-link {
     justify-content: flex-start;
-    padding: 10px 16px;
+    padding: 8px 15px;
 }
 
 .sidebar.collapsed:hover .nav-link i {
-    margin-right: 12px;
+    margin-right: 10px;
     font-size: 16px;
 }
 
 .sidebar.collapsed:hover .badge {
     display: inline-block !important;
 }
-
-.sidebar.collapsed:hover .dropdown-toggle::after {
-    display: inline-block;
-}
-
-/* Contenu principal */
-.main-content {
-    flex: 1;
-    min-width: 0;
-    padding: 0 0 0 15px;
-    transition: all 0.3s ease;
-}
-
-/* Responsive */
-@media (max-width: 992px) {
-    .app-layout {
-        flex-direction: column;
-        padding: 0 10px;
-    }
-
-    .sidebar-wrapper {
-        padding: 0;
-        height: auto;
-        position: relative;
-        top: 0;
-    }
-
-    .sidebar {
-        width: 100% !important;
-        height: auto;
-        max-height: 60vh !important;
-        position: relative;
-        top: 0;
-        border-radius: 16px;
-    }
-
-    .sidebar.collapsed {
-        width: 100% !important;
-        max-height: 60px !important;
-        overflow: hidden;
-    }
-
-    .sidebar.collapsed:hover {
-        max-height: 60vh !important;
-        width: 100% !important;
-    }
-
-    .sidebar-toggle-btn {
-        right: 15px;
-        top: 15px;
-    }
-
-    .main-content {
-        padding: 0;
-    }
-}
-
-@media (max-width: 768px) {
-    .sidebar {
-        border-radius: 12px;
-        padding: 15px;
-    }
-
-    .sidebar .nav-link {
-        padding: 8px 12px;
-        font-size: 13px;
-    }
-
-    .main-content {
-        padding: 0;
-    }
-}
-
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -1654,46 +1700,67 @@
 <!-- ============================================
      LAYOUT AVEC SIDEBAR COLLAPSIBLE
      ============================================ -->
-<div class="app-layout">
-    
-    <!-- ===== SIDEBAR ===== -->
-    <div class="sidebar-wrapper">
-        <div class="sidebar" id="sidebarMenu">
-            <!-- Bouton toggle -->
-            <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Afficher/Masquer le menu">
-                <i class="fas fa-chevron-left" id="toggleIcon"></i>
-            </button>
-            
-            <!-- Contenu du sidebar -->
-            <div style="overflow-y: auto; flex: 1;">
-                {% include 'sidebar_menu.html' %}
+
+{% if session.user_id %}
+    <!-- Layout avec sidebar pour les utilisateurs connectés -->
+    <div class="app-layout">
+        
+        <!-- ===== SIDEBAR ===== -->
+        <div class="sidebar-wrapper">
+            <div class="sidebar" id="sidebarMenu">
+                <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Afficher/Masquer le menu">
+                    <i class="fas fa-chevron-left" id="toggleIcon"></i>
+                </button>
+                <div style="overflow-y: auto; flex: 1;">
+                    {% include 'sidebar_menu.html' %}
+                </div>
             </div>
         </div>
-    </div>
-    
-    <!-- ===== CONTENU PRINCIPAL ===== -->
-    <div class="main-content" id="mainContent">
         
-        <!-- ===== FLASH MESSAGES ===== -->
-        <div class="container-fluid px-0 mt-2">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm fade-in" role="alert">
-                            <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-triangle' if category == 'danger' else 'info-circle' }} me-2"></i>
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
+        <!-- ===== CONTENU PRINCIPAL ===== -->
+        <div class="main-content" id="mainContent">
+            
+            <!-- ===== FLASH MESSAGES ===== -->
+            <div class="container-fluid px-0 mt-2">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm fade-in" role="alert">
+                                <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-triangle' if category == 'danger' else 'info-circle' }} me-2"></i>
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+            </div>
+
+            <!-- ===== CONTENU ===== -->
+            {% block content %}{% endblock %}  <!-- ✅ FERMETURE AVEC endblock -->
+            
         </div>
+    </div>
+{% else %}
+    <!-- Layout simple sans sidebar pour les pages publiques -->
+    <div class="container-fluid px-3 mt-3">
+        <!-- ===== FLASH MESSAGES ===== -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm fade-in" role="alert">
+                        <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-triangle' if category == 'danger' else 'info-circle' }} me-2"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
 
         <!-- ===== CONTENU ===== -->
-        {% block content %}{% endblock %}
-        
+        <!-- On affiche le contenu du block défini plus haut -->
+        {{ self.content() }}
     </div>
-</div>
+{% endif %}  <!-- ✅ FERMETURE DU if AVEC endif -->
 
 <!-- ============================================
      SCRIPTS - CONSERVÉS
