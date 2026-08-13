@@ -16,36 +16,36 @@
             <div class="nav flex-column">
                 <!-- Principal -->
                 <a class="nav-link" href="{{ url_for('dashboard') }}">
-                    <i class="fas fa-tachometer-alt me-2"></i><span class="menu-text">Tableau de bord</span>
+                    <span class="menu-text">Tableau de bord</span>
                 </a>
                 
                 <a class="nav-link" href="{{ url_for('patients') }}">
-                    <i class="fas fa-users me-2"></i><span class="menu-text">Liste Patients</span>
+                    <span class="menu-text">Liste Patients</span>
                 </a>
                 
                 <li class="nav-item">
                     <a class="nav-link" href="{{ url_for('prescriptions_recues') }}">
-                        <i class="fas fa-prescription-bottle me-2"></i><span class="menu-text">Prescriptions reçues</span>
+                        <span class="menu-text">Prescriptions reçues</span>
                         <span class="badge bg-danger ms-1" id="prescriptionBadge">0</span>
                     </a>
                 </li>
                 
                 <a class="nav-link" href="{{ url_for('actes_vente') }}">
-                    <i class="fas fa-vial me-2"></i><span class="menu-text">Labo/Radio/Hospi/Actes&Vente</span>
+                    <span class="menu-text">Labo/Radio/Hospi/Actes&Vente</span>
                 </a>
                 
                 <a class="nav-link" href="{{ url_for('pharma_vente') }}">
-                    <i class="fas fa-pills me-2"></i><span class="menu-text">Pharmacie&Vente</span>
+                    <span class="menu-text">Pharmacie&Vente</span>
                 </a>
                 
                 <a class="nav-link" href="{{ url_for('factures') }}">
-                    <i class="fas fa-file-invoice me-2"></i><span class="menu-text">Factures clients&Créances</span>
+                    <span class="menu-text">Factures clients&Créances</span>
                 </a>
                 
                 <!-- Référentiels AMU -->
                 <div class="dropdown">
                     <a class="nav-link dropdown-toggle" href="#" id="amuDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="fas fa-hospital me-2"></i><span class="menu-text">Référentiels AMU</span>
+                        <span class="menu-text">Référentiels AMU</span>
                     </a>
                     <ul class="dropdown-menu" aria-labelledby="amuDropdown">
                         <li>
@@ -63,31 +63,31 @@
 
                 <!-- Historique et Rendez-vous -->
                 <a class="nav-link" href="{{ url_for('historique_ventes') }}">
-                    <i class="fas fa-history me-2"></i><span class="menu-text">Historique des ventes</span>
+                    <span class="menu-text">Historique des ventes</span>
                 </a>
 
                 <a class="nav-link" href="{{ url_for('gestion_medecins') }}">
-                    <i class="fas fa-user-md me-2"></i><span class="menu-text">Medecins&Activités</span>
+                    <span class="menu-text">Medecins&Activités</span>
                 </a>
 
                 <a class="nav-link" href="{{ url_for('rendez_vous') }}">
-                    <i class="fas fa-calendar-check me-2"></i><span class="menu-text">Programmer Rendez-vous</span>
+                    <span class="menu-text">Programmer Rendez-vous</span>
                 </a>
 
                 <a class="nav-link" href="{{ url_for('rappels_rendez_vous') }}">
-                    <i class="fas fa-bell me-2"></i><span class="menu-text">Rappels des rendez-vous</span>
+                    <span class="menu-text">Rappels des rendez-vous</span>
                 </a>
 
                 <!-- Factures Proforma -->
                 <a class="nav-link {% if request.endpoint == 'proformas' %}active{% endif %}" href="{{ url_for('proformas') }}">
-                    <i class="fas fa-file-invoice me-2"></i><span class="menu-text">Factures Proforma</span>
+                    <span class="menu-text">Factures Proforma</span>
                     <span class="badge bg-warning text-dark float-end" id="proformaBadge" style="display:none;">0</span>
                 </a>
 
                 <!-- Consultation -->
                 {% if session.role in ['admin', 'medecin', 'paramedical'] %}
                     <a class="nav-link" href="{{ url_for('consultation') }}">
-                        <i class="fas fa-stethoscope me-2"></i><span class="menu-text">Consultation & Prise en charge</span>
+                        <span class="menu-text">Consultation & Prise en charge</span>
                     </a>
                 {% endif %}
 
@@ -95,7 +95,7 @@
                 {% if session.role in ['admin', 'comptable', 'gestionnaire', 'pharmacien'] %}
                 <li class="nav-item">
                     <a class="nav-link" href="{{ url_for('gestion_stock') }}">
-                        <i class="fas fa-boxes me-2"></i><span class="menu-text">Gestion des stocks</span>
+                        <span class="menu-text">Gestion des stocks</span>
                     </a>
                 </li>
                 {% endif %}
@@ -103,22 +103,22 @@
                 <!-- Administration -->
                 {% if session.is_admin %}
                 <a class="nav-link" href="{{ url_for('admin_finances') }}">
-                    <i class="fas fa-coins me-2"></i><span class="menu-text">Finances/Caisse&Charge</span>
+                    <span class="menu-text">Finances/Caisse&Charge</span>
                 </a>
                 <a class="nav-link" href="{{ url_for('statistiques_ventes') }}">
-                    <i class="fas fa-chart-bar me-2"></i><span class="menu-text">Statistiques ventes/assurances</span>
+                    <span class="menu-text">Statistiques ventes/assurances</span>
                 </a>
                 <a class="nav-link" href="{{ url_for('historique_annulations') }}">
-                    <i class="fas fa-ban me-2"></i><span class="menu-text">Historiques Annulations</span>
+                    <span class="menu-text">Historiques Annulations</span>
                 </a>
                 <a class="nav-link" href="{{ url_for('rh.gestion_rh') }}">
-                    <i class="fas fa-users-cog me-2"></i><span class="menu-text">Gestion Ressources humaines</span>
+                    <span class="menu-text">Gestion Ressources humaines</span>
                 </a>
                 <a class="nav-link" href="{{ url_for('comptabilite.index') }}">
-                    <i class="fas fa-calculator me-2"></i><span class="menu-text">COMPTABILITE</span>
+                    <span class="menu-text">Comptabilité</span>
                 </a>
                 <a class="nav-link" href="{{ url_for('admin_structure') }}">
-                    <i class="fas fa-cog me-2"></i><span class="menu-text">ADMINISTRATION GENERALE</span>
+                    <span class="menu-text">Administration générale</span>
                 </a>
                 {% endif %}
             </div>
