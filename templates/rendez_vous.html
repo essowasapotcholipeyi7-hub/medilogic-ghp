@@ -75,7 +75,6 @@
                 <div class="card stat-card border-0 shadow-sm">
                     <div class="card-body text-center">
                         <div class="rounded-circle bg-primary bg-opacity-10 p-3 mx-auto mb-2" style="width: 60px; height: 60px;">
-                            <i class="fas fa-calendar-day text-primary fa-2x"></i>
                         </div>
                         <h3 class="mb-1 text-primary" id="statsAujourdhui">0</h3>
                         <small class="text-muted">Rendez-vous aujourd'hui</small>
@@ -86,7 +85,6 @@
                 <div class="card stat-card border-0 shadow-sm">
                     <div class="card-body text-center">
                         <div class="rounded-circle bg-warning bg-opacity-10 p-3 mx-auto mb-2" style="width: 60px; height: 60px;">
-                            <i class="fas fa-calendar-week text-warning fa-2x"></i>
                         </div>
                         <h3 class="mb-1 text-warning" id="statsSemaine">0</h3>
                         <small class="text-muted">Cette semaine</small>
@@ -125,7 +123,7 @@
                                 <i class="fas fa-times"></i>
                             </button>
                             <button class="btn btn-primary" onclick="showAddPatientModal()" type="button">
-                                <i class="fas fa-user-plus"></i> Nouveau patient
+                                <i class="fas fa-user-plus"></i>
                             </button>
                         </div>
                         <div class="text-muted small mt-1">
@@ -154,7 +152,7 @@
                     
                     <div class="col-md-4">
                         <label class="form-label fw-bold">
-                            <i class="fas fa-user-md me-1"></i> Medecin
+                            Medecin
                         </label>
                         <select class="form-select" id="medecinSelect" onchange="afficherDisponibilites()">
                             <option value="">-- Selectionner un medecin --</option>
@@ -248,10 +246,10 @@
     <div>
         <!-- Nouveau bouton pour imprimer le calendrier -->
         <button class="btn btn-light btn-sm me-2" onclick="imprimerCalendrier()">
-            <i class="fas fa-calendar-alt me-1"></i> Calendrier
+            <i class="fas fa-calendar-alt me-1"></i> Imprimer Calendrier
         </button>
         <button class="btn btn-light btn-sm me-2" onclick="imprimerRendezVous()">
-            <i class="fas fa-print me-1"></i> Imprimer
+            <i class="fas fa-print me-1"></i> Imprimer rdv patient
         </button>
         <button class="btn btn-light btn-sm" onclick="exporterRendezVousCSV()">
             <i class="fas fa-file-excel me-1"></i> Exporter
