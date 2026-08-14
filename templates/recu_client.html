@@ -8,11 +8,68 @@
 {% if format == '80mm' %}
 <style>
     @media print {
+        /* ===== PAGE ===== */
         @page {
             size: 80mm auto;
-            margin: 3mm;
+            margin: 2mm 3mm;
         }
         
+        /* ===== RESET ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 80mm !important;
+            height: auto !important;
+            min-height: auto !important;
+            max-height: none !important;
+            background: white !important;
+            font-family: 'Courier New', monospace !important;
+            font-size: 7px !important;
+            line-height: 1.2 !important;
+            color: black !important;
+            overflow: visible !important;
+        }
+        
+        /* ===== CACHER WATERMARK ===== */
+        body::after {
+            display: none !important;
+            content: '' !important;
+        }
+        
+        /* ===== CONTENEURS ===== */
+        .card {
+            border: none !important;
+            box-shadow: none !important;
+            margin: 0 !important;
+            padding: 2px 4px !important;
+            background: white !important;
+            height: auto !important;
+            min-height: auto !important;
+            page-break-inside: avoid !important;
+            page-break-after: avoid !important;
+        }
+        
+        .card-body {
+            padding: 0 !important;
+            margin: 0 !important;
+            height: auto !important;
+            min-height: auto !important;
+        }
+        
+        .container, .container-fluid, .row, .col-7, .col-5, 
+        .main-content, .app-wrapper, .d-flex {
+            height: auto !important;
+            min-height: auto !important;
+            max-height: none !important;
+        }
+        
+        /* ===== TEXTE ===== */
         body {
             width: 80mm;
             font-size: 7px;
@@ -33,54 +90,25 @@
             color: black !important;
         }
         
+        /* ===== BADGES ===== */
         .badge, .bg-primary, .bg-success, .bg-warning, .bg-danger, .bg-info {
             background: black !important;
             color: white !important;
         }
         
-        .container {
-            width: 100%;
-            padding: 0;
-            margin: 0;
-        }
-        
-        .card {
-            border: none !important;
-            box-shadow: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        
-        .card-body {
-            padding: 3px !important;
-        }
-        
-        .row {
-            margin: 0 !important;
-        }
-        
-        .col-7, .col-5 {
-            width: 100%;
-            text-align: center;
-        }
-        
-        h1, h2, h3, h4 {
-            margin: 2px 0;
-            font-size: 9px;
-        }
-        
+        /* ===== TABLEAU ===== */
         table {
             font-size: 6.5px;
+            width: 100%;
+            border-collapse: collapse;
         }
         
         table td, table th {
             padding: 1px 1px !important;
+            border: none !important;
         }
         
-        .text-end, .text-start, .text-center {
-            text-align: center !important;
-        }
-        
+        /* ===== AUTRES ===== */
         .no-print {
             display: none !important;
         }
@@ -116,6 +144,7 @@
             box-shadow: 0 5px 20px rgba(0,0,0,0.1);
         }
     }
+
 </style>
 {% else %}
 <style>

@@ -1111,45 +1111,51 @@
             }
         }
 
-        /* ============================================
-           IMPRESSION - CONSERVÉE
-           ============================================ */
-        @media print {
-            body {
-                background: white;
-                margin: 0;
-                padding: 0;
-            }
-            
-            .navbar, .sidebar, .btn, .no-print, 
-            #selectedPatientBadge, .alert,
-            button, .nav-link, .card-header .btn,
-            .btn-primary, .btn-success, .btn-warning, .btn-danger,
-            a[onclick], .ms-auto, .float-end, .sidebar,
-            .loader-overlay {
-                display: none !important;
-            }
-            
-            .card {
-                box-shadow: none;
-                border: 1px solid #ddd;
-                margin: 0;
-                padding: 0;
-                transform: none;
-            }
-            
-            .container {
-                padding: 0;
-                margin: 0;
-                width: 100%;
-                max-width: 100%;
-            }
-            
-            @page {
-                margin: 1.5cm;
-                size: A4;
-            }
-        }
+/* Styles impression */
+@media print {
+    body {
+        background: white;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* ⭐ Cacher le watermark sur toutes les impressions */
+    body::after {
+        display: none !important;
+        content: '' !important;
+    }
+
+    .navbar, .sidebar, .btn, .no-print, 
+    #selectedPatientBadge, .alert,
+    button, .nav-link, .card-header .btn,
+    .btn-primary, .btn-success, .btn-warning, .btn-danger,
+    a[onclick], .ms-auto, .float-end, .sidebar,
+    .loader-overlay {
+        display: none !important;
+    }
+
+    .card {
+        box-shadow: none;
+        border: 1px solid #ddd;
+        margin: 0;
+        padding: 0;
+        transform: none;
+    }
+
+    .container {
+        padding: 0;
+        margin: 0;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    @page {
+        margin: 1.5cm;
+        size: A4;
+    }
+}  /* ← L'accolade de fermeture est ici, à la fin */
+
+
 
         /* ============================================
            FULLSCREEN - CONSERVÉ
