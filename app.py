@@ -6978,7 +6978,6 @@ def api_recettes_detail():
         date_debut = request.args.get('date_debut')
         date_fin = request.args.get('date_fin')
         
-        # 🔥 Exclure les ventes annulées
         where_clause = "WHERE structure_id = %s AND (statut IS NULL OR statut != 'annulee')"
         params = [structure_id]
         
@@ -6988,12 +6987,15 @@ def api_recettes_detail():
             where_clause += " AND date_vente BETWEEN %s AND %s"
             params.extend([date_debut_formatted, date_fin_formatted])
         
-        # 🔥 Utiliser montant_donne au lieu de net_a_payer pour les recettes
+        # ✅ CORRECTION : Utiliser net_a_payer
         query = f"""
             SELECT 
                 type,
                 COUNT(*) as nombre_ventes,
-                COALESCE(SUM(montant_donne), 0) as total_recettes
+                COALESCE(SUM(net_a_payer), 0) as total_net,
+                COALESCE(SUM(montant_donne), 0) as total_donne,
+                COALESCE(SUM(rendu), 0) as total_rendu,
+                COALESCE(SUM(reste_a_payer), 0) as total_reste
             FROM ventes 
             {where_clause}
             GROUP BY type
@@ -7005,6 +7007,7 @@ def api_recettes_detail():
     except Exception as e:
         print(f"Erreur: {e}")
         return jsonify([]), 500
+
 
 @app.route('/api/finances/depenses/motif')
 @login_required

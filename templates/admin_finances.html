@@ -791,28 +791,43 @@ function genererRapport() {
             return fetch(detailUrl);
         })
         .then(response => response.json())
-        .then(recettesDetail => {
+        .then(data => {
+            // 🔥 CORRECTION : Utiliser les bonnes données
             let recettesActes = 0;
             let recettesPharma = 0;
             let nbActes = 0;
             let nbPharma = 0;
             
-            if (recettesDetail && recettesDetail.length) {
-                recettesDetail.forEach(item => {
+            // 🔥 Vérifier la structure des données retournées
+            const recettesList = data.recettes || data || [];
+            
+            if (recettesList.length) {
+                recettesList.forEach(item => {
+                    // 🔥 Utiliser total_net (net_a_payer) au lieu de total_recettes
+                    const montant = item.total_net || item.total_recettes || 0;
+                    
                     if (item.type === 'actes') {
-                        recettesActes = item.total_recettes || 0;
+                        recettesActes = montant;
                         nbActes = item.nombre_ventes || 0;
                     } else if (item.type === 'pharmacie' || item.type === 'pharma') {
-                        recettesPharma = item.total_recettes || 0;
+                        recettesPharma = montant;
                         nbPharma = item.nombre_ventes || 0;
                     }
                 });
             }
             
+            // Mettre à jour l'affichage
             document.getElementById('rapportRecettesActes').innerHTML = Math.round(recettesActes).toLocaleString('fr-FR') + ' FCFA';
             document.getElementById('rapportRecettesPharma').innerHTML = Math.round(recettesPharma).toLocaleString('fr-FR') + ' FCFA';
             document.getElementById('rapportNbActes').innerHTML = nbActes;
             document.getElementById('rapportNbPharma').innerHTML = nbPharma;
+            
+            // 🔥 Afficher les détails des montants (optionnel)
+            if (data.totaux) {
+                console.log('💰 Net payé total:', data.totaux.total_net);
+                console.log('💰 Montant donné total:', data.totaux.total_donne);
+                console.log('💰 Rendu total:', data.totaux.total_rendu);
+            }
             
             hideLoader();
         })
