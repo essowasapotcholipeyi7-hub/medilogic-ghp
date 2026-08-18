@@ -82,7 +82,9 @@ class Patient(db.Model):
     personne_a_prevenir_nom = db.Column(db.String(100))
     personne_a_prevenir_telephone = db.Column(db.String(50))
     personne_a_prevenir_relation = db.Column(db.String(50))
-    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+   
 
 # ============================================================
 # STRUCTURE MAPPING (pour la synchronisation)
@@ -666,7 +668,7 @@ class Vente(db.Model):
     prise_en_charge = db.Column(db.Float, default=0)
     net_a_payer = db.Column(db.Float, default=0)
     mode_paiement = db.Column(db.String(50), default='especes')
-    taux_assurance = db.Column(db.Integer, default=0)  # ⭐ INTEGER (pas Float)
+    taux_assurance = db.Column(db.Integer, default=0)
     date_vente = db.Column(db.DateTime, default=datetime.utcnow)
     actes = db.Column(db.JSON)
     produits = db.Column(db.JSON)
@@ -690,20 +692,24 @@ class Vente(db.Model):
     taux_temp_modifie = db.Column(db.Boolean, default=False)
     taux_original = db.Column(db.Float, default=0)
     
-    # ⭐ Colonnes d'automatisation (déjà en base ✅)
+    # ⭐ Colonnes d'automatisation
     categorie_actes = db.Column(db.JSON, default=[])
     traite_comptable = db.Column(db.Boolean, default=False)
     ecriture_generee = db.Column(db.Boolean, default=False)
     ecriture_id = db.Column(db.Integer, nullable=True)
     
-    # ⭐ Prescription IDs (déjà en base ✅)
+    # ⭐ Prescription IDs
     prescription_ids = db.Column(db.JSON, default=[])
     
     assurance_principale_active = db.Column(db.Boolean, default=True)
 
+    # ⭐ NOUVELLES COLONNES À AJOUTER
+    taux_aide = db.Column(db.Float, default=0)
+    aide_hospitaliere = db.Column(db.Float, default=0)
+    proforma_id = db.Column(db.Integer, nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
 
 # ============================================================
 # MODÈLES POUR LES MÉDECINS ET RENDEZ-VOUS
@@ -1326,3 +1332,403 @@ class SequencePiece(db.Model):
             'format_affichage': sequence.format_affichage
         }
 
+# ============================================================
+# MODÈLES MANQUANTS (à ajouter)
+# ============================================================
+
+class AnnulationVente(db.Model):
+    __tablename__ = 'annulations_ventes'
+    id = db.Column(db.Integer, primary_key=True)
+    vente_id = db.Column(db.Integer, nullable=False)
+    vente_type = db.Column(db.String(50))
+    motif = db.Column(db.String(255))
+    annule_par_id = db.Column(db.Integer)
+    annule_par_nom = db.Column(db.String(255))
+    ancien_net_a_payer = db.Column(db.Numeric)
+    ancien_sous_total = db.Column(db.Numeric)
+    data_avant = db.Column(db.JSON)
+    date_annulation = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Caisse(db.Model):
+    __tablename__ = 'caisse'
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False, unique=True)  # ⭐ AJOUTÉ
+    solde_actuel = db.Column(db.Numeric, default=0)
+    solde_initial = db.Column(db.Numeric, default=0)
+    date_mise_a_jour = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Depense(db.Model):
+    __tablename__ = 'depenses'
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    montant = db.Column(db.Numeric, nullable=False)
+    motif = db.Column(db.String(255), nullable=False)
+    motif_personnalise = db.Column(db.String(255))
+    description = db.Column(db.Text)
+    piece_jointe = db.Column(db.String(255))
+    date_depense = db.Column(db.DateTime, default=datetime.utcnow)
+    created_by = db.Column(db.Integer)
+    created_by_nom = db.Column(db.String(255))
+
+
+class Facture(db.Model):
+    __tablename__ = 'factures'
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    patient_id = db.Column(db.Integer, nullable=False)
+    patient_nom = db.Column(db.String(255), nullable=False)
+    patient_telephone = db.Column(db.String(50))
+    numero_facture = db.Column(db.String(50), nullable=False)
+    date_emission = db.Column(db.Date, default=db.func.current_date())
+    date_echeance = db.Column(db.Date, nullable=False)
+    sous_total = db.Column(db.Numeric, default=0, nullable=False)
+    taux_assurance = db.Column(db.Numeric, default=0)
+    prise_en_charge = db.Column(db.Numeric, default=0)
+    taux_assurance2 = db.Column(db.Numeric, default=0)
+    prise_en_charge2 = db.Column(db.Numeric, default=0)
+    net_a_payer = db.Column(db.Numeric, default=0, nullable=False)
+    montant_paye = db.Column(db.Numeric, default=0)
+    reste_a_payer = db.Column(db.Numeric, default=0)
+    statut = db.Column(db.String(50), default='en_attente')
+    articles = db.Column(db.JSON)
+    mode_paiement = db.Column(db.String(50))
+    notes = db.Column(db.Text)
+    created_by = db.Column(db.String(255))
+    base_remboursement = db.Column(db.Numeric, default=0)
+    assurances_data = db.Column(db.JSON)
+    vente_id = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class FactureAssurance(db.Model):
+    __tablename__ = 'factures_assurance'
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    mois_reference = db.Column(db.String(20), nullable=False)
+    assurance = db.Column(db.String(255), nullable=False)
+    montant_total = db.Column(db.Numeric, nullable=False)
+    montant_rembourse = db.Column(db.Numeric, default=0)
+    statut = db.Column(db.String(50), default='en_attente')
+    date_facture = db.Column(db.Date, default=db.func.current_date())
+    date_remboursement = db.Column(db.Date)
+    details = db.Column(db.JSON)
+    type_assurance = db.Column(db.String(50), default='principale')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PaiementFacture(db.Model):
+    __tablename__ = 'paiements_factures'
+    id = db.Column(db.Integer, primary_key=True)
+    facture_id = db.Column(db.Integer, nullable=False)
+    montant = db.Column(db.Numeric, nullable=False)
+    date_paiement = db.Column(db.DateTime, default=datetime.utcnow)
+    mode_paiement = db.Column(db.String(50))
+    reference = db.Column(db.String(255))
+    notes = db.Column(db.Text)
+    created_by = db.Column(db.String(255))
+    recu_genere = db.Column(db.Boolean, default=False)
+
+
+class Proforma(db.Model):
+    __tablename__ = 'proformas'
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    patient_id = db.Column(db.Integer)
+    patient_nom = db.Column(db.String(255), nullable=False)
+    patient_telephone = db.Column(db.String(50))
+    assurance_nom = db.Column(db.String(255))
+    taux_assurance = db.Column(db.Numeric, default=0)
+    numero_assure = db.Column(db.String(255))
+    type = db.Column(db.String(50), nullable=False, default='mixte')
+    articles = db.Column(db.JSON, nullable=False, default=[])
+    sous_total = db.Column(db.Numeric, default=0, nullable=False)
+    prise_en_charge = db.Column(db.Numeric, default=0, nullable=False)
+    net_a_payer = db.Column(db.Numeric, default=0, nullable=False)
+    statut = db.Column(db.String(50), default='en_attente')
+    vente_id = db.Column(db.Integer)
+    notes = db.Column(db.Text)
+    created_by = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    expires_at = db.Column(db.DateTime)
+    vue_par_patient = db.Column(db.Boolean, default=False)
+    date_vue = db.Column(db.DateTime)
+    numero_proforma = db.Column(db.Integer)
+    assurance2_nom = db.Column(db.String(255), default='')
+    taux_assurance2 = db.Column(db.Numeric, default=0)
+    numero_assure2 = db.Column(db.String(255), default='')
+    assurance2_active = db.Column(db.Boolean, default=False)
+    taux_modifie = db.Column(db.Boolean, default=False)
+    taux_original = db.Column(db.Numeric, default=0)
+    prise_en_charge2 = db.Column(db.Numeric, default=0)
+    assurances_data = db.Column(db.JSON)
+    base_remboursement = db.Column(db.Numeric, default=0)
+    base_cac = db.Column(db.Numeric, default=0)
+
+
+class ProformaLunette(db.Model):
+    __tablename__ = 'proformas_lunettes'
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    patient_id = db.Column(db.Integer, nullable=False)
+    patient_nom = db.Column(db.String(255))
+    patient_telephone = db.Column(db.String(50))
+    patient_date_naissance = db.Column(db.Date)
+    patient_age = db.Column(db.Integer)
+    numero = db.Column(db.String(255))
+    articles = db.Column(db.JSON)
+    sous_total = db.Column(db.Numeric, default=0)
+    remise = db.Column(db.Numeric, default=0)
+    type_remise = db.Column(db.String(50), default='pourcentage')
+    valeur_remise = db.Column(db.Numeric, default=0)
+    net_a_payer = db.Column(db.Numeric, default=0)
+    tva_taux = db.Column(db.Numeric, default=18)
+    medecin_prescripteur = db.Column(db.String(255))
+    notes = db.Column(db.Text)
+    statut = db.Column(db.String(50), default='en_attente')
+    created_by = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    rib = db.Column(db.String(50))
+    numero_affiliation = db.Column(db.String(255))
+
+
+class Recette(db.Model):
+    __tablename__ = 'recettes'
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    montant = db.Column(db.Numeric, nullable=False)
+    source = db.Column(db.String(255))
+    description = db.Column(db.Text)
+    date_recette = db.Column(db.DateTime, default=datetime.utcnow)
+    created_by = db.Column(db.Integer)
+    created_by_nom = db.Column(db.String(255))
+    source_id = db.Column(db.Integer)
+    source_type = db.Column(db.String(255))
+    est_annulation = db.Column(db.Boolean, default=False)
+
+
+class VenteLunette(db.Model):
+    __tablename__ = 'ventes_lunettes'
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    patient_id = db.Column(db.Integer, nullable=False)
+    patient_nom = db.Column(db.String(255))
+    lunette_id = db.Column(db.Integer)
+    lunette_nom = db.Column(db.String(255))
+    marque = db.Column(db.String(255))
+    modele = db.Column(db.String(255))
+    prix = db.Column(db.Float, default=0)
+    remise = db.Column(db.Float, default=0)
+    prix_avec_remise = db.Column(db.Float, default=0)
+    quantite = db.Column(db.Integer, default=1)
+    total = db.Column(db.Float, default=0)
+    taux_assurance = db.Column(db.Float, default=0)
+    prise_en_charge = db.Column(db.Float, default=0)
+    prise_en_charge2 = db.Column(db.Float, default=0)
+    net_a_payer = db.Column(db.Float, default=0)
+    mode_paiement = db.Column(db.String(50), default='especes')
+    montant_donne = db.Column(db.Float, default=0)
+    rendu = db.Column(db.Float, default=0)
+    reste_a_payer = db.Column(db.Float, default=0)
+    created_by = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+# ============================================================
+# MODÈLE RAPPEL RENDEZ-VOUS (À AJOUTER À LA FIN DE models.py)
+# ============================================================
+
+class RappelRendezVous(db.Model):
+    """Modèle pour l'historique des rappels"""
+    
+    __tablename__ = 'rappels_rendez_vous'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    rendez_vous_id = db.Column(db.Integer, db.ForeignKey('rendez_vous.id'), nullable=False)
+    
+    type_rappel = db.Column(db.String(20), nullable=False)
+    statut = db.Column(db.String(20), default='en_attente')
+    
+    date_planifiee = db.Column(db.DateTime, default=datetime.utcnow)
+    date_envoyee = db.Column(db.DateTime)
+    
+    message_envoye = db.Column(db.Text)
+    url_whatsapp = db.Column(db.String(500))
+    
+    erreur = db.Column(db.Text)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    rendez_vous = db.relationship('RendezVous', backref='rappels')
+
+# ============================================================
+# MODÈLES POUR LA GESTION DES PROTOCOLES ET MODÈLES
+# ============================================================
+
+class ProtocoleMedical(db.Model):
+    """Modèle pour les protocoles de soins et modèles médicaux"""
+    
+    __tablename__ = 'protocoles_medicaux'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, db.ForeignKey('structures.id'), nullable=False)
+    
+    # Catégorie du document
+    categorie = db.Column(db.String(50), nullable=False)
+    # protocole_soins, ordonnance_type, bulletin_examen, 
+    # protocole_patient, fiche_information, protocole_infirmier
+    
+    # Identité
+    titre = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    contenu = db.Column(db.Text, nullable=False)  # Contenu principal
+    
+    # Métadonnées
+    specialite = db.Column(db.String(100))  # Cardiologie, Pédiatrie, etc.
+    tags = db.Column(db.JSON, default=[])  # Mots-clés pour recherche
+    version = db.Column(db.Integer, default=1)
+    statut = db.Column(db.String(20), default='brouillon')
+    # brouillon, en_validation, publie, archive
+    
+    # Auteur
+    auteur_id = db.Column(db.Integer, db.ForeignKey('utilisateurs.id'))
+    auteur_nom = db.Column(db.String(100))
+    
+    # Pour les ordonnances types
+    medicaments = db.Column(db.JSON, default=[])  # Liste des médicaments
+    examens = db.Column(db.JSON, default=[])  # Liste des examens
+    
+    # Pour les protocoles patient
+    patient_id = db.Column(db.Integer, db.ForeignKey('patients.id'), nullable=True)
+    date_debut = db.Column(db.Date)
+    date_fin = db.Column(db.Date)
+    
+    # Pour les protocoles de soins
+    etapes = db.Column(db.JSON, default=[])  # Étapes du protocole
+    duree = db.Column(db.String(50))  # Durée estimée
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relations
+    structure = db.relationship('Structure', backref='protocoles')
+    auteur = db.relationship('Utilisateur', backref='protocoles')
+    patient = db.relationship('Patient', backref='protocoles')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'structure_id': self.structure_id,
+            'categorie': self.categorie,
+            'categorie_label': self.get_categorie_label(),
+            'titre': self.titre,
+            'description': self.description,
+            'contenu': self.contenu,
+            'specialite': self.specialite,
+            'tags': self.tags or [],
+            'version': self.version,
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'auteur_id': self.auteur_id,
+            'auteur_nom': self.auteur_nom,
+            'medicaments': self.medicaments or [],
+            'examens': self.examens or [],
+            'patient_id': self.patient_id,
+            'date_debut': self.date_debut.isoformat() if self.date_debut else None,
+            'date_fin': self.date_fin.isoformat() if self.date_fin else None,
+            'etapes': self.etapes or [],
+            'duree': self.duree,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+    
+    def get_categorie_label(self):
+        labels = {
+            'protocole_soins': 'Protocole de soins',
+            'ordonnance_type': 'Ordonnance type',
+            'bulletin_examen': 'Bulletin d\'examen',
+            'protocole_patient': 'Protocole patient',
+            'fiche_information': 'Fiche d\'information',
+            'protocole_infirmier': 'Protocole infirmier'
+        }
+        return labels.get(self.categorie, self.categorie)
+    
+    def get_statut_label(self):
+        labels = {
+            'brouillon': 'Brouillon',
+            'en_validation': 'En validation',
+            'publie': 'Publié',
+            'archive': 'Archivé'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def generer_ordonnance(self, patient_nom, date_rdv):
+        """Génère une ordonnance à partir d'un modèle"""
+        if self.categorie != 'ordonnance_type':
+            return None
+        
+        content = self.contenu
+        content = content.replace('{{patient_nom}}', patient_nom)
+        content = content.replace('{{date}}', date_rdv)
+        
+        return content
+
+    def generer_protocole(self, patient_nom):
+        """Génère un protocole personnalisé pour un patient"""
+        if self.categorie not in ['protocole_soins', 'protocole_patient']:
+            return None
+        
+        content = self.contenu
+        content = content.replace('{{patient_nom}}', patient_nom)
+        
+        return content
+
+
+class HistoriqueProtocole(db.Model):
+    """Historique des modifications des protocoles"""
+    
+    __tablename__ = 'historique_protocoles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    protocole_id = db.Column(db.Integer, db.ForeignKey('protocoles_medicaux.id'), nullable=False)
+    
+    action = db.Column(db.String(50), nullable=False)  # creation, modification, validation, publication
+    utilisateur_id = db.Column(db.Integer)
+    utilisateur_nom = db.Column(db.String(100))
+    ancien_contenu = db.Column(db.Text)
+    nouveau_contenu = db.Column(db.Text)
+    commentaire = db.Column(db.Text)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    protocole = db.relationship('ProtocoleMedical', backref='historique')
+
+
+class ProtocolePatient(db.Model):
+    """Lien entre un patient et un protocole de soins"""
+    
+    __tablename__ = 'protocoles_patients'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, db.ForeignKey('structures.id'), nullable=False)
+    
+    patient_id = db.Column(db.Integer, db.ForeignKey('patients.id'), nullable=False)
+    protocole_id = db.Column(db.Integer, db.ForeignKey('protocoles_medicaux.id'), nullable=False)
+    
+    statut = db.Column(db.String(20), default='en_cours')
+    # en_cours, termine, abandonne
+    
+    date_debut = db.Column(db.Date, nullable=False)
+    date_fin = db.Column(db.Date)
+    notes = db.Column(db.Text)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    patient = db.relationship('Patient', backref='protocoles_appliques')
+    protocole = db.relationship('ProtocoleMedical', backref='patients_associes')
+    structure = db.relationship('Structure', backref='protocoles_patients')
