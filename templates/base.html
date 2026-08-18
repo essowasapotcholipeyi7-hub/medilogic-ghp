@@ -1235,7 +1235,10 @@
     background: #f0f2f5;
 }
 
-/* ===== SIDEBAR ===== */
+/* ============================================
+   SIDEBAR - VERSION COMPLÈTE
+   ============================================ */
+
 .sidebar {
     width: 260px;
     background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
@@ -1261,42 +1264,41 @@
 
 /* ===== SIDEBAR HEADER ===== */
 .sidebar-header {
-    padding: 16px 20px;
+    padding: 18px 20px;
     border-bottom: 1px solid rgba(255,255,255,0.06);
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-shrink: 0;
-    min-height: 60px;
+    min-height: 65px;
 }
 
 .sidebar-header .logo-area {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     overflow: hidden;
     white-space: nowrap;
 }
 
 .sidebar-header .logo-area i {
-    font-size: 24px;
+    font-size: 26px;
     color: #667eea;
     flex-shrink: 0;
 }
 
 .sidebar-header .logo-area span {
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 700;
     color: white;
     letter-spacing: 0.5px;
-    transition: opacity 0.2s ease;
 }
 
 /* ===== BOUTON TOGGLE ===== */
 .sidebar-toggle {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
     background: rgba(255,255,255,0.08);
     border: none;
     color: white;
@@ -1319,66 +1321,66 @@
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 12px 0 20px 0;
+    padding: 16px 0 20px 0;
 }
 
-/* Scrollbar personnalisée */
-.sidebar-nav::-webkit-scrollbar {
-    width: 4px;
-}
-
-.sidebar-nav::-webkit-scrollbar-track {
-    background: rgba(255,255,255,0.05);
-}
-
-.sidebar-nav::-webkit-scrollbar-thumb {
-    background: rgba(255,255,255,0.2);
-    border-radius: 10px;
-}
-
-.sidebar-nav::-webkit-scrollbar-thumb:hover {
-    background: rgba(255,255,255,0.3);
-}
-
-/* ===== CATEGORIES ===== */
+/* ===== CATÉGORIES ===== */
 .sidebar-category {
-    padding: 8px 20px 4px 20px;
-    font-size: 10px;
+    padding: 12px 20px 6px 20px;
+    font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 1.5px;
-    color: rgba(255,255,255,0.3);
-    font-weight: 600;
+    color: rgba(255,255,255,0.35);
+    font-weight: 700;
 }
 
 /* ===== LIENS ===== */
 .sidebar-link {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 20px;
+    gap: 14px;
+    padding: 12px 20px;
     color: rgba(255,255,255,0.65);
     text-decoration: none;
-    font-size: 14px;
+    font-size: 15px;
+    font-weight: 500;
     transition: all 0.15s ease;
-    border-left: 3px solid transparent;
+    border-left: 4px solid transparent;
     position: relative;
     cursor: pointer;
 }
 
 .sidebar-link:hover {
-    background: rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.08);
     color: white;
+    transform: translateX(4px);
 }
 
+/* ⭐ LIEN ACTIF (surbrillance) */
 .sidebar-link.active {
-    background: rgba(102, 126, 234, 0.15);
-    color: white;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.25) 0%, rgba(118, 75, 162, 0.20) 100%);
+    color: #ffffff !important;
     border-left-color: #667eea;
+    box-shadow: inset 0 0 20px rgba(102, 126, 234, 0.10);
 }
 
+.sidebar-link.active i {
+    color: #667eea !important;
+}
+
+.sidebar-link.active .link-text {
+    color: #ffffff !important;
+    font-weight: 600;
+}
+
+.sidebar-link.active:hover {
+    transform: translateX(2px);
+}
+
+/* ⭐ ICÔNES */
 .sidebar-link i {
-    width: 20px;
-    font-size: 16px;
+    width: 24px;
+    font-size: 18px;
     text-align: center;
     flex-shrink: 0;
     color: rgba(255,255,255,0.5);
@@ -1390,33 +1392,34 @@
     color: #667eea;
 }
 
-.sidebar-link .badge {
-    margin-left: auto;
-    font-size: 10px;
-    padding: 2px 10px;
-    border-radius: 20px;
-    background: #667eea;
-    color: white;
-}
-
+/* ⭐ TEXTE DES LIENS */
 .sidebar-link .link-text {
+    font-size: 15px;
+    font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* ===== SOUS-MENU DROPDOWN ===== */
-.sidebar-dropdown {
-    position: relative;
+/* ⭐ BADGES */
+.sidebar-link .badge {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 3px 12px;
+    border-radius: 20px;
+    background: #667eea;
+    color: white;
+    font-weight: 600;
 }
 
+/* ===== DROPDOWN ===== */
 .sidebar-dropdown .dropdown-toggle {
     cursor: pointer;
 }
 
 .sidebar-dropdown .dropdown-toggle .arrow {
     margin-left: auto;
-    font-size: 10px;
+    font-size: 12px;
     transition: transform 0.2s ease;
 }
 
@@ -1438,10 +1441,10 @@
 
 .sidebar-dropdown .dropdown-item {
     display: block;
-    padding: 8px 20px 8px 52px;
+    padding: 10px 20px 10px 54px;
     color: rgba(255,255,255,0.55);
     text-decoration: none;
-    font-size: 13px;
+    font-size: 14px;
     transition: all 0.15s ease;
 }
 
@@ -1451,28 +1454,36 @@
 }
 
 .sidebar-dropdown .dropdown-item i {
-    margin-right: 8px;
-    font-size: 12px;
+    margin-right: 10px;
+    font-size: 14px;
 }
 
 /* ===== SIDEBAR FOOTER ===== */
 .sidebar-footer {
-    padding: 12px 20px;
+    padding: 15px 20px;
     border-top: 1px solid rgba(255,255,255,0.06);
-    font-size: 11px;
+    font-size: 13px;
     color: rgba(255,255,255,0.3);
     flex-shrink: 0;
     text-align: center;
 }
 
-/* ===== CONTENU PRINCIPAL ===== */
-.main-content {
-    flex: 1;
-    min-width: 0;
-    padding: 20px 25px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    overflow-y: auto;
-    max-height: 100vh;
+/* ===== SCROLLBAR ===== */
+.sidebar-nav::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.05);
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.3);
 }
 
 /* ===== RESPONSIVE ===== */
@@ -1507,12 +1518,18 @@
     .sidebar-overlay.active {
         display: block;
     }
-
-    .main-content {
-        padding: 15px;
-        max-height: none;
-    }
 }
+
+/* ===== CONTENU PRINCIPAL ===== */
+.main-content {
+    flex: 1;
+    min-width: 0;
+    padding: 20px 25px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+    max-height: 100vh;
+}
+
 
 /* ============================================
      BOUTON TOGGLE GLOBAL (toujours visible)
@@ -1684,7 +1701,7 @@
                 <a class="menu-item" href="{{ url_for('rendez_vous') }}">
                     Programmer Rendez-vous
                 </a>
-                <a class="menu-item" href="{{ url_for('rappels_rendez_vous') }}">
+                <a class="menu-item" href="{{ url_for('rappels') }}">
                     Rappels des rendez-vous
                 </a>
             </div>

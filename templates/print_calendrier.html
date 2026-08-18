@@ -5,126 +5,57 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calendrier des rendez-vous</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-            background: #f0f2f5;
-            padding: 20px;
-        }
-        
-        .calendrier-container {
-            max-width: 1200px;
-            margin: 0 auto;
+            font-family: 'Segoe UI', Arial, sans-serif;
             background: white;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.08);
             padding: 20px;
         }
-        
-        /* ===== BARRE D'OUTILS ===== */
-        .toolbar {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-bottom: 15px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #e6ebf2;
-        }
-        
-        .toolbar .btn {
-            padding: 8px 20px;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 500;
-            cursor: pointer;
-            border: none;
-            transition: all 0.2s ease;
-        }
-        
-        .toolbar .btn-print {
-            background: #1a2a6c;
-            color: white;
-        }
-        
-        .toolbar .btn-print:hover {
-            background: #2d4373;
-        }
-        
-        .toolbar .btn-close {
-            background: #e74c3c;
-            color: white;
-        }
-        
-        .toolbar .btn-close:hover {
-            background: #c0392b;
-        }
-        
-        /* ===== EN-TETE ===== */
-        .calendrier-header {
+        .header {
             text-align: center;
             padding: 20px 0 15px 0;
             border-bottom: 3px solid #1a2a6c;
             margin-bottom: 25px;
         }
-        
-        .calendrier-header .logo-area {
+        .header .logo-area {
             display: flex;
             justify-content: center;
             align-items: center;
             gap: 15px;
             flex-wrap: wrap;
         }
-        
-        .calendrier-header .logo-area img {
+        .header .logo-area img {
             max-height: 60px;
             max-width: 120px;
             object-fit: contain;
         }
-        
-        .calendrier-header h1 {
+        .header h1 {
             font-size: 24px;
             color: #1a2a6c;
-            font-weight: 700;
-            letter-spacing: 1px;
         }
-        
-        .calendrier-header .sub-info {
-            font-size: 13px;
+        .header .sub-info {
+            font-size: 12px;
             color: #6c7a89;
             margin-top: 5px;
         }
-        
-        .calendrier-header .period {
-            font-size: 18px;
-            font-weight: 600;
+        .header .sub-info span {
+            margin: 0 8px;
+        }
+        .header .period {
+            font-size: 16px;
             color: #2d4373;
             margin-top: 8px;
-            background: #f5f7fb;
-            padding: 8px 20px;
-            border-radius: 8px;
-            display: inline-block;
+            font-weight: 600;
         }
-        
-        .calendrier-header .stats {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            margin-top: 10px;
-            font-size: 13px;
+        .header .stats {
+            font-size: 12px;
             color: #3d4f60;
+            margin-top: 5px;
         }
-        
-        .calendrier-header .stats span {
+        .header .stats span {
             font-weight: 600;
             color: #1a2a6c;
         }
-        
-        /* ===== GRILLE CALENDRIER ===== */
         .calendrier-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
@@ -132,12 +63,10 @@
             background: #e6ebf2;
             border: 1px solid #dce3ed;
         }
-        
         .jour-colonne {
             background: white;
             min-height: 400px;
         }
-        
         .jour-entete {
             background: #1a2a6c;
             color: white;
@@ -146,31 +75,25 @@
             font-weight: 600;
             font-size: 13px;
         }
-        
         .jour-entete .date-num {
             font-size: 22px;
             font-weight: 700;
         }
-        
         .jour-entete .date-nom {
             font-size: 11px;
             opacity: 0.8;
             text-transform: uppercase;
         }
-        
         .jour-entete.weekend {
             background: #2d4373;
         }
-        
         .jour-entete.aujourdhui {
             background: #e74c3c;
         }
-        
         .jour-contenu {
             padding: 6px;
             min-height: 300px;
         }
-        
         .jour-contenu .aucun-rdv {
             text-align: center;
             color: #b0b8c5;
@@ -178,424 +101,155 @@
             padding: 20px 5px;
             font-style: italic;
         }
-        
-        /* ===== CARTE RENDEZ-VOUS ===== */
         .rdv-card {
             background: #f8faff;
             border-radius: 6px;
-            padding: 8px 10px;
-            margin-bottom: 5px;
+            padding: 6px 8px;
+            margin-bottom: 4px;
             border-left: 4px solid #667eea;
-            font-size: 11px;
-            transition: none;
+            font-size: 10px;
         }
-        
         .rdv-card .rdv-heure {
             font-weight: 700;
             color: #1a2a6c;
-            font-size: 13px;
+            font-size: 12px;
         }
-        
         .rdv-card .rdv-patient {
             font-weight: 600;
             color: #1a2a3a;
-            margin: 2px 0;
+            font-size: 11px;
         }
-        
         .rdv-card .rdv-medecin {
             color: #6c7a89;
-            font-size: 10px;
+            font-size: 9px;
         }
-        
         .rdv-card .rdv-motif {
             color: #3d4f60;
-            font-size: 10px;
-            margin-top: 2px;
-            padding-top: 2px;
-            border-top: 1px dashed #e6ebf2;
-        }
-        
-        .rdv-card .rdv-telephone {
             font-size: 9px;
-            color: #8e9aaf;
+            margin-top: 1px;
         }
-        
         .rdv-card .badge-statut {
             display: inline-block;
-            font-size: 8px;
-            padding: 1px 8px;
-            border-radius: 12px;
+            font-size: 7px;
+            padding: 1px 6px;
+            border-radius: 10px;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.3px;
+            margin-top: 2px;
         }
-        
-        .badge-statut.programme {
-            background: #fff3cd;
-            color: #856404;
-        }
-        
-        .badge-statut.confirme {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .badge-statut.termine {
-            background: #e2e3e5;
-            color: #383d41;
-        }
-        
-        .badge-statut.reporte {
-            background: #d1ecf1;
-            color: #0c5460;
-        }
-        
-        /* ===== PIED DE PAGE ===== */
-        .calendrier-footer {
+        .badge-statut.programme { background: #fff3cd; color: #856404; }
+        .badge-statut.confirme { background: #d4edda; color: #155724; }
+        .badge-statut.termine { background: #e2e3e5; color: #383d41; }
+        .badge-statut.annule { background: #f8d7da; color: #721c24; }
+        .badge-statut.reporte { background: #d1ecf1; color: #0c5460; }
+        .footer {
             margin-top: 25px;
             padding-top: 15px;
             border-top: 2px solid #e6ebf2;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
+            text-align: center;
             font-size: 10px;
             color: #8e9aaf;
         }
-        
-        .calendrier-footer .legende {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-        
-        .calendrier-footer .legende-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        
-        .calendrier-footer .legende-item .color {
-            width: 12px;
-            height: 12px;
-            border-radius: 3px;
-        }
-        
-        .calendrier-footer .right {
-            font-weight: 500;
-            color: #1a2a6c;
-        }
-        
-        /* ===== MEDIA PRINT ===== */
         @media print {
-            body {
-                padding: 10px;
-                background: white;
-            }
-            
-            .calendrier-container {
-                box-shadow: none;
-                border-radius: 0;
-                padding: 0;
-            }
-            
-            /* Cacher la barre d'outils lors de l'impression */
-            .toolbar {
-                display: none !important;
-            }
-            
-            .calendrier-grid {
-                break-inside: avoid;
-            }
-            
-            .jour-colonne {
-                break-inside: avoid;
-                page-break-inside: avoid;
-            }
-            
-            .calendrier-header .stats {
-                font-size: 11px;
-            }
-            
-            .rdv-card {
-                font-size: 9px;
-                padding: 4px 6px;
-            }
-            
-            .rdv-card .rdv-heure {
-                font-size: 11px;
-            }
-            
-            .jour-entete {
-                font-size: 11px;
-                padding: 6px 4px;
-            }
-            
-            .jour-entete .date-num {
-                font-size: 18px;
-            }
-            
-            .jour-contenu {
-                min-height: 200px;
-                padding: 4px;
-            }
-            
-            /* Forcer l'impression des couleurs */
-            .jour-entete,
-            .jour-entete.weekend,
-            .jour-entete.aujourdhui {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            .badge-statut.programme,
-            .badge-statut.confirme,
-            .badge-statut.termine,
-            .badge-statut.reporte {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            .rdv-card {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            .calendrier-header .period {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            .calendrier-footer .legende-item .color {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
+            body { padding: 10px; }
+            .calendrier-grid { break-inside: avoid; }
+            .jour-colonne { break-inside: avoid; page-break-inside: avoid; }
+            .jour-entete { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .rdv-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .badge-statut { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
-        
-        /* ===== MEDIA SCREEN ===== */
         @media screen and (max-width: 768px) {
-            .calendrier-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-            
-            .calendrier-header h1 {
-                font-size: 18px;
-            }
-            
-            .calendrier-header .period {
-                font-size: 14px;
-            }
-            
-            .toolbar {
-                flex-wrap: wrap;
-                justify-content: center;
-            }
+            .calendrier-grid { grid-template-columns: 1fr 1fr; }
         }
-        
         @media screen and (max-width: 480px) {
-            .calendrier-grid {
-                grid-template-columns: 1fr;
-            }
+            .calendrier-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-    <div class="calendrier-container">
-        <!-- ===== BARRE D'OUTILS ===== -->
-        <div class="toolbar">
-            <button class="btn btn-print" onclick="imprimer()">
-                <i class="fas fa-print"></i> Imprimer
-            </button>
-            <button class="btn btn-close" onclick="fermer()">
-                <i class="fas fa-times"></i> Fermer
-            </button>
+    <div class="header">
+        <div class="logo-area">
+            {% if structure and structure.logo_url %}
+            <img src="{{ structure.logo_url }}" alt="Logo">
+            {% endif %}
+            <h1>{{ structure.nom if structure else 'Hopital' }}</h1>
         </div>
-
-        <!-- ===== EN-TETE ===== -->
-        <div class="calendrier-header">
-            <div class="logo-area">
-                {% if structure_info.logo_url %}
-                <img src="{{ structure_info.logo_url }}" alt="Logo">
-                {% endif %}
-                <h1>{{ structure_info.nom or 'Mon Etablissement' }}</h1>
-            </div>
-            <div class="sub-info">
-                {% if structure_info.adresse %}
-                <span>{{ structure_info.adresse }}</span>
-                {% endif %}
-                {% if structure_info.telephone %}
-                <span> | Tel: {{ structure_info.telephone }}</span>
-                {% endif %}
-                {% if structure_info.email %}
-                <span> | Email: {{ structure_info.email }}</span>
-                {% endif %}
-            </div>
-            <div class="period">
-                Calendrier des rendez-vous - {{ libelle_filtre }}
-            </div>
-            <div class="stats">
-                <span>{{ stats.total }}</span> rendez-vous programmes
-                <span>|</span>
-                <span>{{ stats.jours_avec_rdv }}</span> jours avec rendez-vous
-                <span>|</span>
-                <span>{{ stats.jours_total }}</span> jours au total
-            </div>
-            <div style="font-size: 11px; color: #8e9aaf; margin-top: 5px;">
-                Genere le {{ now.strftime('%d/%m/%Y à %H:%M') }}
-            </div>
+        <div class="sub-info">
+            {% if structure and structure.adresse %}
+            <span>{{ structure.adresse }}</span>
+            {% endif %}
+            {% if structure and structure.telephone %}
+            <span>| Tel: {{ structure.telephone }}</span>
+            {% endif %}
+            {% if structure and structure.email %}
+            <span>| Email: {{ structure.email }}</span>
+            {% endif %}
         </div>
-
-        <!-- ===== GRILLE CALENDRIER ===== -->
-        <div class="calendrier-grid">
-            {% for jour in jours_liste %}
-            {% set date_str = jour.isoformat() %}
-            {% set rdvs = rdv_par_jour.get(date_str, []) %}
-            {% set jour_semaine = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'][jour.weekday()] %}
-            {% set est_weekend = jour.weekday() >= 5 %}
-            {% set est_aujourdhui = jour == today %}
-            
-            <div class="jour-colonne">
-                <div class="jour-entete {% if est_weekend %}weekend{% endif %} {% if est_aujourdhui %}aujourdhui{% endif %}">
-                    <div class="date-num">{{ jour.strftime('%d') }}</div>
-                    <div class="date-nom">{{ jour_semaine }}</div>
-                    <div style="font-size: 9px; opacity: 0.7;">{{ jour.strftime('%b %Y') }}</div>
-                </div>
-                
-                <div class="jour-contenu">
-                    {% if rdvs %}
-                        {% for rdv in rdvs %}
-                        <div class="rdv-card">
-                            <div class="rdv-heure">{{ rdv.heure }}</div>
-                            <div class="rdv-patient">{{ rdv.patient_nom }}</div>
-                            {% if rdv.medecin_nom %}
-                            <div class="rdv-medecin">{{ rdv.medecin_nom }}</div>
-                            {% endif %}
-                            {% if rdv.motif %}
-                            <div class="rdv-motif">{{ rdv.motif }}</div>
-                            {% endif %}
-                            {% if rdv.patient_telephone %}
-                            <div class="rdv-telephone">Tel: {{ rdv.patient_telephone }}</div>
-                            {% endif %}
-                            <span class="badge-statut {{ rdv.statut }}">
-                                {{ rdv.statut }}
-                            </span>
-                        </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="aucun-rdv">Aucun patient programme</div>
-                    {% endif %}
-                </div>
-            </div>
-            {% endfor %}
+        <div class="period">Calendrier des rendez-vous - {{ libelle_periode }}</div>
+        <div class="stats">
+            <span>{{ stats.total }}</span> rendez-vous | 
+            <span>{{ stats.jours_avec_rdv }}</span> jours avec rendez-vous | 
+            <span>{{ stats.jours_total }}</span> jours
         </div>
-
-        <!-- ===== PIED DE PAGE ===== -->
-        <div class="calendrier-footer">
-            <div class="legende">
-                <div class="legende-item">
-                    <div class="color" style="background: #667eea;"></div>
-                    <span>Consultation</span>
-                </div>
-                <div class="legende-item">
-                    <div class="color" style="background: #28a745;"></div>
-                    <span>Confirme</span>
-                </div>
-                <div class="legende-item">
-                    <div class="color" style="background: #ffc107;"></div>
-                    <span>Programme</span>
-                </div>
-                <div class="legende-item">
-                    <div class="color" style="background: #17a2b8;"></div>
-                    <span>Reporte</span>
-                </div>
-                <div class="legende-item">
-                    <div class="color" style="background: #dc3545;"></div>
-                    <span>Annule</span>
-                </div>
-            </div>
-            <div class="right">
-                {{ structure_info.nom or 'Mon Etablissement' }}
-            </div>
+        <div style="font-size: 11px; color: #8e9aaf; margin-top: 5px;">
+            Genere le {{ now.strftime('%d/%m/%Y à %H:%M') }}
         </div>
     </div>
 
+    <div class="calendrier-grid">
+        {% for jour in jours_liste %}
+        {% set date_str = jour.isoformat() %}
+        {% set rdvs = rdv_par_jour.get(date_str, []) %}
+        {% set jour_semaine = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'][jour.weekday()] %}
+        {% set est_weekend = jour.weekday() >= 5 %}
+        {% set est_aujourdhui = jour == today %}
+        
+        <div class="jour-colonne">
+            <div class="jour-entete {% if est_weekend %}weekend{% endif %} {% if est_aujourdhui %}aujourdhui{% endif %}">
+                <div class="date-num">{{ jour.strftime('%d') }}</div>
+                <div class="date-nom">{{ jour_semaine }}</div>
+                <div style="font-size: 9px; opacity: 0.7;">{{ jour.strftime('%b %Y') }}</div>
+            </div>
+            <div class="jour-contenu">
+                {% if rdvs %}
+                    {% for rdv in rdvs %}
+                    <div class="rdv-card">
+                        <div class="rdv-heure">{{ rdv.heure_rendez_vous }}</div>
+                        <div class="rdv-patient">{{ rdv.patient_nom }}</div>
+                        {% if rdv.medecin %}
+                        <div class="rdv-medecin">Medecin: {{ rdv.medecin.get_nom_complet() if rdv.medecin.get_nom_complet else rdv.medecin.nom }}</div>
+                        {% elif rdv.medecin_nom %}
+                        <div class="rdv-medecin">Medecin: {{ rdv.medecin_nom }}</div>
+                        {% endif %}
+                        {% if rdv.motif %}
+                        <div class="rdv-motif">{{ rdv.motif }}</div>
+                        {% endif %}
+                        <span class="badge-statut {{ rdv.statut }}">
+                            {{ rdv.get_statut_label() if rdv.get_statut_label else rdv.statut }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="aucun-rdv">Aucun rendez-vous</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="footer">
+        {{ structure.nom if structure else 'Hopital' }} - Document genere le {{ now.strftime('%d/%m/%Y à %H:%M') }}
+    </div>
+
     <script>
-        // ============================================================
-        // IMPRESSION AVEC FERMETURE AUTOMATIQUE
-        // ============================================================
-        
-        let impressionLancee = false;
-        
-        // Fonction pour imprimer
-        function imprimer() {
-            if (!impressionLancee) {
-                impressionLancee = true;
-                window.print();
-            }
-        }
-        
-        // Fonction pour fermer
-        function fermer() {
-            if (confirm('Voulez-vous fermer cette fenetre ?')) {
-                window.close();
-            }
-        }
-        
-        // ===== FERMETURE AUTOMATIQUE APRES IMPRESSION =====
-        // Evenement declenche apres l'impression
-        window.addEventListener('afterprint', function() {
-            if (impressionLancee) {
-                // Fermer automatiquement apres un court delai
-                setTimeout(function() {
-                    try {
-                        window.close();
-                    } catch(e) {
-                        // Si la fermeture automatique echoue, rien
-                    }
-                }, 600);
-            }
-        });
-        
-        // ===== IMPRESSION AUTOMATIQUE AU CHARGEMENT =====
-        // La page s'ouvre et imprime directement
         window.onload = function() {
-            // Petit delai pour que la page soit bien chargee
             setTimeout(function() {
-                imprimer();
+                window.print();
+                setTimeout(function() {
+                    window.close();
+                }, 600);
             }, 500);
         };
-        
-        // ===== RACCOURCIS CLAVIER =====
-        document.addEventListener('keydown', function(e) {
-            // Ctrl+P pour imprimer
-            if (e.ctrlKey && e.key === 'p') {
-                e.preventDefault();
-                imprimer();
-            }
-            // Echap pour fermer
-            if (e.key === 'Escape') {
-                fermer();
-            }
-        });
-        
-        // ===== FALLBACK: SI L'UTILISATEUR ANNULE L'IMPRESSION =====
-        // Si apres 10 secondes l'impression n'a pas ete lancee
-        // on affiche un message pour inviter a imprimer
-        setTimeout(function() {
-            if (!impressionLancee) {
-                // Afficher une notification subtile
-                const info = document.querySelector('.info-auto');
-                if (info) {
-                    info.innerHTML = '<i class="fas fa-exclamation-circle" style="color: #e74c3c;"></i> Cliquez sur "Imprimer" pour lancer l\'impression';
-                    info.style.color = '#e74c3c';
-                }
-            }
-        }, 3000);
     </script>
 </body>
 </html>

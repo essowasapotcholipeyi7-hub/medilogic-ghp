@@ -14,8 +14,19 @@ from models import Vente
 # ⭐ Importer depuis db_helper et models
 from db_helper import db as db_helper
 from models import db, StructureMapping, Patient, Utilisateur, Structure, Employe, Service, Conge, Permission, DocumentRH, Vente, SignatureRH
+from models import RendezVous
+from models import Medecin, Patient, Structure
+from datetime import datetime, date, timedelta
+from routes.protocoles_routes import protocoles_bp
+
+
+
 
 from routes.statistiques import statistiques_bp
+
+from services.rendez_vous_service import RendezVousService
+from services.rappels_service import RappelsService
+
 
 # ========== DÉTECTION ENVIRONNEMENT ==========
 IS_PRODUCTION = os.environ.get('RENDER') == 'true' or os.environ.get('PRODUCTION') == 'true'
@@ -44,6 +55,9 @@ app.register_blueprint(compta_bp)
 
 # Enregistrer le blueprint
 app.register_blueprint(statistiques_bp)
+
+app.register_blueprint(protocoles_bp)
+
 
 @app.after_request
 def auto_commit_after_request(response):
@@ -3483,203 +3497,512 @@ def get_motifs():
 @app.route('/rendez_vous')
 @login_required
 def rendez_vous():
-    """Page de gestion des rendez-vous avec filtres par intervalle"""
+    """Page de gestion des rendez-vous"""
     structure_id = session.get('structure_id')
     
-    # Recuperer les parametres de filtrage
-    filtre_date = request.args.get('filtre_date', 'aujourdhui')  # aujourdhui, semaine, mois, personnalise
-    date_debut = request.args.get('date_debut')
-    date_fin = request.args.get('date_fin')
+    # Récupérer les paramètres de filtrage
+    periode = request.args.get('periode', 'tous')
+    date_debut_str = request.args.get('date_debut')
+    date_fin_str = request.args.get('date_fin')
+    statut = request.args.get('statut', 'tous')
+    medecin_id = request.args.get('medecin_id', type=int)
     
-    today = datetime.now().date()
+    today = date.today()
+    date_debut = None
+    date_fin = None
     
-    # Definir l'intervalle selon le filtre
-    if filtre_date == 'aujourdhui':
+    # Définir les dates selon la période
+    if periode == 'tous':
+        date_debut = None
+        date_fin = None
+    elif periode == 'aujourdhui':
         date_debut = today
         date_fin = today
-        libelle_filtre = "Aujourd'hui"
-    elif filtre_date == 'semaine':
-        # Du lundi au dimanche
-        date_debut = today - timedelta(days=today.weekday())
+    elif periode == 'semaine':
+        jour_semaine = today.weekday()
+        date_debut = today - timedelta(days=jour_semaine)
         date_fin = date_debut + timedelta(days=6)
-        libelle_filtre = "Cette semaine"
-    elif filtre_date == 'mois':
-        # Du 1er au dernier jour du mois
+    elif periode == 'mois':
         date_debut = date(today.year, today.month, 1)
         if today.month == 12:
             date_fin = date(today.year + 1, 1, 1) - timedelta(days=1)
         else:
             date_fin = date(today.year, today.month + 1, 1) - timedelta(days=1)
-        libelle_filtre = "Ce mois"
-    else:  # personnalise
-        if date_debut:
-            date_debut = datetime.strptime(date_debut, '%Y-%m-%d').date()
-        else:
+    elif periode == 'personnalise' and date_debut_str and date_fin_str:
+        try:
+            date_debut = datetime.strptime(date_debut_str, '%Y-%m-%d').date()
+            date_fin = datetime.strptime(date_fin_str, '%Y-%m-%d').date()
+        except ValueError:
             date_debut = today
-        if date_fin:
-            date_fin = datetime.strptime(date_fin, '%Y-%m-%d').date()
-        else:
             date_fin = today
-        libelle_filtre = "Personnalise"
     
-    # Recuperer les patients
-    patients = db.execute_query("""
-        SELECT id, nom, prenom, telephone 
-        FROM patients 
-        WHERE structure_id = %s 
-        ORDER BY nom
-    """, (structure_id,))
+    # Récupérer les rendez-vous
+    rendez_vous, total = RendezVousService.get_rendez_vous_liste(
+        structure_id=structure_id,
+        date_debut=date_debut,
+        date_fin=date_fin,
+        statut=statut if statut != 'tous' else None,
+        medecin_id=medecin_id
+    )
     
-    patients_list = []
+    # Récupérer les médecins et patients
+    medecins = Medecin.query.filter_by(structure_id=structure_id, actif=True).all()
+    patients = Patient.query.filter_by(structure_id=structure_id).order_by(Patient.nom).all()
+    
+    return render_template(
+        'rendez_vous.html',
+        rendez_vous=rendez_vous,
+        medecins=medecins,
+        patients=patients,
+        periode=periode,
+        date_debut=date_debut_str,
+        date_fin=date_fin_str,
+        statut=statut,
+        medecin_id=medecin_id,
+        total=total,
+        today=today.isoformat()
+    )
+
+
+# ============================================================
+# API RENDEZ-VOUS
+# ============================================================
+
+@app.route('/rendez_vous/api/creer', methods=['POST'])
+@login_required
+def api_creer_rendez_vous():
+    """API: Créer un nouveau rendez-vous"""
+    structure_id = session.get('structure_id')
+    data = request.json
+    
+    if not data:
+        return jsonify({'success': False, 'error': 'Données manquantes'}), 400
+    
+    succes, resultat = RendezVousService.creer_rendez_vous(
+        data=data,
+        structure_id=structure_id,
+        utilisateur_nom=session.get('user_nom', 'Systeme')
+    )
+    
+    if succes:
+        return jsonify({
+            'success': True,
+            'data': resultat,
+            'message': 'Rendez-vous créé avec succès'
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'error': resultat.get('error', 'Erreur lors de la création')
+        }), 400
+
+
+@app.route('/rendez_vous/api/<int:rdv_id>/confirmer', methods=['POST'])
+@login_required
+def api_confirmer_rendez_vous(rdv_id):
+    """API: Confirmer un rendez-vous"""
+    structure_id = session.get('structure_id')
+    
+    succes, resultat = RendezVousService.confirmer_rendez_vous(
+        rdv_id=rdv_id,
+        structure_id=structure_id,
+        utilisateur_nom=session.get('user_nom', 'Systeme')
+    )
+    
+    if succes:
+        return jsonify({
+            'success': True,
+            'data': resultat,
+            'message': 'Rendez-vous confirmé avec succès'
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'error': resultat.get('error', 'Erreur lors de la confirmation')
+        }), 400
+
+
+@app.route('/rendez_vous/api/<int:rdv_id>/print', methods=['GET'])
+@login_required
+def api_print_rendez_vous(rdv_id):
+    """API: Générer le HTML d'impression d'un rendez-vous"""
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return jsonify({'success': False, 'error': 'Structure non trouvée'}), 404
+    
+    rdv = RendezVousService.get_rendez_vous_par_id(rdv_id, structure_id)
+    if not rdv:
+        return jsonify({'success': False, 'error': 'Rendez-vous non trouvé'}), 404
+    
+    # Récupérer le patient et le médecin
+    patient = db.session.get(Patient, rdv.patient_id)
+    medecin = db.session.get(Medecin, rdv.medecin_id)
+    
+    # ============================================================
+    # RÉCUPÉRER LA STRUCTURE DEPUIS GOOGLE SHEETS
+    # ============================================================
+    
+    structure = None
+    
+    try:
+        # Récupérer toutes les structures depuis Google Sheets
+        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+        
+        for s in structures:
+            # Comparer les IDs
+            if str(s.get('ID')) == str(structure_id):
+                structure = {
+                    'nom': s.get('nom') or 'Hopital',
+                    'adresse': s.get('adresse') or '',
+                    'telephone': s.get('telephone') or '',
+                    'email': s.get('email') or '',
+                    'logo_url': s.get('logo_url') or ''
+                }
+                break
+    except Exception as e:
+        print(f"Erreur récupération structure depuis Sheets: {e}")
+    
+    # Si la structure n'est pas trouvée, utiliser les valeurs par défaut
+    if not structure:
+        structure = {
+            'nom': 'Hopital',
+            'adresse': '',
+            'telephone': '',
+            'email': '',
+            'logo_url': ''
+        }
+    
+    return render_template(
+        'print_rendez_vous.html',
+        rdv=rdv,
+        structure=structure,
+        patient=patient,
+        medecin=medecin,
+        now=datetime.now()
+    )
+@app.route('/api/patients/liste', methods=['GET'])
+@login_required
+def api_liste_patients():
+    """API: Liste des patients pour la recherche"""
+    structure_id = session.get('structure_id')
+    
+    patients = Patient.query.filter_by(structure_id=structure_id).order_by(Patient.nom).all()
+    
+    result = []
     for p in patients:
-        if isinstance(p, dict):
-            patients_list.append({
-                'ID': p.get('id'),
-                'nom': p.get('nom'),
-                'prenom': p.get('prenom'),
-                'telephone': p.get('telephone', '')
-            })
-        else:
-            patients_list.append({
-                'ID': p[0],
-                'nom': p[1],
-                'prenom': p[2],
-                'telephone': p[3] if len(p) > 3 else ''
-            })
+        result.append({
+            'id': p.id,
+            'nom': p.nom,
+            'prenom': p.prenom or '',
+            'telephone': p.telephone or ''
+        })
     
-    # Recuperer les medecins
-    medecins = db.execute_query("""
-        SELECT id, nom, prenom, titre, specialite, actif
-        FROM medecins 
-        WHERE structure_id = %s 
-        ORDER BY nom
-    """, (structure_id,))
+    return jsonify({'success': True, 'data': result})
+
+@app.route('/rendez_vous/api/<int:rdv_id>/terminer', methods=['POST'])
+@login_required
+def api_terminer_rendez_vous(rdv_id):
+    """API: Terminer un rendez-vous"""
+    structure_id = session.get('structure_id')
     
-    medecins_list = []
-    for m in medecins:
-        if isinstance(m, dict):
-            medecins_list.append({
-                'id': m.get('id'),
-                'nom': m.get('nom'),
-                'prenom': m.get('prenom'),
-                'titre': m.get('titre', 'Dr'),
-                'specialite': m.get('specialite'),
-                'actif': m.get('actif', True)
-            })
-        else:
-            medecins_list.append({
-                'id': m[0],
-                'nom': m[1],
-                'prenom': m[2],
-                'titre': m[3] if len(m) > 3 else 'Dr',
-                'specialite': m[4] if len(m) > 4 else '',
-                'actif': m[5] if len(m) > 5 else True
-            })
+    succes, resultat = RendezVousService.terminer_rendez_vous(
+        rdv_id=rdv_id,
+        structure_id=structure_id,
+        utilisateur_nom=session.get('user_nom', 'Systeme')
+    )
     
-    # Recuperer les rendez-vous avec filtre par intervalle
-    rendez_vous = db.execute_query("""
-        SELECT 
-            r.id, 
-            r.patient_id, 
-            r.date_rdv, 
-            r.heure_rdv, 
-            r.motif, 
-            r.statut,
-            r.medecin_id,
-            p.nom,
-            p.prenom,
-            p.telephone,
-            m.nom as medecin_nom,
-            m.prenom as medecin_prenom,
-            m.titre as medecin_titre
-        FROM rendez_vous r
-        LEFT JOIN patients p ON r.patient_id = p.id
-        LEFT JOIN medecins m ON r.medecin_id = m.id
-        WHERE r.structure_id = %s
-        AND r.date_rdv >= %s
-        AND r.date_rdv <= %s
-        ORDER BY r.date_rdv ASC, r.heure_rdv ASC
-    """, (structure_id, date_debut, date_fin))
+    if succes:
+        return jsonify({
+            'success': True,
+            'data': resultat,
+            'message': 'Rendez-vous terminé avec succès'
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'error': resultat.get('error', 'Erreur lors de la terminaison')
+        }), 400
+
+
+@app.route('/rendez_vous/api/<int:rdv_id>/annuler', methods=['POST'])
+@login_required
+def api_annuler_rendez_vous(rdv_id):
+    """API: Annuler un rendez-vous"""
+    structure_id = session.get('structure_id')
+    data = request.json or {}
     
-    rdv_list = []
-    for r in rendez_vous:
-        if isinstance(r, dict):
-            medecin_nom = ""
-            if r.get('medecin_titre'):
-                medecin_nom = f"{r.get('medecin_titre')} {r.get('medecin_nom', '')}".strip()
-            elif r.get('medecin_nom'):
-                medecin_nom = r.get('medecin_nom')
-            
-            rdv_list.append({
-                'ID': r.get('id'),
-                'patient_id': r.get('patient_id'),
-                'patient_nom': f"{r.get('nom', '')} {r.get('prenom', '')}".strip(),
-                'patient_telephone': r.get('telephone', ''),
-                'medecin_id': r.get('medecin_id'),
-                'medecin_nom': medecin_nom,
-                'date_rendez_vous': r.get('date_rdv'),
-                'heure_rendez_vous': r.get('heure_rdv'),
-                'motif': r.get('motif', ''),
-                'statut': r.get('statut', 'programme')
-            })
-        else:
-            medecin_nom = ""
-            if len(r) > 13 and r[12]:
-                medecin_nom = f"{r[12]} {r[11] or ''}".strip() if r[12] else r[12]
-            elif len(r) > 11 and r[10]:
-                medecin_nom = r[10]
-            
-            rdv_list.append({
-                'ID': r[0],
-                'patient_id': r[1],
-                'patient_nom': f"{r[7]} {r[8]}".strip() if len(r) > 8 else 'Patient',
-                'patient_telephone': r[9] if len(r) > 9 else '',
-                'medecin_id': r[6] if len(r) > 6 else None,
-                'medecin_nom': medecin_nom,
-                'date_rendez_vous': r[2],
-                'heure_rendez_vous': r[3],
-                'motif': r[4] if len(r) > 4 else '',
-                'statut': r[5] if len(r) > 5 else 'programme'
-            })
+    succes, resultat = RendezVousService.annuler_rendez_vous(
+        rdv_id=rdv_id,
+        structure_id=structure_id,
+        utilisateur_nom=session.get('user_nom', 'Systeme'),
+        motif=data.get('motif')
+    )
     
-    # Statistiques par statut pour l'intervalle
-    stats = {
-        'total': len(rdv_list),
-        'programme': len([r for r in rdv_list if r['statut'] == 'programme']),
-        'confirme': len([r for r in rdv_list if r['statut'] == 'confirme']),
-        'termine': len([r for r in rdv_list if r['statut'] == 'termine']),
-        'annule': len([r for r in rdv_list if r['statut'] == 'annule']),
-        'reporte': len([r for r in rdv_list if r['statut'] == 'reporte'])
-    }
+    if succes:
+        return jsonify({
+            'success': True,
+            'data': resultat,
+            'message': 'Rendez-vous annulé avec succès'
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'error': resultat.get('error', 'Erreur lors de l\'annulation')
+        }), 400
+
+
+@app.route('/rendez_vous/api/reporter', methods=['POST'])
+@login_required
+def api_reporter_rendez_vous():
+    """API: Reporter un rendez-vous"""
+    structure_id = session.get('structure_id')
+    data = request.json
     
-    # Recuperer les specialites distinctes
-    specialites = db.execute_query("""
-        SELECT DISTINCT specialite FROM medecins 
-        WHERE structure_id = %s AND specialite IS NOT NULL AND specialite != ''
-        ORDER BY specialite
-    """, (structure_id,))
+    if not data:
+        return jsonify({'success': False, 'error': 'Données manquantes'}), 400
     
-    specialites_list = []
-    if specialites:
-        for s in specialites:
-            if isinstance(s, dict):
-                spec = s.get('specialite')
-                if spec:
-                    specialites_list.append(spec)
-            else:
-                specialites_list.append(s[0])
+    rdv_id = data.get('rdv_id')
+    nouvelle_date = data.get('nouvelle_date')
+    nouvelle_heure = data.get('nouvelle_heure')
+    message = data.get('message')
     
-    return render_template('rendez_vous.html', 
-                         patients=patients_list,
-                         medecins=medecins_list,
-                         specialites=specialites_list,
-                         rendez_vous=rdv_list,
-                         stats=stats,
-                         filtre_date=filtre_date,
-                         date_debut=date_debut.isoformat() if date_debut else None,
-                         date_fin=date_fin.isoformat() if date_fin else None,
-                         libelle_filtre=libelle_filtre,
-                         today=datetime.now().strftime('%Y-%m-%d'))
+    if not rdv_id or not nouvelle_date or not nouvelle_heure:
+        return jsonify({
+            'success': False,
+            'error': 'rdv_id, nouvelle_date et nouvelle_heure sont obligatoires'
+        }), 400
+    
+    succes, resultat = RendezVousService.reporter_rendez_vous(
+        rdv_id=rdv_id,
+        structure_id=structure_id,
+        nouvelle_date=nouvelle_date,
+        nouvelle_heure=nouvelle_heure,
+        utilisateur_nom=session.get('user_nom', 'Systeme'),
+        message=message
+    )
+    
+    if succes:
+        whatsapp_url = None
+        if data.get('envoyer_rappel', False):
+            # Récupérer les infos du patient
+            rdv = RendezVous.query.get(rdv_id)
+            if rdv:
+                patient = Patient.query.get(rdv.patient_id)
+                if patient and patient.telephone:
+                    from datetime import datetime
+                    import urllib.parse
+                    
+                    # Récupérer la structure depuis Google Sheets
+                    structure = None
+                    try:
+                        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+                        for s in structures:
+                            if str(s.get('ID')) == str(structure_id):
+                                structure = {
+                                    'nom': s.get('nom') or 'Notre établissement',
+                                    'adresse': s.get('adresse') or '',
+                                    'telephone': s.get('telephone') or '',
+                                    'email': s.get('email') or ''
+                                }
+                                break
+                    except Exception as e:
+                        print(f"Erreur récupération structure: {e}")
+                    
+                    if not structure:
+                        structure = {
+                            'nom': 'Notre établissement',
+                            'adresse': '',
+                            'telephone': '',
+                            'email': ''
+                        }
+                    
+                    # Formater la date en français
+                    jours = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
+                    mois = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin',
+                            'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre']
+                    
+                    date_parts = nouvelle_date.split('-')
+                    date_obj = datetime(int(date_parts[0]), int(date_parts[1]), int(date_parts[2]))
+                    date_formatee = jours[date_obj.weekday()] + ' ' + date_parts[2] + ' ' + mois[date_obj.month - 1] + ' ' + date_parts[0]
+                    
+                    # Construction du message avec les infos de la structure
+                    msg = f"REPORT DE RENDEZ-VOUS%0A%0A"
+                    msg += f"{structure['nom'].upper()}%0A"
+                    if structure['adresse']:
+                        msg += f"Adresse: {structure['adresse']}%0A"
+                    if structure['telephone']:
+                        msg += f"Tel: {structure['telephone']}%0A"
+                    if structure['email']:
+                        msg += f"Email: {structure['email']}%0A"
+                    msg += f"%0A"
+                    msg += f"Cher(e) {rdv.patient_nom},%0A%0A"
+                    msg += f"Votre rendez-vous a été reporté au :%0A"
+                    msg += f"Date : {date_formatee}%0A"
+                    msg += f"Heure : {nouvelle_heure}%0A%0A"
+                    
+                    if message and message.strip():
+                        msg += f"Message: {message}%0A%0A"
+                    
+                    msg += f"Nous vous attendons. Merci de votre compréhension."
+                    
+                    # Nettoyer le téléphone
+                    tel = str(patient.telephone).replace(' ', '').replace('-', '').replace('+', '')
+                    if not tel.startswith('228') and not tel.startswith('229') and not tel.startswith('221'):
+                        tel = '228' + tel
+                    
+                    whatsapp_url = f"https://wa.me/{tel}?text={msg}"
+        
+        return jsonify({
+            'success': True,
+            'data': resultat,
+            'whatsapp_url': whatsapp_url,
+            'message': 'Rendez-vous reporté avec succès'
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'error': resultat.get('error', 'Erreur lors du report')
+        }), 400
+
+@app.route('/rendez_vous/api/check-conflit', methods=['GET'])
+@login_required
+def api_check_conflit():
+    """API: Vérifier les conflits de créneau"""
+    medecin_id = request.args.get('medecin_id', type=int)
+    date_str = request.args.get('date')
+    heure = request.args.get('heure')
+    duree = request.args.get('duree', 30, type=int)
+    
+    if not medecin_id or not date_str or not heure:
+        return jsonify({
+            'success': False,
+            'error': 'medecin_id, date et heure sont obligatoires'
+        }), 400
+    
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Format de date invalide'}), 400
+    
+    conflit = RendezVousService.verifier_conflit(
+        medecin_id=medecin_id,
+        date=date_obj,
+        heure=heure,
+        duree=duree
+    )
+    
+    return jsonify({
+        'success': True,
+        'disponible': conflit is None,
+        'conflit': conflit.to_dict() if conflit else None
+    })
+
+
+@app.route('/rendez_vous/api/disponibilites/<int:medecin_id>', methods=['GET'])
+@login_required
+def api_disponibilites_medecin(medecin_id):
+    """API: Récupérer les disponibilités d'un médecin"""
+    date_str = request.args.get('date')
+    
+    if not date_str:
+        return jsonify({'success': False, 'error': 'Date obligatoire'}), 400
+    
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Format de date invalide'}), 400
+    
+    disponibilite = RendezVousService.verifier_disponibilite_medecin(
+        medecin_id=medecin_id,
+        date=date_obj
+    )
+    
+    return jsonify({
+        'success': True,
+        'data': disponibilite
+    })
+
+
+@app.route('/rendez_vous/api/stats', methods=['GET'])
+@login_required
+def api_stats():
+    """API: Statistiques des rendez-vous"""
+    structure_id = session.get('structure_id')
+    
+    stats = RendezVousService.get_statistiques(structure_id=structure_id)
+    
+    return jsonify({
+        'success': True,
+        'data': stats
+    })
+
+
+@app.route('/rendez_vous/api/<int:rdv_id>/rappel', methods=['POST'])
+@login_required
+def api_envoyer_rappel(rdv_id):
+    """API: Envoyer un rappel pour un rendez-vous"""
+    structure_id = session.get('structure_id')
+    
+    rdv = RendezVousService.get_rendez_vous_par_id(rdv_id, structure_id)
+    if not rdv:
+        return jsonify({'success': False, 'error': 'Rendez-vous non trouvé'}), 404
+    
+    # Récupérer les infos de la structure depuis Google Sheets
+    structure = None
+    try:
+        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+        for s in structures:
+            if str(s.get('ID')) == str(structure_id):
+                structure = {
+                    'nom': s.get('nom') or 'Hopital',
+                    'adresse': s.get('adresse') or '',
+                    'telephone': s.get('telephone') or '',
+                    'email': s.get('email') or ''
+                }
+                break
+    except Exception as e:
+        print(f"Erreur récupération structure: {e}")
+    
+    if not structure:
+        structure = {
+            'nom': 'Hopital',
+            'adresse': '',
+            'telephone': '',
+            'email': ''
+        }
+    
+    # Appeler le service avec les infos de la structure
+    succes, resultat = RappelsService.envoyer_rappel_manuel(
+        rdv_id=rdv_id,
+        structure_info=structure  # Ajout des infos de la structure
+    )
+    
+    if succes:
+        return jsonify({
+            'success': True,
+            'data': resultat,
+            'message': 'Rappel envoyé avec succès'
+        })
+    else:
+        return jsonify({
+            'success': False,-
+            'error': resultat.get('error', 'Erreur lors de l\'envoi du rappel')
+        }), 400
+
+
+@app.route('/rendez_vous/api/rappels/stats', methods=['GET'])
+@login_required
+def api_stats_rappels():
+    """API: Statistiques des rappels"""
+    structure_id = session.get('structure_id')
+    
+    stats = RappelsService.get_stats_rappels(structure_id)
+    
+    return jsonify({
+        'success': True,
+        'data': stats
+    })
 
 # ============================================================
 # ROUTE POUR IMPRIMER LE CALENDRIER
@@ -3688,145 +4011,72 @@ def rendez_vous():
 @app.route('/rendez_vous/print')
 @login_required
 def print_rendez_vous():
-    """Imprime le calendrier des rendez-vous selon le filtre actuel"""
+    """Page d'impression du calendrier"""
     structure_id = session.get('structure_id')
     
-    # Recuperer les parametres de filtrage
-    filtre_date = request.args.get('filtre_date', 'aujourdhui')
+    periode = request.args.get('periode', 'aujourdhui')
     date_debut_str = request.args.get('date_debut')
     date_fin_str = request.args.get('date_fin')
-    vue = request.args.get('vue', 'semaine')  # jour, semaine, mois
     
-    today = datetime.now().date()
+    today = date.today()
     
-    # Definir l'intervalle selon le filtre
-    if filtre_date == 'aujourdhui':
+    # Définir les dates selon la période
+    if periode == 'tous':
+        date_debut = None
+        date_fin = None
+        libelle_periode = 'Tous les rendez-vous'
+    elif periode == 'aujourdhui':
         date_debut = today
         date_fin = today
-        libelle_filtre = "Aujourd'hui"
-    elif filtre_date == 'semaine':
-        date_debut = today - timedelta(days=today.weekday())
+        libelle_periode = "Aujourd'hui"
+    elif periode == 'semaine':
+        jour_semaine = today.weekday()
+        date_debut = today - timedelta(days=jour_semaine)
         date_fin = date_debut + timedelta(days=6)
-        libelle_filtre = "Cette semaine"
-    elif filtre_date == 'mois':
+        libelle_periode = "Cette semaine"
+    elif periode == 'mois':
         date_debut = date(today.year, today.month, 1)
         if today.month == 12:
             date_fin = date(today.year + 1, 1, 1) - timedelta(days=1)
         else:
             date_fin = date(today.year, today.month + 1, 1) - timedelta(days=1)
-        libelle_filtre = "Ce mois"
-    else:  # personnalise
-        if date_debut_str:
+        libelle_periode = "Ce mois"
+    elif periode == 'personnalise' and date_debut_str and date_fin_str:
+        try:
             date_debut = datetime.strptime(date_debut_str, '%Y-%m-%d').date()
-        else:
-            date_debut = today
-        if date_fin_str:
             date_fin = datetime.strptime(date_fin_str, '%Y-%m-%d').date()
-        else:
+            libelle_periode = f"Du {date_debut_str} au {date_fin_str}"
+        except ValueError:
+            date_debut = today
             date_fin = today
-        libelle_filtre = f"Du {date_debut.strftime('%d/%m/%Y')} au {date_fin.strftime('%d/%m/%Y')}"
+            libelle_periode = "Période personnalisée"
+    else:
+        date_debut = today
+        date_fin = today
+        libelle_periode = "Aujourd'hui"
     
-    # Recuperer les rendez-vous pour l'intervalle
-    rendez_vous = db.execute_query("""
-        SELECT 
-            r.id, 
-            r.patient_id, 
-            r.date_rdv, 
-            r.heure_rdv, 
-            r.motif, 
-            r.statut,
-            r.medecin_id,
-            p.nom,
-            p.prenom,
-            p.telephone,
-            m.nom as medecin_nom,
-            m.prenom as medecin_prenom,
-            m.titre as medecin_titre,
-            m.specialite
-        FROM rendez_vous r
-        LEFT JOIN patients p ON r.patient_id = p.id
-        LEFT JOIN medecins m ON r.medecin_id = m.id
-        WHERE r.structure_id = %s
-        AND r.date_rdv >= %s
-        AND r.date_rdv <= %s
-        AND r.statut NOT IN ('annule')
-        ORDER BY r.date_rdv ASC, r.heure_rdv ASC
-    """, (structure_id, date_debut, date_fin))
+    # Récupérer les rendez-vous
+    rendez_vous, _ = RendezVousService.get_rendez_vous_liste(
+        structure_id=structure_id,
+        date_debut=date_debut,
+        date_fin=date_fin
+    )
     
-    # Organiser les rendez-vous par jour
+    # Organiser par jour
     rdv_par_jour = {}
-    for r in rendez_vous:
-        if isinstance(r, dict):
-            date_rdv = r.get('date_rdv')
-            if date_rdv:
-                date_str = date_rdv.isoformat()
-                if date_str not in rdv_par_jour:
-                    rdv_par_jour[date_str] = []
-                
-                medecin_nom = ""
-                if r.get('medecin_titre'):
-                    medecin_nom = f"{r.get('medecin_titre')} {r.get('medecin_nom', '')}".strip()
-                elif r.get('medecin_nom'):
-                    medecin_nom = r.get('medecin_nom')
-                
-                rdv_par_jour[date_str].append({
-                    'id': r.get('id'),
-                    'heure': r.get('heure_rdv'),
-                    'patient_nom': f"{r.get('nom', '')} {r.get('prenom', '')}".strip(),
-                    'patient_telephone': r.get('telephone', ''),
-                    'medecin_nom': medecin_nom,
-                    'motif': r.get('motif', ''),
-                    'statut': r.get('statut', 'programme')
-                })
-        else:
-            date_rdv = r[2]
-            if date_rdv:
-                date_str = date_rdv.isoformat()
-                if date_str not in rdv_par_jour:
-                    rdv_par_jour[date_str] = []
-                
-                medecin_nom = ""
-                if len(r) > 13 and r[12]:
-                    medecin_nom = f"{r[12]} {r[11] or ''}".strip() if r[12] else r[12]
-                elif len(r) > 11 and r[10]:
-                    medecin_nom = r[10]
-                
-                rdv_par_jour[date_str].append({
-                    'id': r[0],
-                    'heure': r[3],
-                    'patient_nom': f"{r[7]} {r[8]}".strip() if len(r) > 8 else 'Patient',
-                    'patient_telephone': r[9] if len(r) > 9 else '',
-                    'medecin_nom': medecin_nom,
-                    'motif': r[4] if len(r) > 4 else '',
-                    'statut': r[5] if len(r) > 5 else 'programme'
-                })
+    for rdv in rendez_vous:
+        date_str = rdv.date_rendez_vous.isoformat()
+        if date_str not in rdv_par_jour:
+            rdv_par_jour[date_str] = []
+        rdv_par_jour[date_str].append(rdv)
     
-    # Generer la liste des jours
+    # Générer la liste des jours
     jours_liste = []
-    current = date_debut
-    while current <= date_fin:
-        jours_liste.append(current)
-        current += timedelta(days=1)
-    
-    # Recuperer les infos de la structure
-    structure = db.execute_query("""
-        SELECT nom, adresse, telephone, email, logo_url 
-        FROM structures WHERE id = %s
-    """, (structure_id,))
-    
-    structure_info = {}
-    if structure and len(structure) > 0:
-        s = structure[0]
-        if isinstance(s, dict):
-            structure_info = s
-        else:
-            structure_info = {
-                'nom': s[0] if len(s) > 0 else 'Mon Etablissement',
-                'adresse': s[1] if len(s) > 1 else '',
-                'telephone': s[2] if len(s) > 2 else '',
-                'email': s[3] if len(s) > 3 else '',
-                'logo_url': s[4] if len(s) > 4 else ''
-            }
+    if date_debut and date_fin:
+        current = date_debut
+        while current <= date_fin:
+            jours_liste.append(current)
+            current += timedelta(days=1)
     
     # Statistiques
     stats = {
@@ -3834,22 +4084,48 @@ def print_rendez_vous():
         'jours_avec_rdv': len([j for j in rdv_par_jour.values() if j]),
         'jours_total': len(jours_liste)
     }
-
-    today = datetime.now().date()  # Deja present normalement
-    now = datetime.now()       
     
-    return render_template('print_calendrier.html',
-                         rdv_par_jour=rdv_par_jour,
-                         jours_liste=jours_liste,
-                         date_debut=date_debut,
-                         date_fin=date_fin,
-                         libelle_filtre=libelle_filtre,
-                         structure_info=structure_info,
-                         stats=stats,
-                         vue=vue,
-                         today=today,
-                         now=now)
-
+    # ============================================================
+    # RÉCUPÉRER LA STRUCTURE DEPUIS GOOGLE SHEETS
+    # ============================================================
+    
+    structure = None
+    
+    try:
+        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+        for s in structures:
+            if str(s.get('ID')) == str(structure_id):
+                structure = {
+                    'nom': s.get('nom') or 'Hopital',
+                    'adresse': s.get('adresse') or '',
+                    'telephone': s.get('telephone') or '',
+                    'email': s.get('email') or '',
+                    'logo_url': s.get('logo_url') or ''
+                }
+                break
+    except Exception as e:
+        print(f"Erreur récupération structure: {e}")
+    
+    # Fallback: si la structure n'est pas trouvée
+    if not structure:
+        structure = {
+            'nom': 'Hopital',
+            'adresse': '',
+            'telephone': '',
+            'email': '',
+            'logo_url': ''
+        }
+    
+    return render_template(
+        'print_calendrier.html',
+        rdv_par_jour=rdv_par_jour,
+        jours_liste=jours_liste,
+        libelle_periode=libelle_periode,
+        structure=structure,  # Maintenant c'est un dictionnaire avec toutes les infos
+        stats=stats,
+        today=today,
+        now=datetime.now()
+    )
 
 @app.route('/api/rendez_vous', methods=['POST'])
 @login_required
@@ -3925,180 +4201,7 @@ def api_add_rendez_vous():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/rendez_vous/<int:rdv_id>/terminer', methods=['POST'])
-@login_required
-def api_terminer_rendez_vous(rdv_id):
-    """Marquer un rendez-vous comme termine"""
-    try:
-        structure_id = session.get('structure_id')
-        
-        # Verifier que le rendez-vous existe
-        rdv = db.execute_query("""
-            SELECT statut FROM rendez_vous 
-            WHERE id = %s AND structure_id = %s
-        """, (rdv_id, structure_id))
-        
-        if not rdv or len(rdv) == 0:
-            return jsonify({'success': False, 'error': 'Rendez-vous non trouve'}), 404
-        
-        statut = rdv[0][0] if rdv[0] else 'programme'
-        if statut in ['annule', 'termine']:
-            return jsonify({'success': False, 'error': f'Rendez-vous deja {statut}'}), 400
-        
-        db.execute_query("""
-            UPDATE rendez_vous 
-            SET statut = 'termine'
-            WHERE id = %s AND structure_id = %s
-        """, (rdv_id, structure_id))
-        
-        return jsonify({'success': True, 'message': 'Rendez-vous termine'})
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
 
-
-@app.route('/api/rendez_vous/<int:rdv_id>/confirmer', methods=['POST'])
-@login_required
-def api_confirmer_rendez_vous(rdv_id):
-    """Confirmer un rendez-vous"""
-    try:
-        structure_id = session.get('structure_id')
-        
-        rdv = db.execute_query("""
-            SELECT statut FROM rendez_vous 
-            WHERE id = %s AND structure_id = %s
-        """, (rdv_id, structure_id))
-        
-        if not rdv or len(rdv) == 0:
-            return jsonify({'success': False, 'error': 'Rendez-vous non trouve'}), 404
-        
-        statut = rdv[0][0] if rdv[0] else 'programme'
-        if statut != 'programme':
-            return jsonify({'success': False, 'error': 'Impossible de confirmer ce rendez-vous'}), 400
-        
-        db.execute_query("""
-            UPDATE rendez_vous 
-            SET statut = 'confirme'
-            WHERE id = %s AND structure_id = %s
-        """, (rdv_id, structure_id))
-        
-        return jsonify({'success': True, 'message': 'Rendez-vous confirme'})
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/rendez_vous/<int:rdv_id>/annuler', methods=['POST'])
-@login_required
-def api_annuler_rendez_vous(rdv_id):
-    """Annuler un rendez-vous"""
-    try:
-        structure_id = session.get('structure_id')
-        
-        rdv = db.execute_query("""
-            SELECT statut FROM rendez_vous 
-            WHERE id = %s AND structure_id = %s
-        """, (rdv_id, structure_id))
-        
-        if not rdv or len(rdv) == 0:
-            return jsonify({'success': False, 'error': 'Rendez-vous non trouve'}), 404
-        
-        statut = rdv[0][0] if rdv[0] else 'programme'
-        if statut in ['annule', 'termine']:
-            return jsonify({'success': False, 'error': f'Rendez-vous deja {statut}'}), 400
-        
-        db.execute_query("""
-            UPDATE rendez_vous 
-            SET statut = 'annule'
-            WHERE id = %s AND structure_id = %s
-        """, (rdv_id, structure_id))
-        
-        return jsonify({'success': True, 'message': 'Rendez-vous annule'})
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/rendez_vous/reporter', methods=['POST'])
-@login_required
-def api_reporter_rendez_vous():
-    """Reporter un rendez-vous"""
-    try:
-        data = request.json
-        rdv_id = data.get('rdv_id')
-        nouvelle_date = data.get('nouvelle_date')
-        nouvelle_heure = data.get('nouvelle_heure')
-        message = data.get('message')
-        
-        structure_id = session.get('structure_id')
-        
-        # Recuperer le rendez-vous
-        rdv = db.execute_query("""
-            SELECT r.*, p.nom, p.prenom, p.telephone
-            FROM rendez_vous r
-            JOIN patients p ON r.patient_id = p.id
-            WHERE r.id = %s AND r.structure_id = %s
-        """, (rdv_id, structure_id))
-        
-        if not rdv or len(rdv) == 0:
-            return jsonify({'success': False, 'error': 'Rendez-vous non trouve'}), 404
-        
-        if isinstance(rdv[0], dict):
-            r = rdv[0]
-            patient_nom = f"{r.get('nom', '')} {r.get('prenom', '')}".strip()
-            patient_tel = r.get('telephone', '')
-            ancienne_date = r.get('date_rdv')
-            ancienne_heure = r.get('heure_rdv')
-            medecin_id = r.get('medecin_id')
-        else:
-            r = rdv[0]
-            patient_nom = f"{r[8]} {r[9]}".strip() if len(r) > 9 else 'Patient'
-            patient_tel = r[10] if len(r) > 10 else ''
-            ancienne_date = r[3]
-            ancienne_heure = r[4]
-            medecin_id = r[6] if len(r) > 6 else None
-        
-        # Verifier que le nouveau creneau est libre
-        existant = db.execute_query("""
-            SELECT id FROM rendez_vous 
-            WHERE medecin_id = %s 
-            AND date_rdv = %s 
-            AND heure_rdv = %s 
-            AND id != %s
-            AND statut IN ('programme', 'confirme')
-        """, (medecin_id, nouvelle_date, nouvelle_heure, rdv_id))
-        
-        if existant and len(existant) > 0:
-            return jsonify({'success': False, 'error': 'Creneau deja occupe'}), 400
-        
-        # Mettre a jour
-        db.execute_query("""
-            UPDATE rendez_vous 
-            SET date_rdv = %s, 
-                heure_rdv = %s, 
-                statut = 'reporte'
-            WHERE id = %s AND structure_id = %s
-        """, (nouvelle_date, nouvelle_heure, rdv_id, structure_id))
-        
-        # Envoyer WhatsApp si message fourni
-        whatsapp_url = None
-        if message and patient_tel:
-            tel = str(patient_tel).replace(' ', '').replace('+', '')
-            if not tel.startswith('228') and not tel.startswith('229') and not tel.startswith('221'):
-                tel = '228' + tel
-            whatsapp_url = f"https://wa.me/{tel}?text={message}"
-        
-        return jsonify({
-            'success': True,
-            'message': 'Rendez-vous reporte avec succes',
-            'whatsapp_url': whatsapp_url
-        })
-        
-    except Exception as e:
-        print(f"Erreur report: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/structure/nom', methods=['GET'])
@@ -4107,15 +4210,17 @@ def get_structure_nom():
     """Recupere le nom de la structure"""
     structure_id = session.get('structure_id')
     
-    structure = db.execute_query("""
-        SELECT nom FROM structures WHERE id = %s
-    """, (structure_id,))
-    
-    if structure and len(structure) > 0:
-        nom = structure[0][0] if structure[0] else 'Notre etablissement'
-        return jsonify({'nom': nom})
+    try:
+        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+        for s in structures:
+            if str(s.get('ID')) == str(structure_id):
+                nom = s.get('nom') or 'Notre etablissement'
+                return jsonify({'nom': nom})
+    except Exception as e:
+        print(f"Erreur récupération structure: {e}")
     
     return jsonify({'nom': 'Notre etablissement'})
+
 
 @app.route('/mes_rendez_vous')
 @login_required
@@ -4124,21 +4229,88 @@ def mes_rendez_vous():
     structure_id = session.get('structure_id')
     patient_id = session.get('patient_id')  # Si patient connecté
     
-    # Récupérer les informations du patient
-    patients = sheets_helper.get_all_records('patients')
-    patient_info = next((p for p in patients if str(p.get('ID')) == str(patient_id)), {})
+    if not patient_id:
+        flash('Veuillez vous connecter en tant que patient', 'warning')
+        return redirect(url_for('login'))
     
-    # Récupérer les rendez-vous du patient
-    rendez_vous = sheets_helper.get_all_records('rendez_vous')
-    mes_rendez_vous = [r for r in rendez_vous 
-                       if str(r.get('patient_id')) == str(patient_id) 
-                       and str(r.get('structure_id')) == str(structure_id)]
-    mes_rendez_vous.sort(key=lambda x: x.get('date_rendez_vous', ''))
+    # ============================================================
+    # RÉCUPÉRER LES INFORMATIONS DU PATIENT
+    # ============================================================
     
-    return render_template('mes_rendez_vous.html', 
-                         patient_info=patient_info,
-                         mes_rendez_vous=mes_rendez_vous,
-                         today=datetime.now().strftime('%Y-%m-%d'))
+    # Essayer depuis PostgreSQL d'abord
+    patient = Patient.query.filter_by(id=patient_id, structure_id=structure_id).first()
+    
+    if not patient:
+        # Fallback: depuis Google Sheets
+        try:
+            patients = sheets_helper.get_all_records('patients')
+            patient_info = next((p for p in patients if str(p.get('ID')) == str(patient_id)), {})
+        except Exception as e:
+            print(f"Erreur récupération patient: {e}")
+            patient_info = {}
+    else:
+        patient_info = {
+            'ID': patient.id,
+            'nom': patient.nom,
+            'prenom': patient.prenom,
+            'telephone': patient.telephone,
+            'email': patient.email
+        }
+    
+    # ============================================================
+    # RÉCUPÉRER LES RENDEZ-VOUS DU PATIENT
+    # ============================================================
+    
+    # Essayer depuis PostgreSQL d'abord
+    rendez_vous = RendezVous.query.filter_by(
+        patient_id=patient_id,
+        structure_id=structure_id
+    ).order_by(RendezVous.date_rendez_vous.desc()).all()
+    
+    mes_rendez_vous = []
+    for rdv in rendez_vous:
+        # Récupérer le nom du médecin
+        medecin_nom = ''
+        if rdv.medecin_id:
+            medecin = Medecin.query.get(rdv.medecin_id)
+            if medecin:
+                medecin_nom = f"{medecin.titre} {medecin.nom}"
+        
+        mes_rendez_vous.append({
+            'id': rdv.id,
+            'date_rendez_vous': rdv.date_rendez_vous.strftime('%d/%m/%Y') if rdv.date_rendez_vous else '',
+            'heure_rendez_vous': rdv.heure_rendez_vous,
+            'motif': rdv.motif,
+            'statut': rdv.statut,
+            'medecin_nom': medecin_nom,
+            'notes': rdv.notes or ''
+        })
+    
+    # Si aucun rendez-vous en PostgreSQL, essayer Google Sheets
+    if not mes_rendez_vous:
+        try:
+            rendez_vous_sheets = sheets_helper.get_all_records('rendez_vous')
+            for r in rendez_vous_sheets:
+                if str(r.get('patient_id')) == str(patient_id) and str(r.get('structure_id')) == str(structure_id):
+                    mes_rendez_vous.append({
+                        'id': r.get('ID'),
+                        'date_rendez_vous': r.get('date_rendez_vous', ''),
+                        'heure_rendez_vous': r.get('heure_rendez_vous', ''),
+                        'motif': r.get('motif', ''),
+                        'statut': r.get('statut', 'programme'),
+                        'medecin_nom': r.get('medecin_nom', ''),
+                        'notes': r.get('notes', '')
+                    })
+            mes_rendez_vous.sort(key=lambda x: x.get('date_rendez_vous', ''), reverse=True)
+        except Exception as e:
+            print(f"Erreur récupération rendez-vous Sheets: {e}")
+    
+    return render_template(
+        'mes_rendez_vous.html',
+        patient_info=patient_info,
+        mes_rendez_vous=mes_rendez_vous,
+        today=datetime.now().strftime('%Y-%m-%d')
+    )
 
 
 @app.route('/patient/rendez_vous/<int:patient_id>/<token>')
@@ -4147,62 +4319,145 @@ def patient_rendez_vous(patient_id, token):
     from datetime import datetime
     
     try:
-        # 🔥 Récupérer les infos du patient depuis NEON
-        patient = db.execute_query("""
-            SELECT id, nom, prenom, telephone, structure_id
-            FROM patients 
-            WHERE id = %s
-        """, (patient_id,))
+        # ============================================================
+        # RÉCUPÉRER LES INFOS DU PATIENT
+        # ============================================================
         
-        if not patient or len(patient) == 0:
-            return "Patient non trouvé", 404
+        # Essayer depuis PostgreSQL avec SQLAlchemy d'abord
+        patient = Patient.query.get(patient_id)
         
-        if isinstance(patient[0], dict):
-            patient_info = patient[0]
-            structure_id = patient_info.get('structure_id')
-        else:
+        if patient:
             patient_info = {
-                'id': patient[0][0],
-                'nom': patient[0][1],
-                'prenom': patient[0][2],
-                'telephone': patient[0][3]
+                'id': patient.id,
+                'nom': patient.nom,
+                'prenom': patient.prenom,
+                'telephone': patient.telephone,
+                'structure_id': patient.structure_id
             }
-            structure_id = patient[0][4] if len(patient[0]) > 4 else None
+            structure_id = patient.structure_id
+        else:
+            # Fallback: requête directe
+            result = db.execute_query("""
+                SELECT id, nom, prenom, telephone, structure_id
+                FROM patients 
+                WHERE id = %s
+            """, (patient_id,))
+            
+            if not result or len(result) == 0:
+                return "Patient non trouvé", 404
+            
+            row = result[0]
+            if isinstance(row, dict):
+                patient_info = row
+                structure_id = row.get('structure_id')
+            else:
+                patient_info = {
+                    'id': row[0],
+                    'nom': row[1],
+                    'prenom': row[2],
+                    'telephone': row[3],
+                    'structure_id': row[4] if len(row) > 4 else None
+                }
+                structure_id = row[4] if len(row) > 4 else None
         
-        # 🔥 Récupérer la structure depuis Google Sheets (ou Neon)
-        structures = sheets_helper.get_all_records('structures', use_prefix=False)
-        structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
+        # ============================================================
+        # RÉCUPÉRER LA STRUCTURE DEPUIS GOOGLE SHEETS
+        # ============================================================
         
-        structure_nom = structure_info.get('nom', 'Notre établissement')
-        structure_telephone = structure_info.get('telephone', '')
-        structure_adresse = structure_info.get('adresse', '')
+        structure_nom = 'Notre établissement'
+        structure_telephone = ''
+        structure_adresse = ''
         
-        # 🔥 Récupérer ses rendez-vous depuis NEON
-        rendez_vous = db.execute_query("""
-            SELECT id, date_rdv, heure_rdv, motif, statut, notes
-            FROM rendez_vous
-            WHERE patient_id = %s
-            ORDER BY date_rdv DESC
-        """, (patient_id,))
+        try:
+            structures = sheets_helper.get_all_records('structures', use_prefix=False)
+            for s in structures:
+                if str(s.get('ID')) == str(structure_id):
+                    structure_nom = s.get('nom') or 'Notre établissement'
+                    structure_telephone = s.get('telephone') or ''
+                    structure_adresse = s.get('adresse') or ''
+                    break
+        except Exception as e:
+            print(f"Erreur récupération structure: {e}")
+        
+        # ============================================================
+        # RÉCUPÉRER LES RENDEZ-VOUS DU PATIENT
+        # ============================================================
         
         mes_rendez_vous = []
-        for r in rendez_vous:
-            if isinstance(r, dict):
+        
+        # Essayer avec SQLAlchemy d'abord
+        rendez_vous = RendezVous.query.filter_by(patient_id=patient_id).order_by(
+            RendezVous.date_rendez_vous.desc()
+        ).all()
+        
+        if rendez_vous:
+            for rdv in rendez_vous:
+                # Récupérer le nom du médecin
+                medecin_nom = ''
+                if rdv.medecin_id:
+                    medecin = Medecin.query.get(rdv.medecin_id)
+                    if medecin:
+                        medecin_nom = f"{medecin.titre} {medecin.nom}"
+                
                 mes_rendez_vous.append({
-                    'id': r.get('id'),
-                    'date_rendez_vous': r.get('date_rdv'),
-                    'heure_rendez_vous': r.get('heure_rdv'),
-                    'motif': r.get('motif'),
-                    'statut': r.get('statut', 'programme')
+                    'id': rdv.id,
+                    'date_rendez_vous': rdv.date_rendez_vous.strftime('%d/%m/%Y') if rdv.date_rendez_vous else '',
+                    'heure_rendez_vous': rdv.heure_rendez_vous,
+                    'motif': rdv.motif,
+                    'statut': rdv.statut,
+                    'medecin_nom': medecin_nom,
+                    'notes': rdv.notes or ''
                 })
-            else:
-                mes_rendez_vous.append({
-                    'id': r[0],
-                    'date_rendez_vous': r[1],
-                    'heure_rendez_vous': r[2],
-                    'motif': r[3],
-                    'statut': r[4] if len(r) > 4 else 'programme'
-                })
+        else:
+            # Fallback: requête directe
+            result = db.execute_query("""
+                SELECT id, date_rdv, heure_rdv, motif, statut, notes, medecin_id
+                FROM rendez_vous
+                WHERE patient_id = %s
+                ORDER BY date_rdv DESC
+            """, (patient_id,))
+            
+            for r in result:
+                if isinstance(r, dict):
+                    medecin_nom = ''
+                    if r.get('medecin_id'):
+                        med = db.execute_query("SELECT nom, titre FROM medecins WHERE id = %s", (r.get('medecin_id'),))
+                        if med and len(med) > 0:
+                            m = med[0]
+                            if isinstance(m, dict):
+                                medecin_nom = f"{m.get('titre', 'Dr')} {m.get('nom', '')}"
+                            else:
+                                medecin_nom = f"{m[1] if len(m) > 1 else 'Dr'} {m[0] if len(m) > 0 else ''}"
+                    
+                    mes_rendez_vous.append({
+                        'id': r.get('id'),
+                        'date_rendez_vous': r.get('date_rdv'),
+                        'heure_rendez_vous': r.get('heure_rdv'),
+                        'motif': r.get('motif'),
+                        'statut': r.get('statut', 'programme'),
+                        'medecin_nom': medecin_nom,
+                        'notes': r.get('notes', '')
+                    })
+                else:
+                    medecin_nom = ''
+                    if len(r) > 6 and r[6]:
+                        med = db.execute_query("SELECT nom, titre FROM medecins WHERE id = %s", (r[6],))
+                        if med and len(med) > 0:
+                            m = med[0]
+                            if isinstance(m, dict):
+                                medecin_nom = f"{m.get('titre', 'Dr')} {m.get('nom', '')}"
+                            else:
+                                medecin_nom = f"{m[1] if len(m) > 1 else 'Dr'} {m[0] if len(m) > 0 else ''}"
+                    
+                    mes_rendez_vous.append({
+                        'id': r[0],
+                        'date_rendez_vous': r[1] if len(r) > 1 else '',
+                        'heure_rendez_vous': r[2] if len(r) > 2 else '',
+                        'motif': r[3] if len(r) > 3 else '',
+                        'statut': r[4] if len(r) > 4 else 'programme',
+                        'medecin_nom': medecin_nom,
+                        'notes': r[5] if len(r) > 5 else ''
+                    })
         
         return render_template('patient_rendez_vous.html',
                              patient=patient_info,
@@ -4212,10 +4467,11 @@ def patient_rendez_vous(patient_id, token):
                              structure_adresse=structure_adresse)
                              
     except Exception as e:
-        print(f"❌ Erreur: {e}")
+        print(f"Erreur: {e}")
         import traceback
         traceback.print_exc()
         return f"Erreur: {e}", 500
+
 @app.route('/api/structure/nom')
 @login_required
 def api_structure_nom():
@@ -4233,6 +4489,7 @@ def api_structure_infos():
     structure_info = next((s for s in structures if s.get('ID') == structure_id), {})
     return jsonify({
         'nom': structure_info.get('nom', ''),
+        'adresse': structure_info.get('adresse', ''),  # ← AJOUT
         'telephone': structure_info.get('telephone', ''),
         'logo_url': structure_info.get('logo_url', ''),   # ← AJOUT
         'email': structure_info.get('email', ''),          # ← AJOUT
@@ -4440,103 +4697,92 @@ def test_rappels():
     verifier_rappels_automatiques()
     return jsonify({'success': True, 'message': 'Vérification des rappels effectuée'})
 
-@app.route('/rappels_rendez_vous')
+@app.route('/rappels')
 @login_required
-def rappels_rendez_vous():
-    """Page des rappels - Rendez-vous à moins de 7 jours et dépassés"""
-    from datetime import datetime, timedelta
-    
+def rappels():
+    """Page des rappels de rendez-vous"""
     structure_id = session.get('structure_id')
+    today = date.today()
     
-    # 🔥 Récupérer les rendez-vous depuis NEON
-    rendez_vous = db.execute_query("""
-        SELECT 
-            r.id,
-            r.patient_id,
-            r.date_rdv,
-            r.heure_rdv,
-            r.motif,
-            r.statut,
-            p.nom,
-            p.prenom,
-            p.telephone
-        FROM rendez_vous r
-        LEFT JOIN patients p ON r.patient_id = p.id
-        WHERE r.structure_id = %s
-        ORDER BY r.date_rdv DESC
-    """, (structure_id,))
+    # ============================================================
+    # RÉCUPÉRER LA STRUCTURE DEPUIS GOOGLE SHEETS
+    # ============================================================
     
-    aujourdhui = datetime.now().date()
-    date_limite = aujourdhui + timedelta(days=7)
+    structure = None
     
-    moins_7_jours = []
-    depasses = []
+    try:
+        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+        for s in structures:
+            if str(s.get('ID')) == str(structure_id):
+                structure = {
+                    'nom': s.get('nom') or 'Hopital',
+                    'adresse': s.get('adresse') or '',
+                    'telephone': s.get('telephone') or '',
+                    'email': s.get('email') or '',
+                    'logo_url': s.get('logo_url') or ''
+                }
+                break
+    except Exception as e:
+        print(f"Erreur récupération structure: {e}")
     
-    for r in rendez_vous:
-        if isinstance(r, dict):
-            statut = r.get('statut', '')
-            date_rdv_str = r.get('date_rdv')
-            patient_nom = f"{r.get('nom', '')} {r.get('prenom', '')}".strip()
-            patient_tel = r.get('telephone', '')
-            rdv_id = r.get('id')
-            heure_rdv = r.get('heure_rdv')
-            motif = r.get('motif', 'Consultation')
-        else:
-            statut = r[5] if len(r) > 5 else ''
-            date_rdv_str = r[2] if len(r) > 2 else None
-            patient_nom = f"{r[6]} {r[7]}".strip() if len(r) > 7 else 'Patient'
-            patient_tel = r[8] if len(r) > 8 else ''
-            rdv_id = r[0]
-            heure_rdv = r[3] if len(r) > 3 else ''
-            motif = r[4] if len(r) > 4 else 'Consultation'
-        
-        if statut in ['termine', 'annule']:
-            continue
-        
-        if not date_rdv_str:
-            continue
-        
-        try:
-            # Convertir la date si c'est un string
-            if isinstance(date_rdv_str, str):
-                date_rdv = datetime.strptime(date_rdv_str, '%Y-%m-%d').date()
-            else:
-                date_rdv = date_rdv_str
-            
-            rdv_data = {
-                'ID': rdv_id,
-                'patient_id': r.get('patient_id') if isinstance(r, dict) else r[1],
-                'patient_nom': patient_nom,
-                'patient_telephone': patient_tel,
-                'date_rendez_vous': str(date_rdv),
-                'heure_rendez_vous': str(heure_rdv),
-                'motif': motif,
-                'statut': statut
-            }
-            
-            # Rendez-vous dépassés
-            if date_rdv < aujourdhui:
-                rdv_data['jours_depasse'] = (aujourdhui - date_rdv).days
-                depasses.append(rdv_data)
-            
-            # Rendez-vous dans les 7 jours (à venir)
-            elif date_rdv <= date_limite:
-                rdv_data['jours_restants'] = (date_rdv - aujourdhui).days
-                moins_7_jours.append(rdv_data)
-                
-        except Exception as e:
-            print(f"⚠️ Erreur traitement date: {e}")
-            continue
+    if not structure:
+        structure = {
+            'nom': 'Hopital',
+            'adresse': '',
+            'telephone': '',
+            'email': '',
+            'logo_url': ''
+        }
     
-    # Trier par date
-    moins_7_jours.sort(key=lambda x: x.get('date_rendez_vous', ''))
-    depasses.sort(key=lambda x: x.get('date_rendez_vous', ''))
+    # ============================================================
+    # RÉCUPÉRER LES RENDEZ-VOUS
+    # ============================================================
     
-    return render_template('rappels_rendez_vous.html', 
-                         moins_7_jours=moins_7_jours,
-                         depasses=depasses)
-
-
+    # Rendez-vous à moins de 7 jours
+    moins_7 = RendezVous.query.filter(
+        RendezVous.structure_id == structure_id,
+        RendezVous.date_rendez_vous >= today,
+        RendezVous.date_rendez_vous <= today + timedelta(days=7),
+        RendezVous.statut.in_(['programme', 'confirme'])
+    ).order_by(RendezVous.date_rendez_vous).all()
+    
+    moins_7_list = []
+    for rdv in moins_7:
+        moins_7_list.append({
+            'id': rdv.id,
+            'patient_nom': rdv.patient_nom,
+            'patient_telephone': rdv.patient_telephone,
+            'date_rendez_vous': rdv.date_rendez_vous,
+            'heure_rendez_vous': rdv.heure_rendez_vous,
+            'motif': rdv.motif,
+            'jours_restants': (rdv.date_rendez_vous - today).days
+        })
+    
+    # Rendez-vous dépassés
+    depasses = RendezVous.query.filter(
+        RendezVous.structure_id == structure_id,
+        RendezVous.date_rendez_vous < today,
+        RendezVous.statut.in_(['programme', 'confirme'])
+    ).order_by(RendezVous.date_rendez_vous).all()
+    
+    depasses_list = []
+    for rdv in depasses:
+        depasses_list.append({
+            'id': rdv.id,
+            'patient_nom': rdv.patient_nom,
+            'patient_telephone': rdv.patient_telephone,
+            'date_rendez_vous': rdv.date_rendez_vous,
+            'heure_rendez_vous': rdv.heure_rendez_vous,
+            'motif': rdv.motif,
+            'jours_depasse': (today - rdv.date_rendez_vous).days
+        })
+    
+    return render_template(
+        'rappels.html',
+        moins_7_jours=moins_7_list,
+        depasses=depasses_list,
+        structure=structure  # Ajout des informations de la structure
+    )
 @app.route('/api/rappels/stats')
 @login_required
 def api_rappels_stats():

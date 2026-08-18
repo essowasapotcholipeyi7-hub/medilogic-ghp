@@ -230,6 +230,23 @@ class SheetsHelper:
         self._prix_cache = {}
         print("🧹 Cache des prix vidé")
 
+    def get_user_by_id(self, user_id, structure_id):
+        """Récupère un utilisateur par son ID depuis Google Sheets"""
+        try:
+            records = self.get_all_records('users', use_prefix=True)
+            
+            for record in records:
+                if str(record.get('ID')) == str(user_id):
+                    nom = record.get('nom', '')
+                    prenom = record.get('prenom', '')
+                    if prenom:
+                        return f"{prenom} {nom}"
+                    return nom
+            return None
+        except Exception as e:
+            print(f"Erreur récupération utilisateur: {e}")
+            return None
+
     
     def set_structure(self, structure_id, structure_nom=None):
         """Définit la structure active - FORMAT: struct_ID"""
@@ -682,6 +699,7 @@ class SheetsHelper:
             self._batch_operations = []
         except Exception as e:
             print(f"❌ Erreur batch: {e}")
+
     
     # ============================================
     # INITIALISATION DES FEUILLES
