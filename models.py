@@ -1732,3 +1732,114 @@ class ProtocolePatient(db.Model):
     patient = db.relationship('Patient', backref='protocoles_appliques')
     protocole = db.relationship('ProtocoleMedical', backref='patients_associes')
     structure = db.relationship('Structure', backref='protocoles_patients')
+
+# ============================================================
+# MODÈLE JOURNAL DES MOUVEMENTS
+# ============================================================
+
+class JournalMouvement(db.Model):
+    """Journal centralisé des mouvements de l'établissement"""
+    
+    __tablename__ = 'journal_mouvements'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, db.ForeignKey('structures.id'), nullable=False)
+    
+    # Catégorie et type
+    categorie = db.Column(db.String(50), nullable=False)
+    # vente_actes, vente_pharmacie, vente_lunettes, annulation_vente,
+    # paiement_facture, paiement_assurance, facture_emise, avoir_emis,
+    # recette_encaisee, depense_enregistree, proforma_cree, rendez_vous_pris
+    
+    sous_categorie = db.Column(db.String(50))
+    
+    # Référence
+    reference_type = db.Column(db.String(50))  # vente, facture, paiement, etc.
+    reference_id = db.Column(db.Integer)
+    
+    # Date du mouvement
+    date_mouvement = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    # Description
+    description = db.Column(db.Text)
+    
+    # Montant
+    montant = db.Column(db.Numeric, default=0)
+    type_montant = db.Column(db.String(10), default='neutre')  # credit, debit, neutre
+    
+    # Patient
+    patient_id = db.Column(db.Integer)
+    patient_nom = db.Column(db.String(200))
+    
+    # Utilisateur
+    utilisateur_id = db.Column(db.Integer)
+    utilisateur_nom = db.Column(db.String(100))
+    
+    # Détails supplémentaires (JSON)
+    details = db.Column(db.JSON, default={})
+    
+    # Statut
+    statut = db.Column(db.String(20), default='valide')  # valide, annule, en_attente
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    structure = db.relationship('Structure', backref='journal_mouvements')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'structure_id': self.structure_id,
+            'categorie': self.categorie,
+            'categorie_label': self.get_categorie_label(),
+            'sous_categorie': self.sous_categorie,
+            'reference_type': self.reference_type,
+            'reference_id': self.reference_id,
+            'date_mouvement': self.date_mouvement.isoformat() if self.date_mouvement else None,
+            'date_affichage': self.date_mouvement.strftime('%d/%m/%Y %H:%M') if self.date_mouvement else '',
+            'description': self.description,
+            'montant': float(self.montant) if self.montant else 0,
+            'type_montant': self.type_montant,
+            'montant_affichage': self.get_montant_affichage(),
+            'patient_id': self.patient_id,
+            'patient_nom': self.patient_nom,
+            'utilisateur_id': self.utilisateur_id,
+            'utilisateur_nom': self.utilisateur_nom,
+            'details': self.details or {},
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+    def get_categorie_label(self):
+        labels = {
+            'vente_actes': 'Vente d\'actes',
+            'vente_pharmacie': 'Vente pharmacie',
+            'vente_lunettes': 'Vente lunettes',
+            'annulation_vente': 'Annulation vente',
+            'paiement_facture': 'Paiement facture',
+            'paiement_assurance': 'Paiement assurance',
+            'facture_emise': 'Facture émise',
+            'avoir_emis': 'Avoir émis',
+            'recette_encaisee': 'Recette encaissée',
+            'depense_enregistree': 'Dépense enregistrée',
+            'proforma_cree': 'Proforma créé',
+            'rendez_vous_pris': 'Rendez-vous pris',
+            'consultation_terminee': 'Consultation terminée'
+        }
+        return labels.get(self.categorie, self.categorie)
+    
+    def get_statut_label(self):
+        labels = {
+            'valide': 'Valide',
+            'annule': 'Annulé',
+            'en_attente': 'En attente'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def get_montant_affichage(self):
+        if self.type_montant == 'credit':
+            return f"+ {abs(float(self.montant)):,.0f} F"
+        elif self.type_montant == 'debit':
+            return f"- {abs(float(self.montant)):,.0f} F"
+        else:
+            return f"{float(self.montant):,.0f} F"

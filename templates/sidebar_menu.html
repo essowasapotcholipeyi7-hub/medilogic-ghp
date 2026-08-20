@@ -42,6 +42,13 @@
                 <a class="nav-link {% if request.endpoint == 'factures' %}active{% endif %}" href="{{ url_for('factures') }}">
                     <span class="menu-text">Factures clients&Créances</span>
                 </a>
+
+                <!-- ===== FACTURES PROFORMA ===== -->
+                <a class="nav-link {% if request.endpoint == 'proformas' %}active{% endif %}" href="{{ url_for('proformas') }}">
+                    <span class="menu-text">Factures Proforma</span>
+                    <span class="badge bg-warning text-dark float-end" id="proformaBadge" style="display:none;">0</span>
+                </a>
+
                 
                 <!-- ===== RÉFÉRENTIELS AMU ===== -->
                 <div class="dropdown">
@@ -83,11 +90,6 @@
                     <span class="menu-text">Rappels des rendez-vous</span>
                 </a>
 
-                <!-- ===== FACTURES PROFORMA ===== -->
-                <a class="nav-link {% if request.endpoint == 'proformas' %}active{% endif %}" href="{{ url_for('proformas') }}">
-                    <span class="menu-text">Factures Proforma</span>
-                    <span class="badge bg-warning text-dark float-end" id="proformaBadge" style="display:none;">0</span>
-                </a>
 
                 <!-- ===== CONSULTATION ===== -->
                 {% if session.role in ['admin', 'medecin', 'paramedical'] %}
@@ -106,11 +108,7 @@
                 {% endif %}
 
                 <!-- ===== ADMINISTRATION ===== -->
-                {% if session.is_admin %}
-                <a class="nav-link {% if request.endpoint == 'admin_finances' %}active{% endif %}" href="{{ url_for('admin_finances') }}">
-                    <span class="menu-text">Finances/Caisse&Charge</span>
-                </a>
-                
+                {% if session.is_admin %}                
                 <a class="nav-link {% if request.endpoint == 'statistiques_ventes' %}active{% endif %}" href="{{ url_for('statistiques_ventes') }}">
                     <span class="menu-text">Statistiques ventes/assurances</span>
                 </a>
@@ -118,9 +116,15 @@
                 <a class="nav-link {% if request.endpoint == 'historique_annulations' %}active{% endif %}" href="{{ url_for('historique_annulations') }}">
                     <span class="menu-text">Historiques Annulations</span>
                 </a>
+<a class="nav-link" href="{{ url_for('journal.page_journal') }}">
+    <span class="menu-text">Journal des mouvements</span>
+</a>
                 
                 <a class="nav-link {% if request.path.startswith('/rh') %}active{% endif %}" href="{{ url_for('rh.gestion_rh') }}">
                     <span class="menu-text">Gestion Ressources humaines</span>
+                </a>
+                <a class="nav-link {% if request.endpoint == 'admin_finances' %}active{% endif %}" href="{{ url_for('admin_finances') }}">
+                    <span class="menu-text">Finances/Caisse&Charge</span>
                 </a>
                 
                 <a class="nav-link {% if request.path.startswith('/comptabilite') %}active{% endif %}" href="{{ url_for('comptabilite.index') }}">

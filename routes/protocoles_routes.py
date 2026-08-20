@@ -329,9 +329,15 @@ def api_print_protocole(protocole_id):
         for s in structures:
             print(f"ID dans Sheets: {s.get('ID')} vs {structure_id}")
             if str(s.get('ID')) == str(structure_id):
+                # ⭐ Récupérer l'adresse brute
+                adresse_brute = s.get('adresse') or ''
+                
+                # ⭐ Formater l'adresse avec la fonction
+                adresse_formatee = sheets_helper.format_adresse(adresse_brute)
+                
                 structure = {
                     'nom': s.get('nom') or 'Hopital',
-                    'adresse': s.get('adresse') or '',
+                    'adresse': adresse_formatee,  # ⭐ Adresse formatée
                     'telephone': s.get('telephone') or '',
                     'email': s.get('email') or '',
                     'logo_url': s.get('logo_url') or ''

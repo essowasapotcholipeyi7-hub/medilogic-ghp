@@ -572,13 +572,11 @@ function onCategorieChange() {
 
 function genererContenuOrdonnance() {
     var contenu = document.getElementById('contenu');
-    var text = 'ORDONNANCE MEDICALE\n\n';
-    
-    // 🔥 SUPPRIMER LE PATIENT (déjà en haut)
-    // 🔥 AJOUTER LA DATE AUTOMATIQUEMENT
     var dateAujourdhui = new Date().toLocaleDateString('fr-FR');
+    
+    // 🔥 SUPPRIMER LA LIGNE DE SÉPARATION ENTRE DATE ET CONTENU
+    var text = '';
     text += 'Date : ' + dateAujourdhui + '\n\n';
-    text += '─────────────────────────────────────────\n\n';
     
     if (medicamentsList.length === 0) {
         text += 'Aucun médicament ajouté.\n';
@@ -603,6 +601,7 @@ function genererContenuOrdonnance() {
         });
     }
     
+    // 🔥 GARDER LA SÉPARATION AVANT LA SIGNATURE
     text += '\n─────────────────────────────────────────\n\n';
     text += 'Signature : {{medecin}}\n';
     
@@ -621,9 +620,9 @@ function genererContenuBulletin() {
     
     var dateAujourdhui = new Date().toLocaleDateString('fr-FR');
     
-    var text = 'BULLETIN D\'EXAMEN\n\n';
+    // 🔥 SUPPRIMER LA LIGNE DE SÉPARATION ENTRE DATE ET CONTENU
+    var text = '';
     text += 'Date : ' + dateAujourdhui + '\n\n';
-    text += '─────────────────────────────────────────\n\n';
     
     text += '1. Motif / Diagnostic :\n';
     text += '   ' + (motif || '__________________________') + '\n\n';
@@ -643,6 +642,7 @@ function genererContenuBulletin() {
         text += '   __________________________\n';
     }
     
+    // 🔥 GARDER LA SÉPARATION AVANT LA SIGNATURE
     text += '\n─────────────────────────────────────────\n\n';
     text += 'Signature : {{medecin}}\n';
     

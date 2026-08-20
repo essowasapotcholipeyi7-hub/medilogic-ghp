@@ -18,6 +18,8 @@ from models import RendezVous
 from models import Medecin, Patient, Structure
 from datetime import datetime, date, timedelta
 from routes.protocoles_routes import protocoles_bp
+from routes.journal_routes import journal_bp
+
 
 
 
@@ -57,6 +59,7 @@ app.register_blueprint(compta_bp)
 app.register_blueprint(statistiques_bp)
 
 app.register_blueprint(protocoles_bp)
+app.register_blueprint(journal_bp)
 
 
 @app.after_request
@@ -1739,7 +1742,12 @@ def recu(vente_id, type):
     structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
     
     structure_nom = structure_info.get('nom', 'Medilogic-GHP')
-    structure_adresse = structure_info.get('adresse', '')
+
+
+    structure_adresse = sheets_helper.format_adresse(structure_info.get('adresse', ''))
+    structure_adresse_html = structure_adresse.replace('\n', '<br>')
+
+
     structure_telephone = structure_info.get('telephone', '')
     structure_email = structure_info.get('email', '')
     structure_logo = structure_info.get('logo_url', '')
@@ -3652,9 +3660,15 @@ def api_print_rendez_vous(rdv_id):
         for s in structures:
             # Comparer les IDs
             if str(s.get('ID')) == str(structure_id):
+                # ⭐ Récupérer l'adresse brute
+                adresse_brute = s.get('adresse') or ''
+                
+                # ⭐ Formater l'adresse avec la fonction
+                adresse_formatee = sheets_helper.format_adresse(adresse_brute)
+                
                 structure = {
                     'nom': s.get('nom') or 'Hopital',
-                    'adresse': s.get('adresse') or '',
+                    'adresse': adresse_formatee,  # ⭐ Adresse formatée
                     'telephone': s.get('telephone') or '',
                     'email': s.get('email') or '',
                     'logo_url': s.get('logo_url') or ''
@@ -3681,6 +3695,7 @@ def api_print_rendez_vous(rdv_id):
         medecin=medecin,
         now=datetime.now()
     )
+
 @app.route('/api/patients/liste', methods=['GET'])
 @login_required
 def api_liste_patients():
@@ -4095,9 +4110,15 @@ def print_rendez_vous():
         structures = sheets_helper.get_all_records('structures', use_prefix=False)
         for s in structures:
             if str(s.get('ID')) == str(structure_id):
+                # ⭐ Récupérer l'adresse brute
+                adresse_brute = s.get('adresse') or ''
+                
+                # ⭐ Formater l'adresse avec la fonction
+                adresse_formatee = sheets_helper.format_adresse(adresse_brute)
+                
                 structure = {
                     'nom': s.get('nom') or 'Hopital',
-                    'adresse': s.get('adresse') or '',
+                    'adresse': adresse_formatee,  # ⭐ Adresse formatée
                     'telephone': s.get('telephone') or '',
                     'email': s.get('email') or '',
                     'logo_url': s.get('logo_url') or ''
@@ -4121,7 +4142,7 @@ def print_rendez_vous():
         rdv_par_jour=rdv_par_jour,
         jours_liste=jours_liste,
         libelle_periode=libelle_periode,
-        structure=structure,  # Maintenant c'est un dictionnaire avec toutes les infos
+        structure=structure,
         stats=stats,
         today=today,
         now=datetime.now()
@@ -7254,7 +7275,6 @@ def api_recettes_detail():
         print(f"Erreur: {e}")
         return jsonify([]), 500
 
-
 @app.route('/api/finances/depenses/motif')
 @login_required
 def api_finances_depenses_motif():
@@ -8540,6 +8560,13 @@ def proforma_print(proforma_id):
     structures = sheets_helper.get_all_records('structures', use_prefix=False)
     structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
     
+    # ⭐ Récupérer l'adresse brute et la formater
+    adresse_brute = structure_info.get('adresse', '')
+    adresse_formatee = sheets_helper.format_adresse(adresse_brute)
+    
+    # ⭐ Mettre à jour la structure avec l'adresse formatée
+    structure_info['adresse'] = adresse_formatee
+    
     # Récupérer le logo
     logo_url = structure_info.get('logo_url', '')
     
@@ -8614,7 +8641,7 @@ def proforma_print(proforma_id):
     
     return render_template('proformas/proforma_print.html', 
                          proforma=proforma,
-                         structure=structure_info,
+                         structure=structure_info,  # ⭐ Adresse formatée
                          logo_url=logo_url,
                          # 🔥 DONNÉES ASSURANCE COMPLÉMENTAIRE
                          assurance2_nom=assurance2_nom,
@@ -8631,6 +8658,7 @@ def proforma_print(proforma_id):
                          sous_total=sous_total,
                          est_assure=est_assure,
                          assurance_nom=assurance_nom)
+
 
 @app.route('/api/proformas/convertir', methods=['POST'])
 @login_required

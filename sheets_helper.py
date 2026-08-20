@@ -156,6 +156,23 @@ class SheetsHelper:
             traceback.print_exc()
             return []
 
+
+    def format_adresse(self, adresse):
+        """
+        Formate l'adresse en remplaçant les virgules par des sauts de ligne
+        """
+        if not adresse:
+            return ""
+    
+        # Remplacer les virgules suivies d'un espace par un saut de ligne
+        adresse_formatee = adresse.replace(', ', '\n').replace(',', '\n')
+    
+        # Nettoyer les espaces en trop
+        adresse_formatee = '\n'.join([l.strip() for l in adresse_formatee.split('\n') if l.strip()])
+    
+        return adresse_formatee
+
+
     def get_prix_produit(self, structure_id, nom_produit):
         """
         Récupère le prix d'un produit avec cache

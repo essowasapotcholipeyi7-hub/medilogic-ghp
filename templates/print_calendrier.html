@@ -174,7 +174,7 @@
             {% endif %}
             <h1>{{ structure.nom if structure else 'Hopital' }}</h1>
         </div>
-        <div class="sub-info">
+        <div class="sub-info" style="white-space: pre-line;">
             {% if structure and structure.adresse %}
             <span>{{ structure.adresse }}</span>
             {% endif %}
