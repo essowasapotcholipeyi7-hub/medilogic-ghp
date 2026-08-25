@@ -101,7 +101,7 @@
     </div>
 </div>
 
-<!-- Modal Mot de passe oublié -->
+<!-- Modal Mot de passe oublié - Version 2FA -->
 <div class="modal fade" id="forgotModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-4">
@@ -109,16 +109,55 @@
                 <h5 class="modal-title">
                     <i class="fas fa-key me-2"></i>Réinitialisation
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" onclick="resetModal()"></button>
             </div>
             <div class="modal-body p-4">
-                <p class="text-muted small">Entrez votre email pour recevoir un lien de réinitialisation</p>
-                <input type="email" class="form-control rounded-pill" placeholder="votre@email.com">
+                <!-- ÉTAPE 1 : Email -->
+                <div id="stepEmail">
+                    <p class="text-muted small">Entrez votre email pour recevoir un code de vérification</p>
+                    <input type="email" id="resetEmail" class="form-control rounded-pill" placeholder="votre@email.com">
+                    <div id="resetMessage" class="mt-2 small"></div>
+                </div>
+                
+                <!-- ÉTAPE 2 : Code de vérification -->
+                <div id="stepCode" style="display:none;">
+                    <p class="text-muted small">
+                        <i class="fas fa-shield-alt text-primary"></i> 
+                        Un code de vérification a été envoyé à <strong id="verifEmail"></strong>
+                    </p>
+                    <div class="d-flex gap-2 justify-content-center my-3">
+                        <input type="text" id="code1" class="form-control text-center" maxlength="1" style="width:50px; height:60px; font-size:24px;" oninput="moveNext(this, 'code2')">
+                        <input type="text" id="code2" class="form-control text-center" maxlength="1" style="width:50px; height:60px; font-size:24px;" oninput="moveNext(this, 'code3')">
+                        <input type="text" id="code3" class="form-control text-center" maxlength="1" style="width:50px; height:60px; font-size:24px;" oninput="moveNext(this, 'code4')">
+                        <input type="text" id="code4" class="form-control text-center" maxlength="1" style="width:50px; height:60px; font-size:24px;" oninput="moveNext(this, 'code5')">
+                        <input type="text" id="code5" class="form-control text-center" maxlength="1" style="width:50px; height:60px; font-size:24px;" oninput="moveNext(this, 'code6')">
+                        <input type="text" id="code6" class="form-control text-center" maxlength="1" style="width:50px; height:60px; font-size:24px;" oninput="moveNext(this, null)">
+                    </div>
+                    <div id="codeMessage" class="mt-2 small text-center"></div>
+                    <div class="text-center mt-2">
+                        <button class="btn btn-link btn-sm" onclick="renvoyerCode()">
+                            <i class="fas fa-redo"></i> Renvoyer le code
+                        </button>
+                        <span class="text-muted small" id="codeTimer"></span>
+                    </div>
+                </div>
+                
+                <!-- ÉTAPE 3 : Lien de réinitialisation -->
+                <div id="stepLink" style="display:none;">
+                    <div class="text-center">
+                        <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                        <h6>Code vérifié !</h6>
+                        <p class="text-muted small">Cliquez sur le bouton ci-dessous pour réinitialiser votre mot de passe</p>
+                        <a href="#" id="resetLinkBtn" class="btn btn-primary rounded-pill">
+                            <i class="fas fa-arrow-right me-1"></i> Réinitialiser
+                        </a>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer border-0">
-                <button type="button" class="btn btn-light rounded-pill" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-primary rounded-pill" onclick="alert('Fonctionnalité en développement')">
-                    Envoyer
+                <button type="button" class="btn btn-light rounded-pill" data-bs-dismiss="modal" onclick="resetModal()">Annuler</button>
+                <button type="button" class="btn btn-primary rounded-pill" id="resetStepBtn" onclick="etapeSuivante()">
+                    <i class="fas fa-arrow-right me-1"></i> Continuer
                 </button>
             </div>
         </div>
@@ -364,6 +403,237 @@ document.querySelector('form').addEventListener('submit', function(e) {
     var spinner = btn.querySelector('#loading');
     spinner.classList.remove('d-none');
     btn.disabled = true;
+});
+
+// ============================================
+// VARIABLES
+// ============================================
+let resetEmail = '';
+let resetToken = '';
+let codeTimerInterval = null;
+let codeSeconds = 60;
+
+// ============================================
+// GESTION DES ÉTAPES
+// ============================================
+function etapeSuivante() {
+    var stepEmail = document.getElementById('stepEmail');
+    var stepCode = document.getElementById('stepCode');
+    var stepLink = document.getElementById('stepLink');
+    var btn = document.getElementById('resetStepBtn');
+    
+    if (stepEmail.style.display !== 'none') {
+        // ÉTAPE 1 → Envoyer le code
+        envoyerCodeVerification();
+    } else if (stepCode.style.display !== 'none') {
+        // ÉTAPE 2 → Vérifier le code
+        verifierCode();
+    }
+}
+
+function resetModal() {
+    document.getElementById('stepEmail').style.display = 'block';
+    document.getElementById('stepCode').style.display = 'none';
+    document.getElementById('stepLink').style.display = 'none';
+    document.getElementById('resetEmail').value = '';
+    document.getElementById('resetMessage').innerHTML = '';
+    document.getElementById('codeMessage').innerHTML = '';
+    document.getElementById('resetStepBtn').innerHTML = '<i class="fas fa-arrow-right me-1"></i> Continuer';
+    
+    // Réinitialiser les champs de code
+    for (let i = 1; i <= 6; i++) {
+        document.getElementById('code' + i).value = '';
+    }
+    document.getElementById('code1').focus();
+}
+
+// ============================================
+// ÉTAPE 1 : ENVOYER LE CODE
+// ============================================
+function envoyerCodeVerification() {
+    var email = document.getElementById('resetEmail').value.trim();
+    var messageDiv = document.getElementById('resetMessage');
+    var btn = document.getElementById('resetStepBtn');
+    
+    if (!email) {
+        messageDiv.innerHTML = '<span class="text-danger">Veuillez entrer votre email</span>';
+        return;
+    }
+    
+    if (!email.includes('@') || !email.includes('.')) {
+        messageDiv.innerHTML = '<span class="text-danger">Email invalide</span>';
+        return;
+    }
+    
+    messageDiv.innerHTML = '<span class="text-muted">Envoi du code de vérification...</span>';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Envoi...';
+    
+    fetch('/api/auth/send-verification-code', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email: email})
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check me-1"></i> Vérifier';
+        
+        if (data.success) {
+            resetEmail = email;
+            resetToken = data.token;
+            messageDiv.innerHTML = '<span class="text-success">✅ Un code de vérification a été envoyé à votre email</span>';
+            
+            // Passer à l'étape 2
+            document.getElementById('stepEmail').style.display = 'none';
+            document.getElementById('stepCode').style.display = 'block';
+            document.getElementById('verifEmail').textContent = email;
+            document.getElementById('code1').focus();
+            
+            // Démarrer le timer
+            demarrerTimer(60);
+        } else {
+            messageDiv.innerHTML = '<span class="text-danger">❌ ' + (data.error || 'Erreur') + '</span>';
+        }
+    })
+    .catch(error => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-arrow-right me-1"></i> Continuer';
+        messageDiv.innerHTML = '<span class="text-danger">❌ Erreur de connexion</span>';
+        console.error('Erreur:', error);
+    });
+}
+
+// ============================================
+// ÉTAPE 2 : VÉRIFIER LE CODE
+// ============================================
+function verifierCode() {
+    var code = '';
+    for (let i = 1; i <= 6; i++) {
+        var val = document.getElementById('code' + i).value;
+        code += val;
+    }
+    
+    console.log("Code saisi:", code);
+    console.log("Longueur:", code.length);
+    
+    var messageDiv = document.getElementById('codeMessage');
+    var btn = document.getElementById('resetStepBtn');
+    
+    if (code.length < 6) {
+        messageDiv.innerHTML = '<span class="text-warning">Veuillez saisir les 6 chiffres du code</span>';
+        return;
+    }
+    
+    messageDiv.innerHTML = '<span class="text-muted">Vérification du code...</span>';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Vérification...';
+    
+    fetch('/api/auth/verify-code', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            email: resetEmail,
+            code: code,
+            token: resetToken
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check me-1"></i> OK';
+        
+        if (data.success) {
+            messageDiv.innerHTML = '<span class="text-success">✅ Code vérifié !</span>';
+            
+            // Passer à l'étape 3
+            document.getElementById('stepCode').style.display = 'none';
+            document.getElementById('stepLink').style.display = 'block';
+            document.getElementById('resetLinkBtn').href = data.reset_link;
+            
+            btn.innerHTML = '<i class="fas fa-check me-1"></i> Terminé';
+            btn.disabled = true;
+        } else {
+            messageDiv.innerHTML = '<span class="text-danger">❌ ' + (data.error || 'Code invalide') + '</span>';
+            btn.innerHTML = '<i class="fas fa-check me-1"></i> Vérifier';
+        }
+    })
+    .catch(error => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check me-1"></i> Vérifier';
+        messageDiv.innerHTML = '<span class="text-danger">❌ Erreur de connexion</span>';
+        console.error('Erreur:', error);
+    });
+}
+
+// ============================================
+// NAVIGATION ENTRE LES CHAMPS DE CODE
+// ============================================
+function moveNext(current, nextId) {
+    if (current.value.length >= 1) {
+        if (nextId) {
+            document.getElementById(nextId).focus();
+        }
+    }
+}
+
+// ============================================
+// TIMER POUR LE CODE
+// ============================================
+function demarrerTimer(seconds) {
+    codeSeconds = seconds;
+    var timerDiv = document.getElementById('codeTimer');
+    var renvoyerBtn = document.querySelector('.btn-link');
+    
+    if (codeTimerInterval) {
+        clearInterval(codeTimerInterval);
+    }
+    
+    renvoyerBtn.disabled = true;
+    
+    codeTimerInterval = setInterval(function() {
+        codeSeconds--;
+        timerDiv.textContent = ' (' + codeSeconds + 's)';
+        
+        if (codeSeconds <= 0) {
+            clearInterval(codeTimerInterval);
+            timerDiv.textContent = '';
+            renvoyerBtn.disabled = false;
+        }
+    }, 1000);
+}
+
+function renvoyerCode() {
+    // Réinitialiser le processus
+    document.getElementById('stepCode').style.display = 'none';
+    document.getElementById('stepEmail').style.display = 'block';
+    document.getElementById('resetStepBtn').innerHTML = '<i class="fas fa-arrow-right me-1"></i> Continuer';
+    document.getElementById('resetMessage').innerHTML = '';
+    document.getElementById('codeMessage').innerHTML = '';
+    
+    // Réinitialiser les champs de code
+    for (let i = 1; i <= 6; i++) {
+        document.getElementById('code' + i).value = '';
+    }
+    
+    document.getElementById('resetEmail').value = resetEmail;
+    envoyerCodeVerification();
+}
+
+// ============================================
+// ENTRÉE POUR SOUMETTRE
+// ============================================
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        var stepEmail = document.getElementById('stepEmail');
+        var stepCode = document.getElementById('stepCode');
+        
+        if (stepEmail.style.display !== 'none') {
+            envoyerCodeVerification();
+        } else if (stepCode.style.display !== 'none') {
+            verifierCode();
+        }
+    }
 });
 </script>
 {% endblock %}

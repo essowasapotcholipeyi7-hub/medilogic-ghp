@@ -19,6 +19,9 @@ from models import Medecin, Patient, Structure
 from datetime import datetime, date, timedelta
 from routes.protocoles_routes import protocoles_bp
 from routes.journal_routes import journal_bp
+import secrets
+import random
+from datetime import datetime, timedelta
 
 
 
@@ -570,6 +573,341 @@ def valider_mot_de_passe(password):
     
     return True, "OK"
 
+
+# Stockage temporaire des codes (en production, utiliser Redis ou base de données)
+verification_codes = {}
+
+@app.route('/api/auth/send-verification-code', methods=['POST'])
+def api_send_verification_code():
+    """Envoyer un code de vérification par email"""
+    try:
+        data = request.json
+        email = data.get('email')
+        
+        if not email:
+            return jsonify({'success': False, 'error': 'Email requis'}), 400
+        
+        # 🔥 RECHERCHER L'UTILISATEUR DANS GOOGLE SHEETS
+        user = None
+        user_nom = None
+        user_id = None
+        structure_id = None
+        
+        # 1. Chercher dans les responsables de structure (feuille structures)
+        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+        for s in structures:
+            if s.get('email') and s.get('email').lower() == email.lower():
+                user = {
+                    'id': s.get('ID'),
+                    'nom': s.get('nom') or s.get('proprietaire') or 'Responsable',
+                    'email': s.get('email'),
+                    'role': 'responsable',
+                    'structure_id': s.get('ID')
+                }
+                user_nom = s.get('nom') or s.get('proprietaire') or 'Responsable'
+                user_id = s.get('ID')
+                structure_id = s.get('ID')
+                print(f"✅ Utilisateur trouvé dans structures: {user}")
+                break
+        
+        # 2. Si non trouvé, chercher dans les collaborateurs (struct_{id}_users)
+        if not user:
+            try:
+                users = sheets_helper.get_all_records('users', use_prefix=True)
+                for u in users:
+                    if u.get('email') and u.get('email').lower() == email.lower():
+                        user = {
+                            'id': u.get('ID'),
+                            'nom': u.get('nom') or u.get('prenom') or 'Utilisateur',
+                            'email': u.get('email'),
+                            'role': u.get('role', 'collaborateur'),
+                            'structure_id': u.get('structure_id')
+                        }
+                        user_nom = u.get('nom') or u.get('prenom') or 'Utilisateur'
+                        user_id = u.get('ID')
+                        structure_id = u.get('structure_id')
+                        print(f"✅ Utilisateur trouvé dans users: {user}")
+                        break
+            except Exception as e:
+                print(f"⚠️ Erreur recherche users: {e}")
+        
+        # ⚠️ Ne pas révéler que l'email n'existe pas (sécurité)
+        if not user:
+            print(f"⚠️ Email non trouvé: {email}")
+            return jsonify({
+                'success': True,
+                'message': 'Si l\'email existe, un code de vérification a été envoyé',
+                'token': 'dummy_token'
+            })
+        
+        # Générer un code à 6 chiffres
+        import random
+        code = str(random.randint(100000, 999999))
+        token = secrets.token_urlsafe(32)
+        
+        # Stocker le code (expire dans 5 minutes)
+        verification_codes[email] = {
+            'code': code,
+            'token': token,
+            'expiry': datetime.now() + timedelta(minutes=5),
+            'attempts': 0,
+            'max_attempts': 3,
+            'user_id': user_id,
+            'structure_id': structure_id
+        }
+        
+        # Envoyer le code par email
+        send_verification_code_email(email, code, user_nom)
+        
+        print(f"🔐 Code de vérification pour {email}: {code}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Un code de vérification a été envoyé à votre email',
+            'token': token
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': 'Erreur interne'}), 500
+
+
+@app.route('/api/auth/verify-code', methods=['POST'])
+def api_verify_code():
+    """Vérifier le code de vérification"""
+    try:
+        data = request.json
+        email = data.get('email')
+        code = data.get('code')
+        token = data.get('token')
+        
+        if not email or not code or not token:
+            return jsonify({'success': False, 'error': 'Données manquantes'}), 400
+        
+        stored = verification_codes.get(email)
+        
+        if not stored:
+            return jsonify({'success': False, 'error': 'Code expiré ou invalide'}), 400
+        
+        if stored.get('token') != token:
+            return jsonify({'success': False, 'error': 'Session invalide'}), 400
+        
+        if datetime.now() > stored.get('expiry'):
+            del verification_codes[email]
+            return jsonify({'success': False, 'error': 'Code expiré'}), 400
+        
+        if stored.get('attempts', 0) >= stored.get('max_attempts', 3):
+            del verification_codes[email]
+            return jsonify({'success': False, 'error': 'Trop de tentatives'}), 400
+        
+        if stored.get('code') != str(code).strip():
+            stored['attempts'] = stored.get('attempts', 0) + 1
+            return jsonify({'success': False, 'error': f'Code incorrect ({3 - stored["attempts"]} essai(s) restant(s))'}), 400
+        
+        # ✅ Code correct
+        import secrets
+        reset_token = secrets.token_urlsafe(32)
+        reset_expiry = datetime.now() + timedelta(hours=24)
+        
+        user_id = stored.get('user_id')
+        structure_id = stored.get('structure_id')
+        user_type = stored.get('user_type', 'collaborateur')
+        
+        if structure_id and user_id:
+            try:
+                if user_type == 'responsable':
+                    # 🔥 UTILISER reset_token, PAS token (pour ne pas écraser le token de synchro)
+                    sheets_helper.update_record_by_id(
+                        'structures',
+                        user_id,
+                        {
+                            'reset_token': reset_token,      # ← NOUVEAU champ
+                            'reset_token_expiry': reset_expiry.isoformat()
+                        },
+                        id_column='ID',
+                        use_prefix=False
+                    )
+                    print(f"✅ reset_token enregistré dans structures pour l'utilisateur {user_id}")
+                else:
+                    sheets_helper.update_record_by_id(
+                        'users',
+                        user_id,
+                        {
+                            'reset_token': reset_token,      # ← NOUVEAU champ
+                            'reset_token_expiry': reset_expiry.isoformat()
+                        },
+                        id_column='ID'
+                    )
+                    print(f"✅ reset_token enregistré dans struct_{structure_id}_users pour l'utilisateur {user_id}")
+            except Exception as e:
+                print(f"⚠️ Erreur mise à jour: {e}")
+        
+        del verification_codes[email]
+        
+        reset_link = f"{request.host_url}reset-password?token={reset_token}"
+        print(f"🔗 Lien de réinitialisation: {reset_link}")
+        
+        return jsonify({
+            'success': True,
+            'reset_link': reset_link
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    """Page de réinitialisation du mot de passe"""
+    token = request.args.get('token')
+    
+    if not token:
+        flash('Token manquant', 'danger')
+        return redirect(url_for('index'))
+    
+    user = None
+    
+    try:
+        # 1. Chercher dans les structures
+        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+        for s in structures:
+            # 🔥 Chercher reset_token (pas token)
+            if s.get('reset_token') == token:
+                expiry = s.get('reset_token_expiry')
+                if expiry:
+                    try:
+                        expiry_date = datetime.fromisoformat(expiry)
+                        if expiry_date > datetime.now():
+                            user = {
+                                'id': s.get('ID'),
+                                'nom': s.get('nom') or 'Responsable',
+                                'email': s.get('email'),
+                                'structure_id': s.get('ID'),
+                                'type': 'structure'
+                            }
+                            break
+                    except:
+                        pass
+        
+        # 2. Chercher dans les collaborateurs
+        if not user:
+            users = sheets_helper.get_all_records('users', use_prefix=True)
+            for u in users:
+                if u.get('reset_token') == token:
+                    expiry = u.get('reset_token_expiry')
+                    if expiry:
+                        try:
+                            expiry_date = datetime.fromisoformat(expiry)
+                            if expiry_date > datetime.now():
+                                user = {
+                                    'id': u.get('ID'),
+                                    'nom': u.get('nom') or u.get('prenom') or 'Utilisateur',
+                                    'email': u.get('email'),
+                                    'structure_id': u.get('structure_id'),
+                                    'type': 'user'
+                                }
+                                break
+                        except:
+                            pass
+    except Exception as e:
+        print(f"⚠️ Erreur recherche token: {e}")
+    
+    if not user:
+        flash('🔒 Token invalide ou expiré', 'danger')
+        return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+        
+        if new_password != confirm_password:
+            flash('Les mots de passe ne correspondent pas', 'danger')
+            return render_template('reset_password.html', token=token)
+        
+        if len(new_password) < 8:
+            flash('Le mot de passe doit contenir au moins 8 caractères', 'danger')
+            return render_template('reset_password.html', token=token)
+        
+        from werkzeug.security import generate_password_hash
+        hashed = generate_password_hash(new_password)
+        
+        try:
+            if user['type'] == 'structure':
+                # 🔥 NE PAS TOUCHER au champ 'token' (synchronisation)
+                sheets_helper.update_record_by_id(
+                    'structures',
+                    user['id'],
+                    {
+                        'mot_de_passe': hashed,
+                        'reset_token': '',          # ← Nettoyer reset_token
+                        'reset_token_expiry': ''    # ← Nettoyer reset_token_expiry
+                    },
+                    id_column='ID',
+                    use_prefix=False
+                )
+            else:
+                sheets_helper.update_record_by_id(
+                    'users',
+                    user['id'],
+                    {
+                        'mot_de_passe': hashed,
+                        'reset_token': '',
+                        'reset_token_expiry': ''
+                    },
+                    id_column='ID'
+                )
+            
+            flash('✅ Mot de passe réinitialisé avec succès !', 'success')
+            return redirect(url_for('index'))
+            
+        except Exception as e:
+            flash(f'❌ Erreur: {e}', 'danger')
+            return render_template('reset_password.html', token=token)
+    
+    return render_template('reset_password.html', token=token)
+
+
+def send_verification_code_email(email, code, nom):
+    """Envoyer un email avec le code de vérification"""
+    try:
+        from flask_mail import Mail, Message
+        
+        msg = Message(
+            subject="🔐 Code de vérification - SSoftOneV10",
+            recipients=[email],
+            html=f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px;">
+                <h2 style="color: #1a2a6c;">🔐 Code de vérification</h2>
+                <p>Bonjour <strong>{nom}</strong>,</p>
+                <p>Vous avez demandé la réinitialisation de votre mot de passe.</p>
+                <div style="background: #f5f7fa; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;">
+                    <p style="font-size: 14px; color: #6c7a89; margin-bottom: 5px;">Votre code de vérification est :</p>
+                    <div style="font-size: 36px; font-weight: bold; color: #1a2a6c; letter-spacing: 10px; background: white; padding: 15px; border-radius: 8px; border: 2px dashed #1a2a6c;">
+                        {code}
+                    </div>
+                    <p style="font-size: 12px; color: #8e9aaf; margin-top: 10px;">Ce code expire dans <strong>5 minutes</strong></p>
+                </div>
+                <p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+                <hr>
+                <small style="color: #6c7a89;">SSoftOneV10 - Système de Gestion Hospitalière</small>
+            </body>
+            </html>
+            """
+        )
+        mail.send(msg)
+        print(f"✅ Email de vérification envoyé à {email}")
+        return True
+    except Exception as e:
+        print(f"❌ Erreur envoi email: {e}")
+        return False
+
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -873,65 +1211,52 @@ def api_get_patient(id):
     try:
         structure_id = session.get('structure_id')
         
-        # 🔥 Ajouter les colonnes de l'assurance complémentaire et de la personne à prévenir
-        patient = db.execute_query("""
-            SELECT id, nom, prenom, telephone, adresse, date_naissance,
-                   type_assurance, taux_prise_charge, numero_assure,
-                   assurance2_nom, taux_assurance2, numero_assure2,
-                   personne_a_prevenir_nom, personne_a_prevenir_telephone, personne_a_prevenir_relation
-            FROM patients 
+        result = db.execute_query("""
+            SELECT * FROM patients 
             WHERE id = %s AND structure_id = %s
         """, (id, structure_id))
         
-        if not patient or len(patient) == 0:
+        if not result or len(result) == 0:
             return jsonify({'success': False, 'error': 'Patient non trouvé'}), 404
         
-        if isinstance(patient[0], dict):
-            p = patient[0]
-            date_naissance = p.get('date_naissance')
-            result = {
-                'id': p.get('id'),
-                'nom': p.get('nom', ''),
-                'prenom': p.get('prenom', ''),
-                'telephone': p.get('telephone', ''),
-                'adresse': p.get('adresse', ''),
-                'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else '',
-                'age': calculer_age(date_naissance) if date_naissance else None,
-                'type_assurance': p.get('type_assurance', 'non_assure'),
-                'taux_prise_charge': p.get('taux_prise_charge', 0),
-                'numero_assure': p.get('numero_assure', ''),
-                'assurance2_nom': p.get('assurance2_nom', ''),
-                'taux_assurance2': p.get('taux_assurance2', 0),
-                'numero_assure2': p.get('numero_assure2', ''),
-                # 🔥 NOUVEAUX CHAMPS
-                'personne_a_prevenir_nom': p.get('personne_a_prevenir_nom', ''),
-                'personne_a_prevenir_telephone': p.get('personne_a_prevenir_telephone', ''),
-                'personne_a_prevenir_relation': p.get('personne_a_prevenir_relation', '')
-            }
-        else:
-            p = patient[0]
-            date_naissance = p[5] if len(p) > 5 else None
-            result = {
-                'id': p[0],
-                'nom': p[1],
-                'prenom': p[2],
-                'telephone': p[3],
-                'adresse': p[4],
-                'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else '',
-                'age': calculer_age(date_naissance) if date_naissance else None,
-                'type_assurance': p[6] if len(p) > 6 else 'non_assure',
-                'taux_prise_charge': p[7] if len(p) > 7 else 0,
-                'numero_assure': p[8] if len(p) > 8 else '',
-                'assurance2_nom': p[9] if len(p) > 9 else '',
-                'taux_assurance2': p[10] if len(p) > 10 else 0,
-                'numero_assure2': p[11] if len(p) > 11 else '',
-                # 🔥 NOUVEAUX CHAMPS
-                'personne_a_prevenir_nom': p[12] if len(p) > 12 else '',
-                'personne_a_prevenir_telephone': p[13] if len(p) > 13 else '',
-                'personne_a_prevenir_relation': p[14] if len(p) > 14 else ''
-            }
+        row = result[0]
         
-        return jsonify(result)
+        # Si c'est un dictionnaire
+        if isinstance(row, dict):
+            created_at = row.get('created_at')
+            date_naissance = row.get('date_naissance')
+            
+            # Formater la date d'enregistrement
+            if created_at:
+                if hasattr(created_at, 'strftime'):
+                    created_at_formatted = created_at.strftime('%d/%m/%Y %H:%M')
+                else:
+                    created_at_formatted = str(created_at)
+            else:
+                created_at_formatted = 'Non renseignée'
+            
+            return jsonify({
+                'id': row.get('id'),
+                'nom': row.get('nom', ''),
+                'prenom': row.get('prenom', ''),
+                'telephone': row.get('telephone', ''),
+                'adresse': row.get('adresse', ''),
+                'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else '',
+                'age': calculer_age(date_naissance) if date_naissance else None,
+                'type_assurance': row.get('type_assurance', 'non_assure'),
+                'taux_prise_charge': row.get('taux_prise_charge', 0),
+                'numero_assure': row.get('numero_assure', ''),
+                'assurance2_nom': row.get('assurance2_nom', ''),
+                'taux_assurance2': row.get('taux_assurance2', 0),
+                'numero_assure2': row.get('numero_assure2', ''),
+                'personne_a_prevenir_nom': row.get('personne_a_prevenir_nom', ''),
+                'personne_a_prevenir_telephone': row.get('personne_a_prevenir_telephone', ''),
+                'personne_a_prevenir_relation': row.get('personne_a_prevenir_relation', ''),
+                'created_at': created_at_formatted
+            })
+        
+        # Si c'est un tuple
+        return jsonify({'error': 'Format de données invalide'}), 500
         
     except Exception as e:
         print(f"❌ Erreur GET patient: {e}")
@@ -1007,6 +1332,92 @@ def api_get_patients():
         import traceback
         traceback.print_exc()
         return jsonify([]), 500
+
+
+@app.route('/api/patients/stats', methods=['GET'])
+@login_required
+def api_patients_stats():
+    """Récupère les statistiques des patients"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        # 🔥 UTILISER DATE() POUR COMPARER UNIQUEMENT LA DATE SANS L'HEURE
+        result = db.execute_query("""
+            SELECT 
+                COUNT(*) as total,
+                COUNT(CASE WHEN DATE(created_at) = CURRENT_DATE THEN 1 END) as aujourdhui,
+                COUNT(CASE WHEN DATE(created_at) >= DATE_TRUNC('week', CURRENT_DATE) 
+                          AND DATE(created_at) <= DATE_TRUNC('week', CURRENT_DATE) + INTERVAL '6 days' THEN 1 END) as semaine,
+                COUNT(CASE WHEN DATE(created_at) >= DATE_TRUNC('month', CURRENT_DATE) 
+                          AND DATE(created_at) <= DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day' THEN 1 END) as mois,
+                COUNT(CASE WHEN DATE(created_at) >= DATE_TRUNC('year', CURRENT_DATE) 
+                          AND DATE(created_at) <= DATE_TRUNC('year', CURRENT_DATE) + INTERVAL '1 year' - INTERVAL '1 day' THEN 1 END) as annee,
+                COUNT(CASE WHEN type_assurance = 'amu_cnss' THEN 1 END) as amu_cnss,
+                COUNT(CASE WHEN type_assurance = 'amu_inam' THEN 1 END) as amu_inam,
+                COUNT(CASE WHEN assurance2_nom IS NOT NULL AND assurance2_nom != '' THEN 1 END) as cac,
+                COUNT(CASE WHEN type_assurance = 'non_assure' OR type_assurance IS NULL THEN 1 END) as non_assure
+            FROM patients 
+            WHERE structure_id = %s
+        """, (structure_id,))
+        
+        print("=== STATS PATIENTS ===")
+        print(f"Résultat: {result}")
+        
+        if not result or len(result) == 0:
+            return jsonify({
+                'success': True,
+                'total': 0,
+                'aujourdhui': 0,
+                'semaine': 0,
+                'mois': 0,
+                'annee': 0,
+                'par_assurance': {
+                    'amu_cnss': 0,
+                    'amu_inam': 0,
+                    'cac': 0,
+                    'non_assure': 0
+                }
+            })
+        
+        row = result[0]
+        
+        if isinstance(row, dict):
+            return jsonify({
+                'success': True,
+                'total': row.get('total', 0),
+                'aujourdhui': row.get('aujourdhui', 0),
+                'semaine': row.get('semaine', 0),
+                'mois': row.get('mois', 0),
+                'annee': row.get('annee', 0),
+                'par_assurance': {
+                    'amu_cnss': row.get('amu_cnss', 0),
+                    'amu_inam': row.get('amu_inam', 0),
+                    'cac': row.get('cac', 0),
+                    'non_assure': row.get('non_assure', 0)
+                }
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'total': row[0] if len(row) > 0 else 0,
+                'aujourdhui': row[1] if len(row) > 1 else 0,
+                'semaine': row[2] if len(row) > 2 else 0,
+                'mois': row[3] if len(row) > 3 else 0,
+                'annee': row[4] if len(row) > 4 else 0,
+                'par_assurance': {
+                    'amu_cnss': row[5] if len(row) > 5 else 0,
+                    'amu_inam': row[6] if len(row) > 6 else 0,
+                    'cac': row[7] if len(row) > 7 else 0,
+                    'non_assure': row[8] if len(row) > 8 else 0
+                }
+            })
+        
+    except Exception as e:
+        print(f"❌ Erreur stats patients: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # ROUTE de vérification (pour debug)
 @app.route('/check_sheets')
@@ -2729,42 +3140,7 @@ def api_update_structure():
         print(f"❌ Erreur: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/admin/reset_password/<int:structure_id>', methods=['POST'])
-def reset_password(structure_id):
-    """Réinitialiser le mot de passe d'une structure"""
-    try:
-        import hashlib
-        data = request.json
-        new_password = data.get('password', 'medilogic2026')
-        
-        # Hasher le nouveau mot de passe
-        hashed_password = hashlib.sha256(new_password.encode()).hexdigest()
-        
-        # Mettre à jour dans Google Sheets
-        sheet_structures = sheets_helper.spreadsheet.worksheet("structures")
-        
-        # Trouver la ligne de la structure
-        cell = sheet_structures.find(str(structure_id), in_column=1)
-        
-        if cell:
-            row_num = cell.row
-            # Lire la ligne actuelle
-            current_row = sheet_structures.row_values(row_num)
-            # Modifier le mot de passe (colonne 6 = index 5)
-            if len(current_row) > 5:
-                current_row[5] = hashed_password
-                # Mettre à jour la ligne
-                sheet_structures.update(f'A{row_num}:K{row_num}', [current_row])
-                print(f"✅ Mot de passe réinitialisé pour structure {structure_id}")
-                return jsonify({'success': True, 'message': 'Mot de passe réinitialisé'})
-            else:
-                return jsonify({'success': False, 'error': 'Structure invalide'}), 400
-        else:
-            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 404
-            
-    except Exception as e:
-        print(f"❌ Erreur: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/debug_ventes')
 @login_required
 def debug_ventes():
