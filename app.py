@@ -1076,6 +1076,14 @@ def actes_vente():
             else:
                 prise_cac = bool(prise_cac_raw)
             
+            # 🔥🔥🔥 RÉCUPÉRER LE STATUT (colonne K) 🔥🔥🔥
+            statut_raw = a.get('statut') or a.get('STATUT') or a.get('Statut') or 'direct'
+            statut = 'direct'
+            if statut_raw and statut_raw != '':
+                statut = str(statut_raw).strip().upper()
+                if statut not in ['EP', 'DIRECT']:
+                    statut = 'direct'
+            
             actes_filtres.append({
                 'ID': a.get('ID'),
                 'nom': a.get('nom', ''),
@@ -1085,7 +1093,8 @@ def actes_vente():
                 'prise_en_charge_amu': prise_amu,
                 'commentaire_amu': a.get('commentaire_amu', ''),
                 'prise_en_charge_cac': prise_cac,
-                'commentaire_cac': a.get('commentaire_cac', '')
+                'commentaire_cac': a.get('commentaire_cac', ''),
+                'statut': statut  # 🔥 AJOUTER ICI
             })
     
     patients = sheets_helper.get_all_records('patients', use_prefix=True)
@@ -1128,16 +1137,17 @@ def actes_vente():
                         print(f"✅ Acte trouvé dans Sheets: ID {acte_trouve['ID']} - {acte_trouve['nom']}")
                         
                         articles_auto.append({
-                            'id': acte_trouve['ID'],  # ⭐ Utiliser l'ID de l'acte (pas celui de la prescription)
+                            'id': acte_trouve['ID'],
                             'nom': p.medicament,
                             'prix': float(p.prix_total) if p.prix_total else 0,
                             'quantite': int(p.quantite) if p.quantite else 1,
                             'pbr': float(p.pbr) if p.pbr else float(p.prix_total or 0),
-                            'prescription_id': p.id,  # Garder l'ID de la prescription pour référence
+                            'prescription_id': p.id,
                             'prise_en_charge_amu': True,
                             'prise_en_charge_cac': True,
                             'commentaire_amu': '',
-                            'commentaire_cac': ''
+                            'commentaire_cac': '',
+                            'statut': acte_trouve.get('statut', 'direct')  # 🔥 AJOUTER
                         })
                         
                         # ⭐ Mettre à jour le statut dans Neon
@@ -5102,6 +5112,7 @@ def api_get_produits():
                     # H=7: unite, I=8: date_peremption, J=9: lot, K=10: structure_id
                     # L=11: prise_en_charge_amu, M=12: commentaire_amu,
                     # N=13: prise_en_charge_cac, O=14: commentaire_cac
+                    # 🔥 P=15: statut (NOUVEAU)
                     
                     produit_id = row[0] if len(row) > 0 else None
                     nom = row[1].strip() if len(row) > 1 and row[1] else ''
@@ -5109,11 +5120,9 @@ def api_get_produits():
                     pbr = float(row[3]) if len(row) > 3 and row[3] else prix_vente
                     prix_achat = float(row[4]) if len(row) > 4 and row[4] else 0
                     
-                    # 🔥 Gérer les valeurs vides pour quantite_stock
                     stock_raw = row[5].strip() if len(row) > 5 and row[5] else '0'
                     quantite_stock = int(float(stock_raw)) if stock_raw and stock_raw != '' else 0
                     
-                    # 🔥 Gérer les valeurs vides pour seuil_alerte
                     seuil_raw = row[6].strip() if len(row) > 6 and row[6] else '10'
                     seuil_alerte = int(float(seuil_raw)) if seuil_raw and seuil_raw != '' else 10
                     
@@ -5122,13 +5131,17 @@ def api_get_produits():
                     lot = row[9] if len(row) > 9 and row[9] else ''
                     struct_id = row[10] if len(row) > 10 else None
                     
-                    # 🔥🔥🔥 RÉCUPÉRER LES CHAMPS COLONNES L, M, N, O 🔥🔥🔥
+                    # 🔥 RÉCUPÉRER LES CHAMPS COLONNES L, M, N, O
                     prise_en_charge_amu = row[11] if len(row) > 11 and row[11] else True
                     commentaire_amu = row[12] if len(row) > 12 and row[12] else ''
                     prise_en_charge_cac = row[13] if len(row) > 13 and row[13] else True
                     commentaire_cac = row[14] if len(row) > 14 and row[14] else ''
                     
-                    # 🔥 Convertir les valeurs "FALSE" / "TRUE" en booléens
+                    # 🔥🔥🔥 RÉCUPÉRER LE STATUT (COLONNE P, INDEX 15) 🔥🔥🔥
+                    statut = row[15].strip() if len(row) > 15 and row[15] else 'direct'
+                    statut = statut.upper() if statut else 'direct'
+                    
+                    # Convertir en booléens
                     if isinstance(prise_en_charge_amu, str):
                         prise_en_charge_amu = prise_en_charge_amu.upper() == 'TRUE'
                     if isinstance(prise_en_charge_cac, str):
@@ -5147,11 +5160,11 @@ def api_get_produits():
                                 'unite': unite,
                                 'date_peremption': date_peremption,
                                 'lot': lot,
-                                # 🔥🔥🔥 NOUVEAUX CHAMPS 🔥🔥🔥
                                 'prise_en_charge_amu': prise_en_charge_amu,
                                 'commentaire_amu': commentaire_amu,
                                 'prise_en_charge_cac': prise_en_charge_cac,
-                                'commentaire_cac': commentaire_cac
+                                'commentaire_cac': commentaire_cac,
+                                'statut': statut  # 🔥 NOUVEAU
                             })
                 except Exception as e:
                     print(f"⚠️ Erreur ligne {i}: {e}")
@@ -5162,13 +5175,12 @@ def api_get_produits():
             
         except Exception as e:
             print(f"⚠️ Feuille {sheet_name} non trouvée: {e}")
-            # Fallback: essayer sans préfixe
+            # Fallback
             produits = sheets_helper.get_all_records('produits', use_prefix=False)
             produits_liste = []
             for p in produits:
                 if str(p.get('structure_id')) == str(structure_id):
                     try:
-                        # 🔥 Récupérer les champs avec fallback
                         prise_amu = p.get('prise_en_charge_amu', True)
                         if isinstance(prise_amu, str):
                             prise_amu = prise_amu.upper() == 'TRUE'
@@ -5176,6 +5188,10 @@ def api_get_produits():
                         prise_cac = p.get('prise_en_charge_cac', True)
                         if isinstance(prise_cac, str):
                             prise_cac = prise_cac.upper() == 'TRUE'
+                        
+                        # 🔥 Récupérer le statut dans le fallback
+                        statut = p.get('statut', 'direct')
+                        statut = statut.upper() if statut else 'direct'
                         
                         produits_liste.append({
                             'id': p.get('ID'),
@@ -5188,11 +5204,11 @@ def api_get_produits():
                             'unite': p.get('unite', 'unité'),
                             'date_peremption': p.get('date_peremption', ''),
                             'lot': p.get('lot', ''),
-                            # 🔥🔥🔥 NOUVEAUX CHAMPS 🔥🔥🔥
                             'prise_en_charge_amu': prise_amu,
                             'commentaire_amu': p.get('commentaire_amu', ''),
                             'prise_en_charge_cac': prise_cac,
-                            'commentaire_cac': p.get('commentaire_cac', '')
+                            'commentaire_cac': p.get('commentaire_cac', ''),
+                            'statut': statut  # 🔥 NOUVEAU
                         })
                     except:
                         continue
@@ -5205,6 +5221,7 @@ def api_get_produits():
         import traceback
         traceback.print_exc()
         return jsonify([]), 500
+
 
 @app.route('/api/produits/search')
 @login_required
@@ -5656,6 +5673,8 @@ def api_vente_pharma():
                 produit['prise_en_charge_amu'] = True
             if 'prise_en_charge_cac' not in produit:
                 produit['prise_en_charge_cac'] = True
+            if 'statut' not in produit:
+                produit['statut'] = 'direct'  # 🔥 AJOUT
         
         # 🔥 Construire l'objet assurances pour le JSONB
         assurances_data = {
@@ -6197,6 +6216,9 @@ def api_add_acte_vente():
                 acte['prise_en_charge_amu'] = True
             if 'prise_en_charge_cac' not in acte:
                 acte['prise_en_charge_cac'] = True
+
+            if 'statut' not in acte:
+                acte['statut'] = 'direct'  # 🔥 AJOUT
         
         # 🔥 Construire l'objet assurances pour le JSONB
         assurances_data = {
@@ -6770,7 +6792,7 @@ def api_get_actes():
                 except (ValueError, TypeError):
                     pbr_float = prix_float
             
-            # 🔥 PRISE EN CHARGE AMU (colonne G - index 6)
+            # PRISE EN CHARGE AMU (colonne G - index 6)
             prise_en_charge_amu_raw = a.get('prise_en_charge_amu') or a.get('PRISE_EN_CHARGE_AMU') or a.get('Prise_en_charge_amu')
             prise_en_charge_amu = True
             if prise_en_charge_amu_raw is not None and prise_en_charge_amu_raw != '':
@@ -6781,10 +6803,10 @@ def api_get_actes():
                 else:
                     prise_en_charge_amu = True
             
-            # 🔥 COMMENTAIRE AMU (colonne H - index 7)
+            # COMMENTAIRE AMU (colonne H - index 7)
             commentaire_amu = a.get('commentaire_amu') or a.get('COMMENTAIRE_AMU') or a.get('Commentaire_amu') or ''
             
-            # 🔥 PRISE EN CHARGE CAC (colonne I - index 8)
+            # PRISE EN CHARGE CAC (colonne I - index 8)
             prise_en_charge_cac_raw = a.get('prise_en_charge_cac') or a.get('PRISE_EN_CHARGE_CAC') or a.get('Prise_en_charge_cac')
             prise_en_charge_cac = True
             if prise_en_charge_cac_raw is not None and prise_en_charge_cac_raw != '':
@@ -6795,8 +6817,16 @@ def api_get_actes():
                 else:
                     prise_en_charge_cac = True
             
-            # 🔥 COMMENTAIRE CAC (colonne J - index 9)
+            # COMMENTAIRE CAC (colonne J - index 9)
             commentaire_cac = a.get('commentaire_cac') or a.get('COMMENTAIRE_CAC') or a.get('Commentaire_cac') or ''
+            
+            # 🔥🔥🔥 RÉCUPÉRER LE STATUT (colonne K - index 10) 🔥🔥🔥
+            statut_raw = a.get('statut') or a.get('STATUT') or a.get('Statut') or 'direct'
+            statut = 'direct'
+            if statut_raw and statut_raw != '':
+                statut = str(statut_raw).strip().upper()
+                if statut not in ['EP', 'DIRECT']:
+                    statut = 'direct'
             
             acte_nom = a.get('nom') or a.get('NOM') or a.get('Nom')
             if acte_nom and str(acte_nom).strip():
@@ -6810,7 +6840,8 @@ def api_get_actes():
                     'prise_en_charge_amu': prise_en_charge_amu,
                     'commentaire_amu': str(commentaire_amu),
                     'prise_en_charge_cac': prise_en_charge_cac,
-                    'commentaire_cac': str(commentaire_cac)
+                    'commentaire_cac': str(commentaire_cac),
+                    'statut': statut  # 🔥 NOUVEAU
                 })
         
         return jsonify({

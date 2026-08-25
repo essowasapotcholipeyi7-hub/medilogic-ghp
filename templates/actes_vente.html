@@ -66,6 +66,7 @@
                 data-prix="{{ acte.prix }}" 
                 data-pbr="{{ acte.pbr or acte.prix }}"
                 data-nom="{{ acte.nom }}"
+                data-statut="{{ acte.statut or 'direct' }}"
                 data-prise-en-charge-amu="{{ 'true' if acte.prise_en_charge_amu else 'false' }}"
                 data-commentaire-amu="{{ acte.commentaire_amu|default('') }}"
                 data-prise-en-charge-cac="{{ 'true' if acte.prise_en_charge_cac else 'false' }}"
@@ -726,6 +727,7 @@ function ajouterActe() {
         alert('Erreur: Données de l\'acte invalides');
         return;
     }
+
     
     // 🔥 Détection P160 pour ajuster le taux
     if (acteNom && acteNom.includes('P160')) {
@@ -768,6 +770,19 @@ function ajouterActe() {
                            priseEnChargeAMU, commentaireAMU, priseEnChargeCAC, commentaireCAC);
         return;
     }
+
+    // Récupérer le statut de l'acte
+    let statutActe = selectedOption.getAttribute('data-statut') || 'direct';
+    statutActe = statutActe.toUpperCase().trim();
+
+
+    // 🔥 UNIQUEMENT SI PATIENT ASSURÉ ET STATUT EP
+    if (isAMU && statutActe === 'EP') {
+        if (!confirm('⚠️ ENTENTE PRÉALABLE (EP)\n\nL\'acte "' + acteNom + '" est sous Entente Préalable.\n\nAvez-vous reçu un accord écrit de l\'assurance ?\n\nCliquez sur OK si vous avez l\'accord, sinon Annulez.')) {
+            return;  // Bloque l'ajout
+        }
+    }
+
     
     // 🔥 SI LE PATIENT EST ASSURÉ → VÉRIFICATION
     let message = '';

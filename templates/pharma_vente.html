@@ -758,6 +758,7 @@ function chargerProduits() {
                     option.setAttribute('data-prix', prixVente);
                     option.setAttribute('data-pbr', pbrValue);
                     option.setAttribute('data-nom', (p.nom || '').replace(/'/g, "\\'"));
+                    option.setAttribute('data-statut', p.statut || 'direct');  // 🔥 AJOUT
                     option.setAttribute('data-stock', p.quantite_stock || 0);
                     option.setAttribute('data-prix-achat', p.prix_achat || 0);
                     option.setAttribute('data-date-peremption', p.date_peremption || '');
@@ -793,6 +794,9 @@ function chargerProduits() {
 
                     option.setAttribute('data-commentaire-amu', p.commentaire_amu || '');
                     option.setAttribute('data-commentaire-cac', p.commentaire_cac || '');
+
+                    let statutProduit = p.statut || 'direct';
+                    option.setAttribute('data-statut', statutProduit);
 
                     // 🔥 DEBUG (à supprimer après)
                     console.log(`🔍 ${p.nom}: AMU="${rawAMU}" (${typeof rawAMU}) → ${amuValue}, CAC="${rawCAC}" (${typeof rawCAC}) → ${cacValue}`);
@@ -1007,6 +1011,7 @@ function ajouterProduit() {
     const commentaireCAC = selectedOption.getAttribute('data-commentaire-cac') || '';
     const datePeremption = selectedOption.getAttribute('data-date-peremption') || '';
 
+
     let quantite = parseInt(document.getElementById('quantite').value);
     if (isNaN(quantite) || quantite < 1) quantite = 1;
 
@@ -1050,6 +1055,30 @@ function ajouterProduit() {
     // 🔥 Vérification des assurances
     const isAMU = patientAssurance && patientAssurance !== 'non_assure';
     const isCAC = assurance2Active && patientAssurance2 && patientAssurance2 !== 'Aucune';
+
+    // ============================================================
+    // 🔥 AJOUTER ICI LES VÉRIFICATIONS EP ET TPC
+    // ============================================================
+
+    // Récupérer le statut du produit
+    let statutProduit = selectedOption.getAttribute('data-statut') || 'direct';
+    statutProduit = statutProduit.toUpperCase().trim();
+
+
+    // 🔥 UNIQUEMENT SI PATIENT ASSURÉ ET STATUT EP
+    if (isAMU && statutProduit === 'EP') {
+        if (!confirm('⚠️ ENTENTE PRÉALABLE (EP)\n\nLe produit "' + produitNom + '" est sous Entente Préalable.\n\nAvez-vous reçu un accord écrit de l\'assurance ?\n\nCliquez sur OK si vous avez l\'accord, sinon Annulez.')) {
+            return;  // Bloque l'ajout
+        }
+    }
+
+    // 🔥 UNIQUEMENT SI PATIENT ASSURÉ ET STATUT TPC
+    if (isAMU && statutProduit === 'TPC') {
+        if (!confirm('⚠️ TRAITEMENT DES PATHOLOGIES CHRONIQUES (TPC)\n\nLe produit "' + produitNom + '" concerne un Traitement des Pathologies Chroniques.\n\nAvez-vous reçu l\'accord TPC de l\'assurance ?\n\nCliquez sur OK si vous avez l\'accord, sinon Annulez.')) {
+            return;  // Bloque l'ajout
+        }
+    }
+
 
     let messageAlerte = '';
 
