@@ -35,7 +35,19 @@ from utils.categorisation import categoriser_acte
 # RÉSOLUTION / CRÉATION DES COMPTES (avec cache mémoire)
 # ============================================================
 
-_compte_cache = {}
+# ⭐ FIX (bug distinct de l'ObjectDeletedError déjà corrigé, propre aux
+# serveurs longue durée) : ce cache stockait auparavant l'INSTANCE ORM
+# CompteComptable elle-même, au niveau du module — donc partagée entre
+# TOUTES les requêtes Flask, alors que chaque requête a sa propre session
+# SQLAlchemy (détruite à la fin de la requête). Un compte mis en cache lors
+# de la requête N devenait une instance détachée/expirée dès la requête N+1,
+# et sa réutilisation pouvait planter (observé : une vente sur 3 échouait
+# silencieusement — vente_id renvoyé par l'API mais jamais persistée en
+# base — dans un serveur qui tourne longtemps ; invisible dans des scripts
+# de test qui ne font qu'une requête par processus). On ne met désormais en
+# cache que l'ID (entier immuable, sans état de session, donc sans risque
+# à conserver entre requêtes).
+_compte_id_cache = {}
 
 
 def _to_float(v):
@@ -47,14 +59,14 @@ def _to_float(v):
         return 0.0
 
 
-def _get_compte(structure_id, numero, nom_repli=None, type_repli='charge'):
-    """Résout un CompteComptable par numéro pour une structure, en le créant
-    à la volée (à partir du plan SYSCOHADA de référence, ou d'un repli) s'il
-    n'existe pas encore — robustesse si le seed n'a pas encore tourné pour
-    cette structure."""
-    cle = f"{structure_id}_{numero}"
-    if cle in _compte_cache:
-        return _compte_cache[cle]
+def _get_compte_id(structure_id, numero, nom_repli=None, type_repli='charge'):
+    """Résout l'ID d'un CompteComptable par numéro pour une structure, en le
+    créant à la volée (à partir du plan SYSCOHADA de référence, ou d'un
+    repli) s'il n'existe pas encore — robustesse si le seed n'a pas encore
+    tourné pour cette structure."""
+    cle = (structure_id, numero)
+    if cle in _compte_id_cache:
+        return _compte_id_cache[cle]
 
     compte = CompteComptable.query.filter_by(structure_id=structure_id, numero=numero).first()
     if compte and not compte.actif:
@@ -71,12 +83,12 @@ def _get_compte(structure_id, numero, nom_repli=None, type_repli='charge'):
         db.session.add(compte)
         db.session.flush()  # pour obtenir compte.id sans committer
 
-    _compte_cache[cle] = compte
-    return compte
+    _compte_id_cache[cle] = compte.id
+    return compte.id
 
 
 def invalider_cache_comptes():
-    _compte_cache.clear()
+    _compte_id_cache.clear()
 
 
 # ============================================================
@@ -157,10 +169,10 @@ def creer_ecriture(structure_id, date_ecriture, libelle, lignes, journal_code,
     db.session.flush()
 
     for l in lignes_valides:
-        compte = _get_compte(structure_id, l['numero_compte'])
+        compte_id = _get_compte_id(structure_id, l['numero_compte'])
         db.session.add(LigneEcriture(
             ecriture_id=ecriture.id,
-            compte_id=compte.id,
+            compte_id=compte_id,
             debit=round(_to_float(l.get('debit')), 2),
             credit=round(_to_float(l.get('credit')), 2),
             libelle=l.get('libelle') or libelle
