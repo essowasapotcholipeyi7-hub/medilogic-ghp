@@ -6,7 +6,7 @@ from sqlalchemy import or_, func, and_
 import json
 from utils.categorisation import categoriser_acte
 
-from models import db, Vente, Patient
+from models import db, Vente, Patient, Structure
 
 statistiques_bp = Blueprint('statistiques', __name__, url_prefix='/api/statistiques')
 
@@ -898,3 +898,108 @@ def get_patients_par_assurance(ventes, patients, patients_dict, type_assurance='
     
     result.sort(key=lambda x: (x['assurance'], x['patient_nom']))
     return result
+
+
+# ============================================================
+# BORDEREAU IMPRIMABLE PAR COMPAGNIE D'ASSURANCE
+# ============================================================
+# ⭐ NOUVEAU : document propre, détaillé, prêt à imprimer/envoyer à une
+# compagnie (GTA, SUNU, AMU-CNSS...) pour justifier un remboursement —
+# distinct de l'ancien bouton "Imprimer" qui se contentait de dupliquer le
+# tableau HTML affiché à l'écran, sans en-tête ni mise en forme dédiée.
+
+@statistiques_bp.route('/assurance/bordereau')
+def bordereau_assurance():
+    """Génère un bordereau imprimable détaillé pour UNE compagnie
+    d'assurance sur une période donnée (patients, prestations, montants)."""
+    structure_id = session.get('structure_id')
+    if not structure_id:
+        return "Structure non trouvée", 400
+
+    assurance_code = request.args.get('assurance', '').strip()
+    if not assurance_code or assurance_code == 'toutes':
+        return "Veuillez préciser une compagnie d'assurance (paramètre 'assurance')", 400
+
+    periode = request.args.get('periode', 'mois')
+    date_debut_str = request.args.get('date_debut')
+    date_fin_str = request.args.get('date_fin')
+    dates = get_dates_periode(periode, date_debut_str, date_fin_str)
+
+    debut, fin = dates['debut'], dates['fin']
+    if isinstance(debut, date) and not isinstance(debut, datetime):
+        debut = datetime.combine(debut, datetime.min.time())
+        fin = datetime.combine(fin, datetime.max.time())
+
+    est_principale = assurance_code.lower() in ASSURANCES_PRINCIPALES
+
+    query = db.session.query(Vente).join(
+        Patient, Vente.patient_id == Patient.id
+    ).filter(
+        Vente.structure_id == structure_id,
+        Vente.date_vente >= debut,
+        Vente.date_vente <= fin,
+        Vente.statut == 'validee',
+    )
+    if est_principale:
+        query = query.filter(Patient.type_assurance.ilike(f'%{assurance_code}%'))
+    else:
+        query = query.filter(Vente.assurance2_nom.ilike(f'%{assurance_code}%'))
+
+    ventes = query.order_by(Vente.date_vente).all()
+
+    # Regroupement par patient, détail des prestations, calcul des montants
+    lignes = []
+    total_montant = 0.0
+    total_part_assurance = 0.0
+    total_reste = 0.0
+
+    for v in ventes:
+        montants = calculer_montants_vente(v)
+        part_assurance = montants['part_amu'] if est_principale else montants['part_cac']
+        numero_assure = None
+        patient = Patient.query.get(v.patient_id)
+        if patient:
+            numero_assure = patient.numero_assure if est_principale else patient.numero_assure2
+
+        prestations = []
+        for item in (v.actes or []) + (v.produits or []):
+            if isinstance(item, dict):
+                nom = item.get('nom', 'Prestation')
+                qte = item.get('quantite', 1)
+                prix = item.get('prix') or item.get('prix_reel') or item.get('total') or 0
+                prestations.append(f"{nom} (x{qte}) — {float(prix):,.0f} F".replace(',', ' '))
+
+        lignes.append({
+            'date': v.date_vente.strftime('%d/%m/%Y') if v.date_vente else '-',
+            'patient_nom': v.patient_nom,
+            'numero_assure': numero_assure or '-',
+            'prestations': prestations,
+            'montant_total': montants['total_prix'],
+            'part_assurance': part_assurance,
+            'reste_patient': montants['reste_patient'],
+        })
+        total_montant += montants['total_prix']
+        total_part_assurance += part_assurance
+        total_reste += montants['reste_patient']
+
+    if assurance_code.lower() in ('amu_cnss', 'amu-cnss'):
+        nom_compagnie = 'AMU-CNSS'
+    elif assurance_code.lower() in ('amu_inam', 'amu-inam'):
+        nom_compagnie = 'AMU-INAM'
+    else:
+        nom_compagnie = ASSURANCE_LABELS.get(assurance_code.lower(), assurance_code.upper())
+
+    structure = Structure.query.get(structure_id)
+
+    return render_template(
+        'statistiques_assurance_print.html',
+        structure=structure,
+        nom_compagnie=nom_compagnie,
+        periode_libelle=dates['libelle'],
+        lignes=lignes,
+        total_montant=total_montant,
+        total_part_assurance=total_part_assurance,
+        total_reste=total_reste,
+        nb_patients=len(set(l['patient_nom'] for l in lignes)),
+        now=datetime.now(),
+    )

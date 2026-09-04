@@ -770,6 +770,41 @@ def api_sauvegarder_budget():
     return jsonify({'success': True})
 
 
+@compta_bp.route('/api/exercice/statut')
+def api_exercice_statut():
+    """⭐ NOUVEAU : statut de l'exercice comptable en cours — onglet
+    "Exercice comptable" (SYSCOHADA : l'exercice comptable coïncide avec
+    l'année civile, sauf dérogation)."""
+    structure_id = session.get('structure_id')
+    annee_courante = datetime.now().year
+
+    clotures = Cloture.query.filter_by(structure_id=structure_id).order_by(Cloture.annee.desc()).all()
+    annees_cloturees = {c.annee for c in clotures}
+
+    nb_ecritures_annee = EcritureComptable.query.filter(
+        EcritureComptable.structure_id == structure_id,
+        EcritureComptable.date_ecriture >= f"{annee_courante}-01-01",
+        EcritureComptable.date_ecriture <= f"{annee_courante}-12-31",
+    ).count()
+
+    nb_brouillons = EcritureComptable.query.filter(
+        EcritureComptable.structure_id == structure_id,
+        EcritureComptable.statut.in_(['brouillon', 'en_attente']),
+    ).count()
+
+    return jsonify({
+        'annee_courante': annee_courante,
+        'exercice_ouvert': annee_courante not in annees_cloturees,
+        'nb_ecritures_exercice_courant': nb_ecritures_annee,
+        'nb_ecritures_a_valider': nb_brouillons,
+        'clotures': [{
+            'annee': c.annee,
+            'date_cloture': c.date_cloture.strftime('%Y-%m-%d %H:%M') if c.date_cloture else '',
+            'created_by': c.created_by or '-',
+        } for c in clotures],
+    })
+
+
 @compta_bp.route('/api/cloture', methods=['POST'])
 def api_cloture():
     structure_id = session.get('structure_id')
@@ -1047,10 +1082,11 @@ def get_compte_resultat(structure_id, date_debut, date_fin):
                 JOIN comptes_comptables c ON l.compte_id = c.id
                 WHERE e.structure_id = :structure_id
                 AND e.statut = 'valide'
+                AND c.type IN ('charge', 'produit')
                 AND (:date_debut IS NULL OR e.date_ecriture >= :date_debut)
                 AND (:date_fin IS NULL OR e.date_ecriture <= :date_fin)
             )
-            SELECT 
+            SELECT
                 numero,
                 nom,
                 type,
@@ -1064,26 +1100,29 @@ def get_compte_resultat(structure_id, date_debut, date_fin):
             'date_debut': date_debut_obj.strftime('%Y-%m-%d') if date_debut_obj else None,
             'date_fin': date_fin_obj.strftime('%Y-%m-%d') if date_fin_obj else None
         })
-        
+
         rows = result.fetchall()
-        
+
         charges = []
         produits = []
         total_charges = 0
         total_produits = 0
-        
+
         for row in rows:
+            # ⭐ FIX : ne bucketer QUE les comptes de charge/produit (la
+            # requête SQL les filtre déjà) — l'ancien `else` avalait tout
+            # compte non-charge (trésorerie, tiers...) dans les "produits".
             type_compte = row.type
             numero = row.numero
             nom = row.nom
             total_debit = float(row.total_debit or 0)
             total_credit = float(row.total_credit or 0)
-            
+
             if type_compte == 'charge':
                 solde = total_debit - total_credit
                 total_charges += solde
                 charges.append({'numero': numero, 'nom': nom, 'montant': solde})
-            else:
+            elif type_compte == 'produit':
                 solde = total_credit - total_debit
                 total_produits += solde
                 produits.append({'numero': numero, 'nom': nom, 'montant': solde})
@@ -1125,9 +1164,10 @@ def get_bilan(structure_id, date_fin):
                 JOIN comptes_comptables c ON l.compte_id = c.id
                 WHERE e.structure_id = :structure_id
                 AND e.statut = 'valide'
+                AND c.type IN ('actif', 'passif')
                 AND (:date_fin IS NULL OR e.date_ecriture <= :date_fin)
             )
-            SELECT 
+            SELECT
                 numero,
                 nom,
                 type,
@@ -1140,24 +1180,28 @@ def get_bilan(structure_id, date_fin):
             'structure_id': structure_id,
             'date_fin': date_fin_obj.strftime('%Y-%m-%d') if date_fin_obj else None
         })
-        
+
         rows = result.fetchall()
-        
+
         actifs = []
         passifs = []
         capitaux_propres = []
-        
+
         total_actif = 0
         total_passif = 0
         total_capitaux = 0
-        
+
+        # ⭐ FIX : ne bucketer QUE les comptes actif/passif (filtrés en SQL).
+        # L'ancien `else` récupérait tout compte de charge/produit dont le
+        # solde créditeur était positif et l'affichait comme "capitaux
+        # propres", ce qui n'a aucun sens comptablement.
         for row in rows:
             type_compte = row.type
             numero = row.numero
             nom = row.nom
             total_debit = float(row.total_debit or 0)
             total_credit = float(row.total_credit or 0)
-            
+
             if type_compte == 'actif':
                 solde = total_debit - total_credit
                 total_actif += solde
@@ -1166,12 +1210,21 @@ def get_bilan(structure_id, date_fin):
                 solde = total_credit - total_debit
                 total_passif += solde
                 passifs.append({'numero': numero, 'nom': nom, 'montant': solde})
-            else:
-                solde = total_credit - total_debit
-                if solde > 0:
-                    total_capitaux += solde
-                    capitaux_propres.append({'numero': numero, 'nom': nom, 'montant': solde})
-        
+
+        # ⭐ Le résultat de l'exercice (charges/produits, non clôturés) fait
+        # partie des capitaux propres au bilan tant que l'exercice n'est pas
+        # clôturé — présentation OHADA standard : une seule ligne "Résultat
+        # net de l'exercice", pas le détail des comptes de charge/produit.
+        resultat_periode = get_compte_resultat(structure_id, None, date_fin)
+        resultat_net = resultat_periode.get('resultat', 0)
+        if abs(resultat_net) > 0.5:
+            capitaux_propres.append({
+                'numero': '120' if resultat_net >= 0 else '129',
+                'nom': f"Résultat net de l'exercice ({resultat_periode.get('resultat_text', '')})",
+                'montant': resultat_net,
+            })
+            total_capitaux += resultat_net
+
         return {
             'actifs': actifs,
             'passifs': passifs,

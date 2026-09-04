@@ -435,6 +435,9 @@
     <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
         <span><i class="fas fa-shield-alt"></i> Patients par assurance - Détail pour dépôt de dossier</span>
         <div>
+            <button class="btn btn-warning btn-sm me-2" onclick="imprimerBordereauAssurance()" title="Document détaillé prêt à envoyer à la compagnie (sélectionnez une assurance dans le filtre ci-dessus)">
+                <i class="fas fa-file-invoice"></i> Bordereau compagnie
+            </button>
             <button class="btn btn-light btn-sm me-2" onclick="imprimerListeAssurance()">
                 <i class="fas fa-print"></i> Imprimer
             </button>
@@ -1600,6 +1603,25 @@ function exporterListeAssuranceCSV() {
     link.download = 'liste_patients_assurance.csv';
     link.click();
     URL.revokeObjectURL(link.href);
+}
+
+function imprimerBordereauAssurance() {
+    const assurance = document.getElementById('statsFiltreAssurance').value;
+    if (!assurance || assurance === 'toutes') {
+        showToast ? showToast('Sélectionnez d\'abord une compagnie d\'assurance dans le filtre', 'warning')
+                  : alert('Sélectionnez d\'abord une compagnie d\'assurance dans le filtre');
+        return;
+    }
+
+    const periode = document.getElementById('statsPeriode').value;
+    const dateDebut = document.getElementById('statsDateDebut').value;
+    const dateFin = document.getElementById('statsDateFin').value;
+
+    let url = `/api/statistiques/assurance/bordereau?assurance=${encodeURIComponent(assurance)}&periode=${periode}`;
+    if (dateDebut) url += `&date_debut=${dateDebut}`;
+    if (dateFin) url += `&date_fin=${dateFin}`;
+
+    window.open(url, '_blank');
 }
 
 function imprimerListeAssurance() {

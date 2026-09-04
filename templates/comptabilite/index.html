@@ -112,6 +112,16 @@
                             Rapprochement bancaire
                         </button>
                     </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="etatfinancier-tab" data-bs-toggle="tab" data-bs-target="#etatfinancier" type="button" role="tab" onclick="chargerEtatFinancier()">
+                            <i class="fas fa-balance-scale"></i> État financier
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="exercice-tab" data-bs-toggle="tab" data-bs-target="#exercice" type="button" role="tab" onclick="chargerExercice()">
+                            <i class="fas fa-calendar-check"></i> Exercice comptable
+                        </button>
+                    </li>
                 </ul>
 
                 <div class="tab-content" id="comptaTabContent">
@@ -575,6 +585,136 @@
                                         </tbody>
                                     </table>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ========================================== -->
+                    <!-- ONGLET ÉTAT FINANCIER (OHADA) -->
+                    <!-- ========================================== -->
+                    <div class="tab-pane fade" id="etatfinancier" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6><i class="fas fa-balance-scale"></i> États financiers (SYSCOHADA)</h6>
+                            <div class="d-flex gap-2 align-items-end">
+                                <div>
+                                    <label class="form-label small mb-0">Arrêté au</label>
+                                    <input type="date" class="form-control form-control-sm" id="etatFinDateFin" onchange="chargerEtatFinancier()">
+                                </div>
+                                <button class="btn btn-outline-primary btn-sm" onclick="window.open('/comptabilite/rapport/print/resultat?date_fin=' + document.getElementById('etatFinDateFin').value, '_blank')">
+                                    <i class="fas fa-print"></i> Imprimer compte de résultat
+                                </button>
+                                <button class="btn btn-outline-primary btn-sm" onclick="window.open('/comptabilite/rapport/print/bilan?date_fin=' + document.getElementById('etatFinDateFin').value, '_blank')">
+                                    <i class="fas fa-print"></i> Imprimer bilan
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="row g-3">
+                            <!-- COMPTE DE RÉSULTAT -->
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-header bg-dark text-white">Compte de résultat</div>
+                                    <div class="card-body p-0">
+                                        <table class="table table-sm mb-0">
+                                            <thead class="table-light">
+                                                <tr><th colspan="2">CHARGES</th></tr>
+                                            </thead>
+                                            <tbody id="etatFinChargesBody"></tbody>
+                                            <tfoot>
+                                                <tr class="fw-bold table-light"><td>Total charges</td><td class="text-end" id="etatFinTotalCharges">0</td></tr>
+                                            </tfoot>
+                                            <thead class="table-light">
+                                                <tr><th colspan="2">PRODUITS</th></tr>
+                                            </thead>
+                                            <tbody id="etatFinProduitsBody"></tbody>
+                                            <tfoot>
+                                                <tr class="fw-bold table-light"><td>Total produits</td><td class="text-end" id="etatFinTotalProduits">0</td></tr>
+                                                <tr class="fw-bold" id="etatFinResultatRow"><td>RÉSULTAT NET</td><td class="text-end" id="etatFinResultat">0</td></tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- BILAN -->
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-header bg-dark text-white d-flex justify-content-between">
+                                        <span>Bilan</span>
+                                        <span id="etatFinBilanEquilibre" class="badge"></span>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <table class="table table-sm mb-0">
+                                            <thead class="table-light"><tr><th colspan="2">ACTIF</th></tr></thead>
+                                            <tbody id="etatFinActifBody"></tbody>
+                                            <tfoot><tr class="fw-bold table-light"><td>Total actif</td><td class="text-end" id="etatFinTotalActif">0</td></tr></tfoot>
+                                            <thead class="table-light"><tr><th colspan="2">PASSIF</th></tr></thead>
+                                            <tbody id="etatFinPassifBody"></tbody>
+                                            <thead class="table-light"><tr><th colspan="2">CAPITAUX PROPRES</th></tr></thead>
+                                            <tbody id="etatFinCapitauxBody"></tbody>
+                                            <tfoot><tr class="fw-bold table-light"><td>Total passif + capitaux</td><td class="text-end" id="etatFinTotalPassif">0</td></tr></tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ========================================== -->
+                    <!-- ONGLET EXERCICE COMPTABLE -->
+                    <!-- ========================================== -->
+                    <div class="tab-pane fade" id="exercice" role="tabpanel">
+                        <h6><i class="fas fa-calendar-check"></i> Exercice comptable</h6>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4">
+                                <div class="card border-0 shadow-sm">
+                                    <div class="card-body">
+                                        <div class="text-uppercase small text-muted">Exercice en cours</div>
+                                        <h2 class="mb-0" id="exerciceAnneeCourante">—</h2>
+                                        <span class="badge mt-2" id="exerciceStatutBadge">—</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-0 shadow-sm">
+                                    <div class="card-body">
+                                        <div class="text-uppercase small text-muted">Écritures sur l'exercice</div>
+                                        <h2 class="mb-0" id="exerciceNbEcritures">0</h2>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-0 shadow-sm">
+                                    <div class="card-body">
+                                        <div class="text-uppercase small text-muted">En attente de validation</div>
+                                        <h2 class="mb-0" id="exerciceNbAValider">0</h2>
+                                        <small class="text-muted">écritures saisies manuellement, non encore validées</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            La clôture d'un exercice est <strong>définitive</strong> : toutes les écritures validées de
+                            l'année sont figées. Assurez-vous d'avoir vérifié le Journal, le Grand livre, la Balance
+                            et l'État financier avant de clôturer.
+                        </div>
+
+                        <button class="btn btn-danger mb-4" onclick="cloturerAnnee()">
+                            <i class="fas fa-lock"></i> Clôturer l'exercice en cours
+                        </button>
+
+                        <div class="card">
+                            <div class="card-header bg-light"><i class="fas fa-history"></i> Historique des clôtures</div>
+                            <div class="card-body p-0">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead><tr><th>Année</th><th>Date de clôture</th><th>Clôturé par</th></tr></thead>
+                                    <tbody id="exerciceHistoriqueBody">
+                                        <tr><td colspan="3" class="text-center text-muted">Aucune clôture</td></tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -1761,10 +1901,13 @@ function sauvegarderBudget() {
 }
 
 function cloturerAnnee() {
-    const annee = document.getElementById('budgetAnnee').value;
+    let annee = document.getElementById('exerciceAnneeCourante')?.textContent?.trim();
+    if (!annee || annee === '—') {
+        annee = document.getElementById('budgetAnnee')?.value;
+    }
     if (!annee) { alert('Veuillez sélectionner une année'); return; }
-    if (!confirm(`Clôturer l'année ${annee} ?\n\nCette action est irréversible.`)) return;
-    
+    if (!confirm(`Clôturer l'exercice ${annee} ?\n\nCette action est irréversible : toutes les écritures validées de l'année seront figées.`)) return;
+
     fetch('/comptabilite/api/cloture', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -1774,12 +1917,113 @@ function cloturerAnnee() {
     .then(data => {
         if (data.success) {
             alert(`${data.message}`);
-            chargerBudget();
+            if (typeof chargerBudget === 'function') chargerBudget();
+            chargerExercice();
         } else {
             alert('❌ Erreur: ' + (data.error || 'Erreur inconnue'));
         }
     })
     .catch(error => alert('❌ Erreur: ' + error));
+}
+
+
+// ============================================================
+// EXERCICE COMPTABLE
+// ============================================================
+
+function chargerExercice() {
+    fetch('/comptabilite/api/exercice/statut')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('exerciceAnneeCourante').textContent = data.annee_courante;
+            const badge = document.getElementById('exerciceStatutBadge');
+            if (data.exercice_ouvert) {
+                badge.textContent = 'Ouvert';
+                badge.className = 'badge mt-2 bg-success';
+            } else {
+                badge.textContent = 'Clôturé';
+                badge.className = 'badge mt-2 bg-secondary';
+            }
+            document.getElementById('exerciceNbEcritures').textContent = data.nb_ecritures_exercice_courant;
+            document.getElementById('exerciceNbAValider').textContent = data.nb_ecritures_a_valider;
+
+            const tbody = document.getElementById('exerciceHistoriqueBody');
+            if (!data.clotures || data.clotures.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Aucune clôture</td></tr>';
+            } else {
+                tbody.innerHTML = data.clotures.map(c => `
+                    <tr>
+                        <td>${c.annee}</td>
+                        <td>${c.date_cloture}</td>
+                        <td>${c.created_by}</td>
+                    </tr>
+                `).join('');
+            }
+        })
+        .catch(err => console.error('Erreur chargement exercice:', err));
+}
+
+
+// ============================================================
+// ÉTAT FINANCIER (Bilan + Compte de résultat, présentation OHADA)
+// ============================================================
+
+function formaterMontantEtat(m) {
+    return Math.round(m || 0).toLocaleString('fr-FR') + ' FCFA';
+}
+
+function chargerEtatFinancier() {
+    const dateFinInput = document.getElementById('etatFinDateFin');
+    if (dateFinInput && !dateFinInput.value) {
+        dateFinInput.value = new Date().toISOString().split('T')[0];
+    }
+    const dateFin = dateFinInput ? dateFinInput.value : '';
+
+    // Compte de résultat (sur l'année civile de la date choisie)
+    const anneeChoisie = dateFin ? dateFin.split('-')[0] : new Date().getFullYear();
+    fetch(`/comptabilite/api/rapports/resultat?date_debut=${anneeChoisie}-01-01&date_fin=${dateFin}`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('etatFinChargesBody').innerHTML = (data.charges || []).map(c => `
+                <tr><td>${c.numero} - ${c.nom}</td><td class="text-end">${formaterMontantEtat(c.montant)}</td></tr>
+            `).join('') || '<tr><td colspan="2" class="text-center text-muted">Aucune charge</td></tr>';
+            document.getElementById('etatFinProduitsBody').innerHTML = (data.produits || []).map(p => `
+                <tr><td>${p.numero} - ${p.nom}</td><td class="text-end">${formaterMontantEtat(p.montant)}</td></tr>
+            `).join('') || '<tr><td colspan="2" class="text-center text-muted">Aucun produit</td></tr>';
+            document.getElementById('etatFinTotalCharges').textContent = formaterMontantEtat(data.total_charges);
+            document.getElementById('etatFinTotalProduits').textContent = formaterMontantEtat(data.total_produits);
+            const resultatRow = document.getElementById('etatFinResultatRow');
+            const resultatCell = document.getElementById('etatFinResultat');
+            resultatCell.textContent = `${formaterMontantEtat(data.resultat)} (${data.resultat_text})`;
+            resultatRow.className = 'fw-bold ' + (data.resultat >= 0 ? 'text-success' : 'text-danger');
+        })
+        .catch(err => console.error('Erreur compte de résultat:', err));
+
+    // Bilan (à la date choisie)
+    fetch(`/comptabilite/api/rapports/bilan?date_fin=${dateFin}`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('etatFinActifBody').innerHTML = (data.actifs || []).map(a => `
+                <tr><td>${a.numero} - ${a.nom}</td><td class="text-end">${formaterMontantEtat(a.montant)}</td></tr>
+            `).join('') || '<tr><td colspan="2" class="text-center text-muted">Aucun compte d\'actif</td></tr>';
+            document.getElementById('etatFinPassifBody').innerHTML = (data.passifs || []).map(p => `
+                <tr><td>${p.numero} - ${p.nom}</td><td class="text-end">${formaterMontantEtat(p.montant)}</td></tr>
+            `).join('') || '<tr><td colspan="2" class="text-center text-muted">Aucun compte de passif</td></tr>';
+            document.getElementById('etatFinCapitauxBody').innerHTML = (data.capitaux_propres || []).map(c => `
+                <tr><td>${c.numero} - ${c.nom}</td><td class="text-end">${formaterMontantEtat(c.montant)}</td></tr>
+            `).join('') || '<tr><td colspan="2" class="text-center text-muted">—</td></tr>';
+            document.getElementById('etatFinTotalActif').textContent = formaterMontantEtat(data.total_actif);
+            document.getElementById('etatFinTotalPassif').textContent = formaterMontantEtat(data.total_passif_capitaux);
+            const badgeEq = document.getElementById('etatFinBilanEquilibre');
+            if (data.est_equilibre) {
+                badgeEq.textContent = 'Équilibré';
+                badgeEq.className = 'badge bg-success';
+            } else {
+                badgeEq.textContent = 'Déséquilibré';
+                badgeEq.className = 'badge bg-danger';
+            }
+        })
+        .catch(err => console.error('Erreur bilan:', err));
 }
 
 
