@@ -3425,11 +3425,18 @@ def api_historique_medecin(id):
             stats_data = {'total': 0, 'termines': 0, 'annules': 0, 'confirmes': 0, 'programmes': 0, 'reportes': 0}
         
         # 3. Recuperer l'historique - TOUT EN STRING avec TO_CHAR
+        # ⭐ FIX : la table rendez_vous a DEUX paires de colonnes date/heure
+        # (date_rdv/heure_rdv ET date_rendez_vous/heure_rendez_vous, issues
+        # de deux flux de creation de RDV differents dans l'app). Cette
+        # requete ne lisait que date_rdv/heure_rdv, systematiquement vides
+        # pour les RDV crees via l'autre flux -> l'historique du medecin
+        # semblait vide/casse. On prend la colonne renseignee, quelle
+        # qu'elle soit.
         historique = db.execute_query("""
-            SELECT 
+            SELECT
                 r.id,
-                TO_CHAR(r.date_rdv, 'YYYY-MM-DD') as date_rdv,
-                TO_CHAR(r.heure_rdv, 'HH24:MI') as heure_rdv,
+                TO_CHAR(COALESCE(r.date_rendez_vous, r.date_rdv), 'YYYY-MM-DD') as date_rdv,
+                COALESCE(r.heure_rendez_vous, TO_CHAR(r.heure_rdv, 'HH24:MI')) as heure_rdv,
                 COALESCE(r.motif, '') as motif,
                 COALESCE(r.statut, 'programme') as statut,
                 COALESCE(r.duree, 30) as duree,
@@ -3438,7 +3445,8 @@ def api_historique_medecin(id):
                 TO_CHAR(r.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at
             FROM rendez_vous r
             WHERE r.medecin_id = %s AND r.structure_id = %s
-            ORDER BY r.date_rdv DESC, r.heure_rdv DESC
+            ORDER BY COALESCE(r.date_rendez_vous, r.date_rdv) DESC,
+                     COALESCE(r.heure_rendez_vous, TO_CHAR(r.heure_rdv, 'HH24:MI')) DESC
             LIMIT 50
         """, (id, structure_id))
         
@@ -3470,11 +3478,12 @@ def api_historique_medecin(id):
                     'created_at': r[8] if len(r) > 8 else None
                 })
         
-        # 4. Statistiques par mois
+        # 4. Statistiques par mois (même fix que ci-dessus : COALESCE des
+        # deux paires de colonnes date possibles)
         stats_mois = db.execute_query("""
-            SELECT 
-                EXTRACT(YEAR FROM date_rdv) as annee,
-                EXTRACT(MONTH FROM date_rdv) as mois,
+            SELECT
+                EXTRACT(YEAR FROM COALESCE(date_rendez_vous, date_rdv)) as annee,
+                EXTRACT(MONTH FROM COALESCE(date_rendez_vous, date_rdv)) as mois,
                 COUNT(*) as total
             FROM rendez_vous
             WHERE medecin_id = %s AND structure_id = %s AND statut = 'termine'
@@ -3555,41 +3564,59 @@ def get_medecins():
             honoraire = m[8] if len(m) > 8 else 0
             actif = m[9] if len(m) > 9 else True
         
+        # ⭐ FIX (2 bugs corrigés ici) :
+        # 1) `db.execute_query` retourne toujours des dicts (RealDictCursor) —
+        #    faire `resultat[0][0]` levait `KeyError: 0` a chaque appel, ce
+        #    qui faisait planter la liste ENTIERE des medecins (500) des
+        #    qu'une structure avait au moins un medecin.
+        # 2) COALESCE(date_rendez_vous, date_rdv) — la table a deux paires de
+        #    colonnes date/heure selon le flux de creation du RDV ; se fier
+        #    uniquement a date_rdv (souvent vide) faisait ressortir 0
+        #    consultation partout meme une fois le crash corrige.
+        def _scalar(rows, cle='total'):
+            if not rows:
+                return 0
+            r0 = rows[0]
+            if isinstance(r0, dict):
+                return r0.get(cle) or next(iter(r0.values()), 0) or 0
+            return r0[0] if len(r0) > 0 else 0
+
         # Compter les consultations terminees
         nb_total = db.execute_query("""
-            SELECT COUNT(*) FROM rendez_vous 
+            SELECT COUNT(*) as total FROM rendez_vous
             WHERE medecin_id = %s AND statut = 'termine'
         """, (med_id,))
-        nb_total = nb_total[0][0] if nb_total else 0
-        
+        nb_total = _scalar(nb_total)
+
         # Ce mois
         now = datetime.now()
         nb_mois = db.execute_query("""
-            SELECT COUNT(*) FROM rendez_vous 
-            WHERE medecin_id = %s AND statut = 'termine' 
-            AND EXTRACT(YEAR FROM date_rdv) = %s 
-            AND EXTRACT(MONTH FROM date_rdv) = %s
+            SELECT COUNT(*) as total FROM rendez_vous
+            WHERE medecin_id = %s AND statut = 'termine'
+            AND EXTRACT(YEAR FROM COALESCE(date_rendez_vous, date_rdv)) = %s
+            AND EXTRACT(MONTH FROM COALESCE(date_rendez_vous, date_rdv)) = %s
         """, (med_id, now.year, now.month))
-        nb_mois = nb_mois[0][0] if nb_mois else 0
-        
+        nb_mois = _scalar(nb_mois)
+
         # Cette semaine
         today = date.today()
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
         nb_semaine = db.execute_query("""
-            SELECT COUNT(*) FROM rendez_vous 
-            WHERE medecin_id = %s AND statut = 'termine' 
-            AND date_rdv >= %s AND date_rdv <= %s
+            SELECT COUNT(*) as total FROM rendez_vous
+            WHERE medecin_id = %s AND statut = 'termine'
+            AND COALESCE(date_rendez_vous, date_rdv) >= %s AND COALESCE(date_rendez_vous, date_rdv) <= %s
         """, (med_id, week_start, week_end))
-        nb_semaine = nb_semaine[0][0] if nb_semaine else 0
-        
+        nb_semaine = _scalar(nb_semaine)
+
         # Derniere consultation
         dernier = db.execute_query("""
-            SELECT date_rdv FROM rendez_vous 
-            WHERE medecin_id = %s AND statut = 'termine' 
-            ORDER BY date_rdv DESC, heure_rdv DESC LIMIT 1
+            SELECT COALESCE(date_rendez_vous, date_rdv) as derniere FROM rendez_vous
+            WHERE medecin_id = %s AND statut = 'termine'
+            ORDER BY COALESCE(date_rendez_vous, date_rdv) DESC, COALESCE(heure_rendez_vous, TO_CHAR(heure_rdv, 'HH24:MI')) DESC LIMIT 1
         """, (med_id,))
-        derniere_date = dernier[0][0].isoformat() if dernier and len(dernier) > 0 else None
+        derniere_val = _scalar(dernier, cle='derniere')
+        derniere_date = derniere_val.isoformat() if derniere_val and hasattr(derniere_val, 'isoformat') else None
         
         result.append({
             'id': med_id,
@@ -3631,15 +3658,15 @@ def get_medecin_details(id):
             m.honoraire_consultation,
             m.actif,
             COUNT(CASE WHEN r.statut = 'termine' THEN 1 END) as total_consultations,
-            COUNT(CASE WHEN r.statut = 'termine' 
-                AND EXTRACT(YEAR FROM r.date_rdv) = EXTRACT(YEAR FROM CURRENT_DATE)
-                AND EXTRACT(MONTH FROM r.date_rdv) = EXTRACT(MONTH FROM CURRENT_DATE) 
+            COUNT(CASE WHEN r.statut = 'termine'
+                AND EXTRACT(YEAR FROM COALESCE(r.date_rendez_vous, r.date_rdv)) = EXTRACT(YEAR FROM CURRENT_DATE)
+                AND EXTRACT(MONTH FROM COALESCE(r.date_rendez_vous, r.date_rdv)) = EXTRACT(MONTH FROM CURRENT_DATE)
                 THEN 1 END) as consultations_mois,
-            COUNT(CASE WHEN r.statut = 'termine' 
-                AND r.date_rdv >= date_trunc('week', CURRENT_DATE)
-                AND r.date_rdv <= date_trunc('week', CURRENT_DATE) + interval '6 days'
+            COUNT(CASE WHEN r.statut = 'termine'
+                AND COALESCE(r.date_rendez_vous, r.date_rdv) >= date_trunc('week', CURRENT_DATE)
+                AND COALESCE(r.date_rendez_vous, r.date_rdv) <= date_trunc('week', CURRENT_DATE) + interval '6 days'
                 THEN 1 END) as consultations_semaine,
-            MAX(CASE WHEN r.statut = 'termine' THEN r.date_rdv END) as derniere_consultation
+            MAX(CASE WHEN r.statut = 'termine' THEN COALESCE(r.date_rendez_vous, r.date_rdv) END) as derniere_consultation
         FROM medecins m
         LEFT JOIN rendez_vous r ON m.id = r.medecin_id
         WHERE m.id = %s AND m.structure_id = %s
@@ -3696,11 +3723,13 @@ def get_medecin_consultations(id):
     structure_id = session.get('structure_id')
     
     rendez_vous = db.execute_query("""
-        SELECT r.id, r.date_rdv, r.heure_rdv, r.patient_nom, 
-               r.patient_telephone, r.motif, r.statut, r.duree
+        SELECT r.id, COALESCE(r.date_rendez_vous, r.date_rdv) as date_rdv,
+               COALESCE(r.heure_rendez_vous, TO_CHAR(r.heure_rdv, 'HH24:MI')) as heure_rdv,
+               r.patient_nom, r.patient_telephone, r.motif, r.statut, r.duree
         FROM rendez_vous r
         WHERE r.medecin_id = %s AND r.structure_id = %s
-        ORDER BY r.date_rdv DESC, r.heure_rdv DESC
+        ORDER BY COALESCE(r.date_rendez_vous, r.date_rdv) DESC,
+                 COALESCE(r.heure_rendez_vous, TO_CHAR(r.heure_rdv, 'HH24:MI')) DESC
     """, (id, structure_id))
     
     result = []

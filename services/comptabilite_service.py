@@ -148,6 +148,37 @@ def creer_ecriture(structure_id, date_ecriture, libelle, lignes, journal_code,
     return ecriture
 
 
+def _nom_assurance(vente, principale=True):
+    """Résout le nom/code de l'assurance réellement utilisée sur une vente.
+
+    BUG CORRIGÉ : les routes de vente (actes, pharmacie, conversion de
+    proforma) ne renseignent JAMAIS la colonne simple `ventes.assurance` —
+    seul le JSON `ventes.assurances` (`{'principale': {'nom': ...}, ...}`)
+    contient le vrai code (ex: 'amu_cnss', 'gta'...). S'appuyer uniquement
+    sur `vente.assurance` faisait donc toujours retomber sur le compte
+    générique "Autres assurances", quelle que soit l'assurance réelle.
+    """
+    # 1) Colonne simple, si jamais renseignée (compat future / autres flux)
+    champ_simple = vente.assurance if principale else vente.assurance2_nom
+    if champ_simple:
+        return champ_simple
+
+    # 2) JSON `assurances` : {'principale': {'nom': ...}, 'complementaire': {...}}
+    data = vente.assurances
+    if isinstance(data, str):
+        import json
+        try:
+            data = json.loads(data)
+        except (TypeError, ValueError):
+            data = None
+    if isinstance(data, dict):
+        bloc = data.get('principale' if principale else 'complementaire') or {}
+        if isinstance(bloc, dict) and bloc.get('nom'):
+            return bloc['nom']
+
+    return None
+
+
 def _compte_tresorerie(mode_paiement):
     """'especes' -> Caisse (571). Tout le reste (carte, mobile money,
     chèque, virement...) -> Banque (521)."""
@@ -212,17 +243,18 @@ def generer_ecriture_vente(vente, user_nom='SYSTEME'):
             total_debit += montant_effectif
 
         if prise_en_charge > 0:
-            nom_assurance = vente.assurance or (vente.assurances_data or {}).get('principale', {}).get('nom') if hasattr(vente, 'assurances_data') else vente.assurance
-            compte_num = compte_assurance(vente.assurance)
+            nom_assurance = _nom_assurance(vente, principale=True)
+            compte_num = compte_assurance(nom_assurance)
             lignes.append({'numero_compte': compte_num,
-                            'libelle': f"Tiers-payant à recevoir ({vente.assurance or 'assurance'})",
+                            'libelle': f"Tiers-payant à recevoir ({nom_assurance or 'assurance'})",
                             'debit': prise_en_charge})
             total_debit += prise_en_charge
 
         if prise_en_charge2 > 0:
-            compte_num2 = compte_assurance(vente.assurance2_nom)
+            nom_assurance2 = _nom_assurance(vente, principale=False)
+            compte_num2 = compte_assurance(nom_assurance2)
             lignes.append({'numero_compte': compte_num2,
-                            'libelle': f"Tiers-payant à recevoir ({vente.assurance2_nom or 'assurance 2'})",
+                            'libelle': f"Tiers-payant à recevoir ({nom_assurance2 or 'assurance 2'})",
                             'debit': prise_en_charge2})
             total_debit += prise_en_charge2
 
