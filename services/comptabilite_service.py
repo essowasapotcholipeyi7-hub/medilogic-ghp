@@ -236,33 +236,46 @@ def generer_ecriture_vente(vente, user_nom='SYSTEME'):
             return None  # rien à comptabiliser (ex: vente à 0)
 
         # --- Répartition du crédit "Ventes" par catégorie ---
-        items = vente.actes if (vente.type == 'actes' and vente.actes) else (vente.produits or [])
+        # ⭐ On combine `actes` (catégorisés finement via categoriser_acte) et
+        # `produits` (pharmacie/lunetterie) plutôt que de se fier uniquement à
+        # `vente.type` — une vente issue d'une proforma peut être "mixte"
+        # (actes + produits dans la même vente).
         totaux_par_compte = {}
 
-        if vente.type in ('pharma', 'pharmacie'):
-            totaux_par_compte['7011'] = total_debit
-        elif vente.type in ('lunettes', 'lunetterie', 'optique'):
-            totaux_par_compte['7012'] = total_debit
-        elif items:
-            for item in items:
+        for item in (vente.actes or []):
+            if not isinstance(item, dict):
+                continue
+            montant_item = _to_float(item.get('total') or item.get('prix') or item.get('montant'))
+            info = categoriser_acte(item.get('nom', ''))
+            totaux_par_compte[info['compte']] = totaux_par_compte.get(info['compte'], 0) + montant_item
+
+        produits_items = vente.produits or []
+        if produits_items:
+            compte_produits = '7012' if vente.type in ('lunettes', 'lunetterie', 'optique') else '7011'
+            for item in produits_items:
                 if not isinstance(item, dict):
                     continue
-                nom = item.get('nom', '')
-                montant_item = _to_float(item.get('total') or item.get('prix') or item.get('montant'))
-                info = categoriser_acte(nom)
-                compte_num = info['compte']
-                totaux_par_compte[compte_num] = totaux_par_compte.get(compte_num, 0) + montant_item
+                montant_item = _to_float(item.get('total') or item.get('prix_reel')
+                                          or item.get('prix_vente') or item.get('prix') or item.get('montant'))
+                totaux_par_compte[compte_produits] = totaux_par_compte.get(compte_produits, 0) + montant_item
 
-            somme_items = sum(totaux_par_compte.values())
-            if somme_items <= 0.5:
-                totaux_par_compte = {'7068': total_debit}
-            elif abs(somme_items - total_debit) > 1:
-                # Ajustement d'arrondi sur "Autres prestations" pour garantir
-                # l'équilibre de l'écriture sans bloquer la vente.
-                ecart = round(total_debit - somme_items, 2)
-                totaux_par_compte['7068'] = totaux_par_compte.get('7068', 0) + ecart
-        else:
-            totaux_par_compte['7068'] = total_debit
+        if not totaux_par_compte:
+            # Repli si la vente n'a aucun détail d'articles exploitable
+            if vente.type in ('pharma', 'pharmacie'):
+                totaux_par_compte['7011'] = total_debit
+            elif vente.type in ('lunettes', 'lunetterie', 'optique'):
+                totaux_par_compte['7012'] = total_debit
+            else:
+                totaux_par_compte['7068'] = total_debit
+
+        somme_items = sum(totaux_par_compte.values())
+        if somme_items <= 0.5:
+            totaux_par_compte = {'7068': total_debit}
+        elif abs(somme_items - total_debit) > 1:
+            # Ajustement d'arrondi sur "Autres prestations" pour garantir
+            # l'équilibre de l'écriture sans bloquer la vente.
+            ecart = round(total_debit - somme_items, 2)
+            totaux_par_compte['7068'] = totaux_par_compte.get('7068', 0) + ecart
 
         for compte_num, montant in totaux_par_compte.items():
             if montant <= 0:
@@ -414,6 +427,42 @@ def _compte_charge_pour_motif(motif):
         if mot in cle:
             return compte
     return '628'  # charge diverse par défaut
+
+
+def generer_ecriture_annulation_facture(facture, montant_annule, user_nom='SYSTEME'):
+    """Annulation d'une facture (créance) encore partiellement ou totalement
+    impayée : la partie non recouvrée est passée en perte (691 Rabais et
+    remises accordés), ce qui éteint la créance client sans mouvement de
+    trésorerie — la partie déjà réglée avant l'annulation n'est pas touchée
+    (elle a déjà sa propre écriture de règlement)."""
+    try:
+        montant_annule = _to_float(montant_annule)
+        if montant_annule <= 0:
+            return None
+
+        lignes = [
+            {'numero_compte': '691', 'libelle': f"Créance abandonnée — facture {facture.numero_facture}",
+             'debit': montant_annule},
+            {'numero_compte': COMPTE_CLIENTS_PATIENTS,
+             'libelle': f"Annulation créance — {facture.patient_nom}", 'credit': montant_annule},
+        ]
+
+        return creer_ecriture(
+            structure_id=facture.structure_id,
+            date_ecriture=datetime.utcnow().date(),
+            libelle=f"Annulation facture {facture.numero_facture} — {facture.patient_nom}",
+            lignes=lignes,
+            journal_code='OD',
+            piece_justificative=f"ANNUL-FAC-{facture.id}",
+            auto=True,
+            source_type='annulation_facture',
+            source_id=facture.id,
+            user_nom=user_nom,
+        )
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ [comptabilite_service] Erreur generer_ecriture_annulation_facture: {e}")
+        return None
 
 
 def generer_ecriture_depense(depense, user_nom='SYSTEME'):

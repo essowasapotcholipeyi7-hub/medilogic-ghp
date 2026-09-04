@@ -201,64 +201,6 @@ db.execute_query = execute_query
 print("✅ db.execute_query défini avec succès")  # Pour vérifier
 
 
-# app.py - Fonction de traitement auto (version sans dépendance aux scripts)
-
-def traiter_vente_auto(vente_id, structure_id):
-    """
-    Traite automatiquement une vente (sans dépendance aux scripts)
-    """
-    from sqlalchemy import text
-    import json
-    from datetime import date
-    from utils.categorisation import categoriser_acte
-    
-    with app.app_context():
-        try:
-            print(f"🚀 Traitement automatique de la vente #{vente_id}")
-            
-            # ⭐ 1. Récupérer la vente
-            vente = Vente.query.get(vente_id)
-            if not vente:
-                print(f"❌ Vente #{vente_id} non trouvée")
-                return
-            
-            # ⭐ 2. Catégoriser les actes (si pas déjà fait)
-            if not vente.traite_comptable:
-                actes = vente.actes if isinstance(vente.actes, list) else []
-                
-                if actes:
-                    actes_categorises = []
-                    for acte in actes:
-                        if isinstance(acte, dict):
-                            nom = acte.get('nom', '')
-                            info = categoriser_acte(nom)
-                            acte['categorie'] = info['categorie']
-                            acte['compte'] = info['compte']
-                            acte['code'] = info['code']
-                            actes_categorises.append(acte)
-                    
-                    vente.categorie_actes = actes_categorises
-                    vente.traite_comptable = True
-                    db.session.commit()
-                    print(f"✅ Vente #{vente_id} catégorisée ({len(actes_categorises)} actes)")
-                else:
-                    vente.traite_comptable = True
-                    db.session.commit()
-            
-            # ⭐ 3. Marquer comme générée (regroupement se fera via le script)
-            if vente.traite_comptable and not vente.ecriture_generee:
-                vente.ecriture_generee = True
-                db.session.commit()
-                print(f"✅ Vente #{vente_id} marquée comme générée")
-            
-            print(f"✅ Vente #{vente_id} traitée avec succès")
-            
-        except Exception as e:
-            print(f"❌ Erreur traitement auto vente #{vente_id}: {e}")
-            import traceback
-            traceback.print_exc()
-            db.session.rollback()
-
 # ========== CONFIGURATION EMAIL ==========
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
@@ -6287,72 +6229,6 @@ def api_vente_pharma():
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# app.py - Après la route pharma
-
-def traiter_vente_auto(vente_id, structure_id):
-    """
-    Traite automatiquement une vente (valable pour actes ET pharmacie)
-    """
-    from sqlalchemy import text
-    import json
-    from datetime import date
-    from utils.categorisation import categoriser_acte
-    
-    with app.app_context():
-        try:
-            print(f"🚀 Traitement automatique de la vente #{vente_id}")
-            
-            # ⭐ Récupérer la vente
-            vente = Vente.query.get(vente_id)
-            if not vente:
-                print(f"❌ Vente #{vente_id} non trouvée")
-                return
-            
-            # ⭐ Pour la pharmacie, les produits sont déjà catégorisés (compte 712)
-            # On les marque simplement comme traités
-            if vente.type == 'pharmacie':
-                vente.traite_comptable = True
-                vente.ecriture_generee = True
-                db.session.commit()
-                print(f"✅ Vente pharmacie #{vente_id} traitée")
-                return
-            
-            # ⭐ Pour les actes : catégoriser
-            if not vente.traite_comptable:
-                actes = vente.actes if isinstance(vente.actes, list) else []
-                
-                if actes:
-                    actes_categorises = []
-                    for acte in actes:
-                        if isinstance(acte, dict):
-                            nom = acte.get('nom', '')
-                            info = categoriser_acte(nom)
-                            acte['categorie'] = info['categorie']
-                            acte['compte'] = info['compte']
-                            acte['code'] = info['code']
-                            actes_categorises.append(acte)
-                    
-                    vente.categorie_actes = actes_categorises
-                    print(f"✅ Vente #{vente_id} catégorisée ({len(actes_categorises)} actes)")
-                
-                vente.traite_comptable = True
-                db.session.commit()
-            
-            # ⭐ Marquer comme générée
-            if not vente.ecriture_generee:
-                vente.ecriture_generee = True
-                db.session.commit()
-                print(f"✅ Vente #{vente_id} marquée comme générée")
-            
-            print(f"✅ Vente #{vente_id} traitée avec succès")
-            
-        except Exception as e:
-            print(f"❌ Erreur traitement auto vente #{vente_id}: {e}")
-            import traceback
-            traceback.print_exc()
-            db.session.rollback()
-
-
 @app.route('/api/produits/<int:id>/stock', methods=['GET'])
 @login_required
 def api_get_stock_produit(id):
@@ -6799,42 +6675,12 @@ def api_add_acte_vente():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# ============================================================
-# ⭐ FONCTION DE TRAITEMENT AUTOMATIQUE (en dehors de la route)
-# ============================================================
-
-def traiter_vente_auto(vente_id, structure_id):
-    """
-    Traite automatiquement une vente :
-    1. Catégorisation des actes
-    2. Mise à jour du groupe de ventes du jour
-    """
-    with app.app_context():
-        try:
-            print(f"🚀 Traitement automatique de la vente #{vente_id}")
-            
-            # ⭐ 1. Récupérer la vente
-            vente = Vente.query.get(vente_id)
-            if not vente:
-                print(f"❌ Vente #{vente_id} non trouvée")
-                return
-            
-            # ⭐ 2. Catégoriser les actes (si pas déjà fait)
-            if not vente.traite_comptable:
-                from scripts.traiter_ventes import traiter_une_vente
-                traiter_une_vente(vente)
-                print(f"✅ Vente #{vente_id} catégorisée")
-            
-            # ⭐ 3. Mettre à jour ou créer l'écriture groupée
-            from scripts.generer_ecritures_groupes import mettre_a_jour_ecriture_groupee
-            mettre_a_jour_ecriture_groupee(vente_id)
-            
-            print(f"✅ Vente #{vente_id} traitée et intégrée au groupe")
-            
-        except Exception as e:
-            print(f"❌ Erreur traitement auto vente #{vente_id}: {e}")
-            import traceback
-            traceback.print_exc()
+# ⭐ NOTE : l'ancien pipeline de traitement asynchrone (catégorisation +
+# écritures groupées quotidiennes via scripts/traiter_ventes.py et
+# scripts/generer_ecritures_groupes.py) a été retiré — remplacé par la
+# génération synchrone, par transaction, dans services/comptabilite_service.py
+# (une écriture par vente/paiement, immédiatement validée). Ces scripts
+# restent dans le dépôt pour référence mais ne sont plus appelés depuis l'app.
 
 @app.route('/api/ventes/all')
 @login_required
@@ -9584,10 +9430,36 @@ def api_convertir_proforma():
             """, (structure_id, nouveau_solde))
             
             print(f"💰 Solde de caisse mis à jour: {nouveau_solde} FCFA")
-            
+
         except Exception as e:
             print(f"⚠️ Erreur mise à jour solde: {e}")
-        
+
+        # ⭐⭐⭐ COMPTABILISATION AUTOMATIQUE (écriture SYSCOHADA validée) ⭐⭐⭐
+        try:
+            from services.comptabilite_service import generer_ecriture_vente
+            vente_orm = Vente.query.get(vente_id)
+            if vente_orm:
+                ecriture = generer_ecriture_vente(vente_orm, user_nom=user_name)
+                if ecriture:
+                    print(f"🧾 Écriture comptable #{ecriture.id} générée pour la vente (proforma #{proforma_id}) #{vente_id}")
+        except Exception as e:
+            print(f"⚠️ Erreur génération écriture comptable (vente proforma #{vente_id} conservée): {e}")
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        try:
+            from services.journal_service import JournalService
+            categorie_journal = 'vente_pharmacie' if type_vente == 'pharmacie' else 'vente_actes'
+            JournalService.creer_mouvement(
+                structure_id=structure_id, categorie=categorie_journal,
+                description=f"Vente #{vente_id} depuis proforma #{proforma_id}",
+                montant=montant_effectif, type_montant='credit',
+                reference_type='vente', reference_id=vente_id,
+                patient_id=data.get('patient_id'), patient_nom=data.get('patient_nom', 'Patient'),
+                utilisateur_nom=user_name,
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur journal d'activité (vente proforma #{vente_id}): {e}")
+
         return jsonify({
             'success': True,
             'vente_id': vente_id,
@@ -10478,15 +10350,43 @@ def api_annuler_facture(facture_id):
         if not facture:
             return jsonify({'success': False, 'error': 'Facture non trouvée'}), 404
         
+        f = facture[0]
+        reste_a_payer = float(f.get('reste_a_payer', 0) or 0)
+
         # Marquer comme annulée
         db.execute_query("""
-            UPDATE factures 
-            SET statut = 'annulee', 
+            UPDATE factures
+            SET statut = 'annulee',
                 notes = CONCAT(COALESCE(notes, ''), ' [ANNULEE - ', %s, ']'),
                 updated_at = NOW()
             WHERE id = %s
         """, (motif, facture_id))
-        
+
+        # ⭐⭐⭐ COMPTABILISATION AUTOMATIQUE : la créance restante est abandonnée ⭐⭐⭐
+        if reste_a_payer > 0:
+            try:
+                from services.comptabilite_service import generer_ecriture_annulation_facture
+                facture_orm = Facture.query.get(facture_id)
+                if facture_orm:
+                    ecriture_annul = generer_ecriture_annulation_facture(
+                        facture_orm, reste_a_payer, user_nom=session.get('user_name', 'Admin'))
+                    if ecriture_annul:
+                        print(f"🧾 Écriture d'annulation #{ecriture_annul.id} générée pour la facture #{facture_id}")
+            except Exception as e:
+                print(f"⚠️ Erreur génération écriture d'annulation (facture #{facture_id} conservée annulée): {e}")
+
+            try:
+                from services.journal_service import JournalService
+                JournalService.creer_mouvement(
+                    structure_id=structure_id, categorie='avoir_emis',
+                    description=f"Annulation facture {f.get('numero_facture')} — créance abandonnée ({motif})",
+                    montant=reste_a_payer, type_montant='debit',
+                    reference_type='facture', reference_id=facture_id,
+                    patient_nom=f.get('patient_nom'), utilisateur_nom=session.get('user_name', 'Admin'),
+                )
+            except Exception as e:
+                print(f"⚠️ Erreur journal d'activité (annulation facture #{facture_id}): {e}")
+
         return jsonify({'success': True, 'message': 'Facture annulée'})
         
     except Exception as e:

@@ -24,12 +24,10 @@
                     <span class="menu-text">Liste Patients</span>
                 </a>
                 
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'prescriptions_recues' %}active{% endif %}" href="{{ url_for('prescriptions_recues') }}">
-                        <span class="menu-text">Prescriptions reçues</span>
-                        <span class="badge bg-danger ms-1" id="prescriptionBadge">0</span>
-                    </a>
-                </li>
+                <a class="nav-link {% if request.endpoint == 'prescriptions_recues' %}active{% endif %}" href="{{ url_for('prescriptions_recues') }}">
+                    <span class="menu-text">Prescriptions reçues</span>
+                    <span class="badge bg-danger ms-1" id="prescriptionBadge">0</span>
+                </a>
                 
                 <a class="nav-link {% if request.endpoint == 'actes_vente' %}active{% endif %}" href="{{ url_for('actes_vente') }}">
                     <span class="menu-text">Labo/Radio/Hospi/Actes&Vente</span>
@@ -100,11 +98,9 @@
 
                 <!-- ===== GESTION DES STOCKS ===== -->
                 {% if session.role in ['admin', 'comptable', 'gestionnaire', 'pharmacien'] %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'gestion_stock' %}active{% endif %}" href="{{ url_for('gestion_stock') }}">
-                        <span class="menu-text">Gestion des stocks</span>
-                    </a>
-                </li>
+                <a class="nav-link {% if request.endpoint == 'gestion_stock' %}active{% endif %}" href="{{ url_for('gestion_stock') }}">
+                    <span class="menu-text">Gestion des stocks</span>
+                </a>
                 {% endif %}
 
                 <!-- ===== ADMINISTRATION ===== -->

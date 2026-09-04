@@ -109,29 +109,31 @@ def gestion_rh(structure_id):
 @rh_bp.route('/employes')
 @require_structure
 def employes(structure_id):
-    """Liste des employés"""
-    return render_template('rh/employes.html')
+    """⭐ Redirige vers l'onglet correspondant du hub unique (gestion_rh.html
+    réimplémentait déjà la même liste — deux pages parallèles à maintenir).
+    templates/rh/employes.html est conservé mais n'est plus servi."""
+    return redirect(url_for('rh.gestion_rh') + '#personnel')
 
 
 @rh_bp.route('/conges')
 @require_structure
 def conges(structure_id):
-    """Gestion des congés"""
-    return render_template('rh/conges.html')
+    """⭐ Voir note sur employes() ci-dessus."""
+    return redirect(url_for('rh.gestion_rh') + '#conges')
 
 
 @rh_bp.route('/permissions')
 @require_structure
 def permissions(structure_id):
-    """Gestion des permissions"""
-    return render_template('rh/permissions.html')
+    """⭐ Voir note sur employes() ci-dessus."""
+    return redirect(url_for('rh.gestion_rh') + '#permissions')
 
 
 @rh_bp.route('/services')
 @require_structure
 def services(structure_id):
-    """Gestion des services"""
-    return render_template('rh/services.html')
+    """⭐ Voir note sur employes() ci-dessus."""
+    return redirect(url_for('rh.gestion_rh') + '#services')
 
 
 @rh_bp.route('/dashboard')
