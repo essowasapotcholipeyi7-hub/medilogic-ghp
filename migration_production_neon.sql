@@ -9,6 +9,78 @@
 
 
 -- ----------------------------------------------------------
+-- 0) Anomalies, immobilisations/amortissements, provisions créances
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS anomalies_comptables (
+    id SERIAL PRIMARY KEY,
+    structure_id INTEGER NOT NULL,
+    source_type VARCHAR(50),
+    source_id INTEGER,
+    message TEXT NOT NULL,
+    date_creation TIMESTAMP DEFAULT NOW(),
+    resolu BOOLEAN DEFAULT FALSE,
+    resolu_par VARCHAR(100),
+    date_resolution TIMESTAMP,
+    commentaire TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_anomalies_structure ON anomalies_comptables(structure_id, resolu);
+
+CREATE TABLE IF NOT EXISTS immobilisations (
+    id SERIAL PRIMARY KEY,
+    structure_id INTEGER NOT NULL,
+    designation VARCHAR(255) NOT NULL,
+    categorie VARCHAR(100),
+    compte_immo_numero VARCHAR(20) NOT NULL,
+    compte_amort_numero VARCHAR(20) NOT NULL,
+    date_acquisition DATE NOT NULL,
+    valeur_acquisition NUMERIC NOT NULL DEFAULT 0,
+    valeur_residuelle NUMERIC DEFAULT 0,
+    duree_annees INTEGER NOT NULL DEFAULT 5,
+    statut VARCHAR(20) DEFAULT 'en_service',
+    date_cession DATE,
+    valeur_cession NUMERIC,
+    cumul_amorti NUMERIC DEFAULT 0,
+    mode_paiement VARCHAR(50) DEFAULT 'especes',
+    ecriture_acquisition_id INTEGER,
+    created_by VARCHAR(100),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_immobilisations_structure ON immobilisations(structure_id);
+
+CREATE TABLE IF NOT EXISTS dotations_amortissement (
+    id SERIAL PRIMARY KEY,
+    structure_id INTEGER NOT NULL,
+    immobilisation_id INTEGER NOT NULL REFERENCES immobilisations(id),
+    annee INTEGER NOT NULL,
+    montant NUMERIC NOT NULL,
+    date_generation TIMESTAMP DEFAULT NOW(),
+    ecriture_id INTEGER,
+    created_by VARCHAR(100),
+    UNIQUE(immobilisation_id, annee)
+);
+CREATE INDEX IF NOT EXISTS idx_dotations_structure_annee ON dotations_amortissement(structure_id, annee);
+
+CREATE TABLE IF NOT EXISTS provisions_creances (
+    id SERIAL PRIMARY KEY,
+    structure_id INTEGER NOT NULL,
+    facture_id INTEGER,
+    patient_id INTEGER,
+    patient_nom VARCHAR(255),
+    montant_creance NUMERIC NOT NULL,
+    taux_provision NUMERIC NOT NULL DEFAULT 50,
+    montant_provisionne NUMERIC NOT NULL,
+    statut VARCHAR(20) DEFAULT 'active',
+    ecriture_provision_id INTEGER,
+    ecriture_reprise_id INTEGER,
+    date_creation TIMESTAMP DEFAULT NOW(),
+    date_cloture TIMESTAMP,
+    created_by VARCHAR(100),
+    commentaire TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_provisions_structure ON provisions_creances(structure_id, statut);
+
+
+-- ----------------------------------------------------------
 -- 1) Colonnes d'automatisation sur ecritures_comptables
 -- ----------------------------------------------------------
 ALTER TABLE ecritures_comptables ADD COLUMN IF NOT EXISTS journal_code VARCHAR(10);
@@ -137,3 +209,11 @@ SELECT table_name, column_name, column_default
 FROM information_schema.columns
 WHERE column_name = 'id' AND table_name IN ('depenses', 'factures', 'paiements_factures', 'proformas_lunettes')
 ORDER BY table_name;
+
+-- ----------------------------------------------------------
+-- APRÈS ce script : relancez scripts/seed_plan_comptable_syscohada.py
+-- (ou cliquez "Initialiser" dans l'onglet Plan comptable) pour créer les
+-- nouveaux comptes 491, 651, 6591, 7591 nécessaires aux provisions pour
+-- créances douteuses — sinon ils se créent automatiquement au premier
+-- usage, mais n'apparaîtront pas tout de suite dans les listes déroulantes.
+-- ----------------------------------------------------------

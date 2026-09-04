@@ -122,6 +122,27 @@
                             <i class="fas fa-calendar-check"></i> Exercice comptable
                         </button>
                     </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="anomalies-tab" data-bs-toggle="tab" data-bs-target="#anomalies" type="button" role="tab" onclick="chargerAnomalies()">
+                            <i class="fas fa-triangle-exclamation"></i> Anomalies
+                            <span class="badge bg-danger ms-1" id="anomaliesBadge" style="display:none;">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="creances-tab" data-bs-toggle="tab" data-bs-target="#creances" type="button" role="tab" onclick="chargerCreancesDouteuses()">
+                            <i class="fas fa-user-clock"></i> Créances douteuses
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="immobilisations-tab" data-bs-toggle="tab" data-bs-target="#immobilisations" type="button" role="tab" onclick="chargerImmobilisations()">
+                            <i class="fas fa-building"></i> Immobilisations
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="tafire-tab" data-bs-toggle="tab" data-bs-target="#tafire" type="button" role="tab" onclick="chargerTafire()">
+                            <i class="fas fa-water"></i> TAFIRE
+                        </button>
+                    </li>
                 </ul>
 
                 <div class="tab-content" id="comptaTabContent">
@@ -731,6 +752,157 @@
                         </div>
                     </div>
 
+                    <!-- ========================================== -->
+                    <!-- ONGLET ANOMALIES -->
+                    <!-- ========================================== -->
+                    <div class="tab-pane fade" id="anomalies" role="tabpanel">
+                        <h6><i class="fas fa-triangle-exclamation"></i> Anomalies de génération automatique</h6>
+                        <p class="text-muted small">
+                            Chaque vente, paiement, dépense... génère automatiquement son écriture comptable. Si une
+                            génération échoue (compte introuvable, écriture déséquilibrée...), l'opération métier
+                            réussit quand même — mais l'écriture manquante apparaît ici pour reprise manuelle.
+                        </p>
+
+                        <ul class="nav nav-pills mb-3">
+                            <li class="nav-item"><button class="nav-link active" onclick="filtrerAnomalies('false', this)">Non résolues</button></li>
+                            <li class="nav-item"><button class="nav-link" onclick="filtrerAnomalies('true', this)">Résolues</button></li>
+                            <li class="nav-item"><button class="nav-link" onclick="filtrerAnomalies('', this)">Toutes</button></li>
+                        </ul>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover table-bordered">
+                                <thead class="table-light">
+                                    <tr><th>Date</th><th>Origine</th><th>Message</th><th>Statut</th><th>Action</th></tr>
+                                </thead>
+                                <tbody id="anomaliesBody">
+                                    <tr><td colspan="5" class="text-center text-muted">Chargement...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- ========================================== -->
+                    <!-- ONGLET CRÉANCES DOUTEUSES -->
+                    <!-- ========================================== -->
+                    <div class="tab-pane fade" id="creances" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6><i class="fas fa-user-clock"></i> Créances douteuses</h6>
+                            <div>
+                                <label class="form-label small mb-0 me-1">Retard mini (jours)</label>
+                                <input type="number" class="form-control form-control-sm d-inline-block" style="width:80px" id="creancesSeuilJours" value="60" onchange="chargerCreancesDouteuses()">
+                            </div>
+                        </div>
+                        <p class="text-muted small">Factures patients impayées au-delà du seuil. Provisionnez une estimation de perte, ou passez directement une créance irrécouvrable en perte.</p>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Patient</th><th>Facture</th><th>Échéance</th><th>Retard</th>
+                                        <th class="text-end">Reste à payer</th><th>Provision</th><th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="creancesBody">
+                                    <tr><td colspan="7" class="text-center text-muted">Chargement...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="card mt-3">
+                            <div class="card-header bg-light">Provisions en cours / historique</div>
+                            <div class="card-body p-0">
+                                <table class="table table-sm mb-0">
+                                    <thead><tr><th>Patient</th><th class="text-end">Créance</th><th>Taux</th><th class="text-end">Provisionné</th><th>Statut</th><th>Action</th></tr></thead>
+                                    <tbody id="provisionsBody"><tr><td colspan="6" class="text-center text-muted">Aucune</td></tr></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ========================================== -->
+                    <!-- ONGLET IMMOBILISATIONS -->
+                    <!-- ========================================== -->
+                    <div class="tab-pane fade" id="immobilisations" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6><i class="fas fa-building"></i> Immobilisations & amortissements</h6>
+                            <div>
+                                <button class="btn btn-success btn-sm me-2" onclick="ouvrirAjoutImmobilisation()"><i class="fas fa-plus"></i> Nouvelle immobilisation</button>
+                                <button class="btn btn-outline-primary btn-sm" onclick="genererDotationsAnnee()"><i class="fas fa-calculator"></i> Générer les dotations de l'année</button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Désignation</th><th>Catégorie</th><th>Acquisition</th>
+                                        <th class="text-end">Valeur</th><th class="text-end">Cumul amorti</th>
+                                        <th class="text-end">VNC</th><th>Statut</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="immobilisationsBody">
+                                    <tr><td colspan="7" class="text-center text-muted">Chargement...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- ========================================== -->
+                    <!-- ONGLET TAFIRE -->
+                    <!-- ========================================== -->
+                    <div class="tab-pane fade" id="tafire" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6><i class="fas fa-water"></i> Flux de trésorerie (TAFIRE simplifié)</h6>
+                            <div>
+                                <label class="form-label small mb-0 me-1">Année</label>
+                                <input type="number" class="form-control form-control-sm d-inline-block" style="width:100px" id="tafireAnnee" onchange="chargerTafire()">
+                            </div>
+                        </div>
+                        <div class="alert alert-secondary small">
+                            <i class="fas fa-info-circle"></i>
+                            Vue simplifiée en 3 masses (Exploitation / Investissement / Financement), construite à
+                            partir des mouvements réels de trésorerie. Ce n'est pas le TAFIRE officiel OHADA au
+                            format normé (~40 lignes ZA/ZB/ZC) — à faire valider par votre comptable pour un dépôt
+                            officiel.
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-3">
+                                <div class="card border-0 shadow-sm"><div class="card-body">
+                                    <div class="text-uppercase small text-muted">Trésorerie début</div>
+                                    <h4 class="mb-0" id="tafireTresorerieDebut">0</h4>
+                                </div></div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card border-0 shadow-sm"><div class="card-body">
+                                    <div class="text-uppercase small text-muted">Variation</div>
+                                    <h4 class="mb-0" id="tafireVariation">0</h4>
+                                </div></div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card border-0 shadow-sm"><div class="card-body">
+                                    <div class="text-uppercase small text-muted">Trésorerie fin</div>
+                                    <h4 class="mb-0" id="tafireTresorerieFin">0</h4>
+                                </div></div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card border-0 shadow-sm"><div class="card-body">
+                                    <div class="text-uppercase small text-muted">Cohérence</div>
+                                    <h4 class="mb-0" id="tafireCoherence">—</h4>
+                                </div></div>
+                            </div>
+                        </div>
+
+                        <table class="table table-bordered">
+                            <tbody>
+                                <tr><td>Flux de trésorerie liés à l'<strong>exploitation</strong></td><td class="text-end" id="tafireExploitation">0</td></tr>
+                                <tr><td>Flux de trésorerie liés à l'<strong>investissement</strong></td><td class="text-end" id="tafireInvestissement">0</td></tr>
+                                <tr><td>Flux de trésorerie liés au <strong>financement</strong></td><td class="text-end" id="tafireFinancement">0</td></tr>
+                                <tr class="table-light" id="tafireNonCategoriseRow"><td>Non catégorisé (écritures manuelles)</td><td class="text-end" id="tafireNonCategorise">0</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
                 </div><!-- Fin tab-content -->
             </div><!-- Fin card-body -->
         </div><!-- Fin card -->
@@ -796,6 +968,74 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nouvelle Immobilisation -->
+<div class="modal fade" id="immobilisationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-building"></i> Nouvelle immobilisation</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-2">
+                    <label class="form-label small">Désignation</label>
+                    <input type="text" class="form-control form-control-sm" id="immoDesignation" placeholder="Ex: Échographe portable">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Catégorie</label>
+                    <input type="text" class="form-control form-control-sm" id="immoCategorie" placeholder="Ex: Matériel médical">
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label small">Compte d'immobilisation</label>
+                        <select class="form-control form-control-sm" id="immoCompteImmo">
+                            <option value="2183">2183 - Matériel médical et informatique</option>
+                            <option value="2184">2184 - Mobilier et matériel de bureau</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label small">Compte d'amortissement</label>
+                        <input type="text" class="form-control form-control-sm" id="immoCompteAmort" value="2818">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label small">Date d'acquisition</label>
+                        <input type="date" class="form-control form-control-sm" id="immoDateAcquisition">
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label small">Durée d'amortissement (années)</label>
+                        <input type="number" class="form-control form-control-sm" id="immoDuree" value="5" min="1">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label small">Valeur d'acquisition (FCFA)</label>
+                        <input type="number" class="form-control form-control-sm" id="immoValeur" step="1000">
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label small">Mode de paiement</label>
+                        <select class="form-control form-control-sm" id="immoModePaiement">
+                            <option value="especes">Espèces (Caisse)</option>
+                            <option value="banque">Banque</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="immoGenererEcriture" checked>
+                    <label class="form-check-label small" for="immoGenererEcriture">
+                        Générer l'écriture comptable d'acquisition (débit immobilisation / crédit trésorerie)
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-primary" onclick="creerImmobilisation()">Enregistrer</button>
             </div>
         </div>
     </div>
@@ -1067,6 +1307,7 @@ document.addEventListener('DOMContentLoaded', function() {
     chargerDashboard();
     chargerCaisses();
     genererAnnees();
+    verifierAnomaliesAuChargement();
 
     // 3. ⭐ CHARGER LES COMPTES EN PRIORITÉ (car tout le monde en a besoin)
     chargerComptes();
@@ -2095,6 +2336,315 @@ function chargerEtatFinancier() {
             }
         })
         .catch(err => console.error('Erreur bilan:', err));
+}
+
+
+// ============================================================
+// ANOMALIES COMPTABLES
+// ============================================================
+
+let anomaliesFiltreCourant = 'false';
+
+function filtrerAnomalies(valeur, btn) {
+    anomaliesFiltreCourant = valeur;
+    document.querySelectorAll('#anomalies .nav-pills .nav-link').forEach(el => el.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    chargerAnomalies();
+}
+
+function chargerAnomalies() {
+    const url = anomaliesFiltreCourant ? `/comptabilite/api/anomalies?resolu=${anomaliesFiltreCourant}` : '/comptabilite/api/anomalies';
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            // Badge sur l'onglet + rappel dashboard
+            const badge = document.getElementById('anomaliesBadge');
+            if (data.total_non_resolues > 0) {
+                badge.textContent = data.total_non_resolues;
+                badge.style.display = '';
+            } else {
+                badge.style.display = 'none';
+            }
+
+            const tbody = document.getElementById('anomaliesBody');
+            if (!data.data || data.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Aucune anomalie</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.data.map(a => `
+                <tr class="${a.resolu ? '' : 'table-warning'}">
+                    <td>${a.date_creation}</td>
+                    <td><span class="badge bg-secondary">${a.source_type}</span> #${a.source_id ?? '-'}</td>
+                    <td class="small">${a.message}</td>
+                    <td>${a.resolu ? `<span class="badge bg-success">Résolue par ${a.resolu_par}</span>` : '<span class="badge bg-danger">Non résolue</span>'}</td>
+                    <td>${a.resolu ? '-' : `<button class="btn btn-sm btn-outline-success" onclick="resoudreAnomalie(${a.id})">Marquer résolue</button>`}</td>
+                </tr>
+            `).join('');
+        })
+        .catch(err => console.error('Erreur chargement anomalies:', err));
+}
+
+function resoudreAnomalie(id) {
+    const commentaire = prompt('Comment avez-vous corrigé cette anomalie ? (optionnel, pour traçabilité)') || '';
+    fetch(`/comptabilite/api/anomalies/${id}/resoudre`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ commentaire })
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) chargerAnomalies();
+        else alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+    })
+    .catch(error => alert('❌ Erreur: ' + error));
+}
+
+function verifierAnomaliesAuChargement() {
+    // Appelé au chargement de la page pour afficher le badge même si
+    // l'utilisateur n'a pas encore ouvert l'onglet Anomalies.
+    fetch('/comptabilite/api/anomalies?resolu=false')
+        .then(r => r.json())
+        .then(data => {
+            const badge = document.getElementById('anomaliesBadge');
+            if (data.total_non_resolues > 0) {
+                badge.textContent = data.total_non_resolues;
+                badge.style.display = '';
+            }
+        })
+        .catch(() => {});
+}
+
+
+// ============================================================
+// CRÉANCES DOUTEUSES & PROVISIONS
+// ============================================================
+
+function chargerCreancesDouteuses() {
+    const seuil = document.getElementById('creancesSeuilJours').value || 60;
+    fetch(`/comptabilite/api/creances-douteuses?seuil_jours=${seuil}`)
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('creancesBody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Aucune créance en retard au-delà du seuil</td></tr>';
+                return;
+            }
+            const badgeTranche = { '0-30j': 'bg-light text-dark', '31-59j': 'bg-warning text-dark', '60-89j': 'bg-orange text-white', '90j+': 'bg-danger' };
+            tbody.innerHTML = data.map(c => `
+                <tr>
+                    <td>${c.patient_nom}</td>
+                    <td>${c.numero_facture}</td>
+                    <td>${c.date_echeance}</td>
+                    <td><span class="badge ${badgeTranche[c.tranche] || 'bg-secondary'}">${c.jours_retard}j (${c.tranche})</span></td>
+                    <td class="text-end">${Math.round(c.reste_a_payer).toLocaleString()} F</td>
+                    <td>${c.deja_provisionnee ? `<span class="badge bg-info">${Math.round(c.montant_provisionne).toLocaleString()} F provisionnés</span>` : '-'}</td>
+                    <td>
+                        ${c.deja_provisionnee ? '' : `
+                            <button class="btn btn-sm btn-outline-warning" onclick="provisionnerCreance(${c.facture_id})">Provisionner</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="perteDirecteCreance(${c.facture_id})">Perte directe</button>
+                        `}
+                    </td>
+                </tr>
+            `).join('');
+        })
+        .catch(err => console.error('Erreur chargement créances douteuses:', err));
+
+    chargerProvisions();
+}
+
+function provisionnerCreance(factureId) {
+    const taux = prompt('Taux de provision estimé (%) :', '50');
+    if (taux === null) return;
+    fetch(`/comptabilite/api/creances-douteuses/${factureId}/provisionner`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ taux: parseFloat(taux) || 50 })
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert(`Provision de ${Math.round(result.montant_provisionne).toLocaleString()} FCFA enregistrée.`);
+            chargerCreancesDouteuses();
+        } else {
+            alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('❌ Erreur: ' + error));
+}
+
+function perteDirecteCreance(factureId) {
+    if (!confirm("Passer définitivement cette créance en perte (créance abandonnée, patient insolvable) ? Cette action est irréversible.")) return;
+    fetch(`/comptabilite/api/creances-douteuses/${factureId}/perte-directe`, { method: 'POST' })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) { chargerCreancesDouteuses(); }
+            else alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+        })
+        .catch(error => alert('❌ Erreur: ' + error));
+}
+
+function chargerProvisions() {
+    fetch('/comptabilite/api/provisions')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('provisionsBody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Aucune</td></tr>';
+                return;
+            }
+            const badges = { 'active': 'bg-warning text-dark', 'reprise': 'bg-success', 'perte': 'bg-danger' };
+            tbody.innerHTML = data.map(p => `
+                <tr>
+                    <td>${p.patient_nom}</td>
+                    <td class="text-end">${Math.round(p.montant_creance).toLocaleString()} F</td>
+                    <td>${p.taux_provision}%</td>
+                    <td class="text-end">${Math.round(p.montant_provisionne).toLocaleString()} F</td>
+                    <td><span class="badge ${badges[p.statut] || 'bg-secondary'}">${p.statut}</span></td>
+                    <td>
+                        ${p.statut === 'active' ? `
+                            <button class="btn btn-sm btn-outline-success" onclick="reprendreProvision(${p.id})">Reprise (payé)</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="provisionPasserEnPerte(${p.id})">Passer en perte</button>
+                        ` : '-'}
+                    </td>
+                </tr>
+            `).join('');
+        })
+        .catch(err => console.error('Erreur chargement provisions:', err));
+}
+
+function reprendreProvision(id) {
+    if (!confirm('Le patient a-t-il finalement payé ? Ceci annule la provision.')) return;
+    fetch(`/comptabilite/api/provisions/${id}/reprendre`, { method: 'POST' })
+        .then(r => r.json())
+        .then(result => { if (result.success) chargerCreancesDouteuses(); else alert('❌ ' + result.error); })
+        .catch(error => alert('❌ Erreur: ' + error));
+}
+
+function provisionPasserEnPerte(id) {
+    if (!confirm('Passer cette créance provisionnée définitivement en perte ? Irréversible.')) return;
+    fetch(`/comptabilite/api/provisions/${id}/passer-en-perte`, { method: 'POST' })
+        .then(r => r.json())
+        .then(result => { if (result.success) chargerCreancesDouteuses(); else alert('❌ ' + result.error); })
+        .catch(error => alert('❌ Erreur: ' + error));
+}
+
+
+// ============================================================
+// IMMOBILISATIONS & AMORTISSEMENTS
+// ============================================================
+
+function chargerImmobilisations() {
+    fetch('/comptabilite/api/immobilisations')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('immobilisationsBody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Aucune immobilisation enregistrée</td></tr>';
+                return;
+            }
+            const badges = { 'en_service': 'bg-success', 'cede': 'bg-secondary', 'reforme': 'bg-dark' };
+            tbody.innerHTML = data.map(i => `
+                <tr>
+                    <td>${i.designation}</td>
+                    <td>${i.categorie || '-'}</td>
+                    <td>${i.date_acquisition}</td>
+                    <td class="text-end">${Math.round(i.valeur_acquisition).toLocaleString()} F</td>
+                    <td class="text-end">${Math.round(i.cumul_amorti).toLocaleString()} F</td>
+                    <td class="text-end fw-bold">${Math.round(i.vnc).toLocaleString()} F</td>
+                    <td><span class="badge ${badges[i.statut] || 'bg-secondary'}">${i.statut}</span></td>
+                </tr>
+            `).join('');
+        })
+        .catch(err => console.error('Erreur chargement immobilisations:', err));
+}
+
+function ouvrirAjoutImmobilisation() {
+    document.getElementById('immoDesignation').value = '';
+    document.getElementById('immoCategorie').value = '';
+    document.getElementById('immoDateAcquisition').value = new Date().toISOString().split('T')[0];
+    document.getElementById('immoDuree').value = 5;
+    document.getElementById('immoValeur').value = '';
+    new bootstrap.Modal(document.getElementById('immobilisationModal')).show();
+}
+
+function creerImmobilisation() {
+    const designation = document.getElementById('immoDesignation').value.trim();
+    const valeur = parseFloat(document.getElementById('immoValeur').value) || 0;
+    if (!designation || valeur <= 0) { alert('Désignation et valeur d\'acquisition requises'); return; }
+
+    fetch('/comptabilite/api/immobilisations', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            designation, categorie: document.getElementById('immoCategorie').value,
+            compte_immo_numero: document.getElementById('immoCompteImmo').value,
+            compte_amort_numero: document.getElementById('immoCompteAmort').value,
+            date_acquisition: document.getElementById('immoDateAcquisition').value,
+            duree_annees: parseInt(document.getElementById('immoDuree').value) || 5,
+            valeur_acquisition: valeur,
+            mode_paiement: document.getElementById('immoModePaiement').value,
+            generer_ecriture: document.getElementById('immoGenererEcriture').checked,
+        })
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('immobilisationModal')).hide();
+            chargerImmobilisations();
+        } else {
+            alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('❌ Erreur: ' + error));
+}
+
+function genererDotationsAnnee() {
+    const annee = prompt('Générer les dotations aux amortissements pour quelle année ?', new Date().getFullYear());
+    if (!annee) return;
+    fetch('/comptabilite/api/immobilisations/dotations/generer', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ annee: parseInt(annee) })
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert(`${result.nb_generees} dotation(s) générée(s)${result.erreurs.length ? ' (erreurs: ' + result.erreurs.join(', ') + ')' : ''}.`);
+            chargerImmobilisations();
+        } else {
+            alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('❌ Erreur: ' + error));
+}
+
+
+// ============================================================
+// TAFIRE
+// ============================================================
+
+function chargerTafire() {
+    const anneeInput = document.getElementById('tafireAnnee');
+    if (!anneeInput.value) anneeInput.value = new Date().getFullYear();
+
+    fetch(`/comptabilite/api/rapports/tafire?annee=${anneeInput.value}`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('tafireTresorerieDebut').textContent = formaterMontantEtat(data.tresorerie_debut);
+            document.getElementById('tafireVariation').textContent = formaterMontantEtat(data.variation_tresorerie);
+            document.getElementById('tafireTresorerieFin').textContent = formaterMontantEtat(data.tresorerie_fin);
+            const coherenceEl = document.getElementById('tafireCoherence');
+            coherenceEl.textContent = data.coherent ? '✅ OK' : '⚠️ Écart';
+            coherenceEl.className = 'mb-0 ' + (data.coherent ? 'text-success' : 'text-danger');
+
+            document.getElementById('tafireExploitation').textContent = formaterMontantEtat(data.flux_exploitation);
+            document.getElementById('tafireInvestissement').textContent = formaterMontantEtat(data.flux_investissement);
+            document.getElementById('tafireFinancement').textContent = formaterMontantEtat(data.flux_financement);
+            const nonCatRow = document.getElementById('tafireNonCategoriseRow');
+            if (Math.abs(data.flux_non_categorise) > 1) {
+                document.getElementById('tafireNonCategorise').textContent = formaterMontantEtat(data.flux_non_categorise);
+                nonCatRow.style.display = '';
+            } else {
+                nonCatRow.style.display = 'none';
+            }
+        })
+        .catch(err => console.error('Erreur chargement TAFIRE:', err));
 }
 
 

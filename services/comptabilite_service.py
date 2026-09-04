@@ -19,11 +19,11 @@
 # doit toujours réussir même si la comptabilisation échoue ; l'anomalie est
 # alors visible dans le tableau de bord comptabilité pour reprise manuelle.
 
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from models import (
     db, CompteComptable, EcritureComptable, LigneEcriture,
     Vente, Facture, PaiementFacture, FactureAssurance,
-    AnnulationVente, Recette, Depense
+    AnnulationVente, Recette, Depense, AnomalieComptable
 )
 from utils.plan_comptable_syscohada import (
     PLAN_COMPTABLE_PAR_NUMERO, COMPTE_CLIENTS_PATIENTS, COMPTE_ATTENTE,
@@ -80,6 +80,25 @@ def invalider_cache_comptes():
 
 
 # ============================================================
+# ANOMALIES (générations d'écritures échouées — visibles au tableau de bord)
+# ============================================================
+
+def _log_anomalie(structure_id, source_type, source_id, message):
+    """Journalise un échec de génération automatique dans une transaction
+    SÉPARÉE — ne doit jamais elle-même faire échouer l'appelant."""
+    try:
+        db.session.rollback()  # au cas où une transaction précédente serait en échec
+        db.session.add(AnomalieComptable(
+            structure_id=structure_id, source_type=source_type, source_id=source_id,
+            message=str(message)[:2000],
+        ))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ [comptabilite_service] Impossible de journaliser l'anomalie: {e}")
+
+
+# ============================================================
 # NOYAU COMMUN : CRÉATION D'UNE ÉCRITURE
 # ============================================================
 
@@ -104,8 +123,11 @@ def creer_ecriture(structure_id, date_ecriture, libelle, lignes, journal_code,
     total_credit = sum(_to_float(l.get('credit')) for l in lignes_valides)
 
     if abs(total_debit - total_credit) > 1:  # tolérance d'arrondi (1 FCFA)
-        print(f"⚠️ [comptabilite_service] Écriture déséquilibrée rejetée "
-              f"(débit={total_debit}, crédit={total_credit}) — {libelle}")
+        message = (f"Écriture déséquilibrée rejetée (débit={total_debit}, "
+                   f"crédit={total_credit}) — {libelle}")
+        print(f"⚠️ [comptabilite_service] {message}")
+        if auto:
+            _log_anomalie(structure_id, source_type, source_id, message)
         return None
 
     if not isinstance(date_ecriture, date):
@@ -341,6 +363,8 @@ def generer_ecriture_vente(vente, user_nom='SYSTEME'):
         print(f"❌ [comptabilite_service] Erreur generer_ecriture_vente(vente#{getattr(vente, 'id', '?')}): {e}")
         import traceback
         traceback.print_exc()
+        _log_anomalie(getattr(vente, 'structure_id', None), 'vente', getattr(vente, 'id', None),
+                      f"Échec génération écriture de vente: {e}")
         return None
 
 
@@ -362,6 +386,8 @@ def generer_ecriture_annulation_vente(vente, annulation, user_nom='SYSTEME'):
     except Exception as e:
         db.session.rollback()
         print(f"❌ [comptabilite_service] Erreur generer_ecriture_annulation_vente: {e}")
+        _log_anomalie(getattr(vente, 'structure_id', None), 'annulation_vente',
+                      getattr(vente, 'id', None), f"Échec génération écriture d'annulation: {e}")
         return None
 
 
@@ -396,6 +422,8 @@ def generer_ecriture_paiement_facture(paiement, facture, user_nom='SYSTEME'):
     except Exception as e:
         db.session.rollback()
         print(f"❌ [comptabilite_service] Erreur generer_ecriture_paiement_facture: {e}")
+        _log_anomalie(getattr(facture, 'structure_id', None), 'paiement_facture',
+                      getattr(paiement, 'id', None), f"Échec génération écriture de règlement: {e}")
         return None
 
 
@@ -430,6 +458,8 @@ def generer_ecriture_remboursement_assurance(montant, assurance_nom, structure_i
     except Exception as e:
         db.session.rollback()
         print(f"❌ [comptabilite_service] Erreur generer_ecriture_remboursement_assurance: {e}")
+        _log_anomalie(structure_id, 'paiement_assurance', source_id,
+                      f"Échec génération écriture de remboursement assurance: {e}")
         return None
 
 
@@ -494,6 +524,8 @@ def generer_ecriture_annulation_facture(facture, montant_annule, user_nom='SYSTE
     except Exception as e:
         db.session.rollback()
         print(f"❌ [comptabilite_service] Erreur generer_ecriture_annulation_facture: {e}")
+        _log_anomalie(getattr(facture, 'structure_id', None), 'annulation_facture',
+                      getattr(facture, 'id', None), f"Échec génération écriture d'annulation facture: {e}")
         return None
 
 
@@ -527,6 +559,8 @@ def generer_ecriture_depense(depense, user_nom='SYSTEME'):
     except Exception as e:
         db.session.rollback()
         print(f"❌ [comptabilite_service] Erreur generer_ecriture_depense: {e}")
+        _log_anomalie(getattr(depense, 'structure_id', None), 'depense',
+                      getattr(depense, 'id', None), f"Échec génération écriture de dépense: {e}")
         return None
 
 
@@ -559,6 +593,8 @@ def generer_ecriture_recette_diverse(recette, user_nom='SYSTEME'):
     except Exception as e:
         db.session.rollback()
         print(f"❌ [comptabilite_service] Erreur generer_ecriture_recette_diverse: {e}")
+        _log_anomalie(getattr(recette, 'structure_id', None), 'recette',
+                      getattr(recette, 'id', None), f"Échec génération écriture de recette: {e}")
         return None
 
 
@@ -616,7 +652,181 @@ def generer_ecriture_paie(paie, employe, user_nom='SYSTEME'):
     except Exception as e:
         db.session.rollback()
         print(f"❌ [comptabilite_service] Erreur generer_ecriture_paie: {e}")
+        _log_anomalie(getattr(paie, 'structure_id', None), 'paie',
+                      getattr(paie, 'id', None), f"Échec génération écriture de paie: {e}")
         return None
+
+
+# ============================================================
+# PROVISIONS POUR CRÉANCES DOUTEUSES
+# ============================================================
+
+def generer_ecriture_provision(structure_id, montant_provisionne, patient_nom, provision_id, user_nom='SYSTEME'):
+    """Constate une dépréciation estimée sur une créance qui traîne :
+    Débit 6591 (charge) / Crédit 491 (dépréciation, contra-actif). Ne
+    touche PAS le compte 4111 — la créance reste due en totalité, c'est
+    juste une estimation comptable de la perte probable."""
+    lignes = [
+        {'numero_compte': '6591', 'libelle': f"Provision créance douteuse — {patient_nom}", 'debit': montant_provisionne},
+        {'numero_compte': '491', 'libelle': f"Dépréciation créance — {patient_nom}", 'credit': montant_provisionne},
+    ]
+    return creer_ecriture(
+        structure_id=structure_id, date_ecriture=datetime.utcnow().date(),
+        libelle=f"Provision pour créance douteuse — {patient_nom}", lignes=lignes,
+        journal_code='OD', piece_justificative=f"PROV-{provision_id}", auto=True,
+        source_type='provision_creance', source_id=provision_id, user_nom=user_nom,
+    )
+
+
+def generer_ecriture_reprise_provision(structure_id, montant_provisionne, patient_nom, provision_id, user_nom='SYSTEME'):
+    """Annule une provision devenue sans objet (le patient a finalement
+    payé, ou la créance est recouvrée autrement) : Débit 491 / Crédit 7591."""
+    lignes = [
+        {'numero_compte': '491', 'libelle': f"Reprise provision — {patient_nom}", 'debit': montant_provisionne},
+        {'numero_compte': '7591', 'libelle': f"Reprise provision créance douteuse — {patient_nom}", 'credit': montant_provisionne},
+    ]
+    return creer_ecriture(
+        structure_id=structure_id, date_ecriture=datetime.utcnow().date(),
+        libelle=f"Reprise de provision — {patient_nom}", lignes=lignes,
+        journal_code='OD', piece_justificative=f"REPR-{provision_id}", auto=True,
+        source_type='reprise_provision', source_id=provision_id, user_nom=user_nom,
+    )
+
+
+def generer_ecriture_perte_creance(structure_id, montant_creance, montant_provisionne, patient_nom,
+                                    provision_id, user_nom='SYSTEME'):
+    """Passe une créance définitivement en perte (client insolvable,
+    créance abandonnée) : éteint le 4111 pour le montant total ; la partie
+    déjà couverte par une provision sort de 491, le reste est une charge
+    exceptionnelle sur 651."""
+    montant_creance = _to_float(montant_creance)
+    montant_provisionne = min(_to_float(montant_provisionne), montant_creance)
+    reste_non_couvert = round(montant_creance - montant_provisionne, 2)
+
+    lignes = [{'numero_compte': COMPTE_CLIENTS_PATIENTS, 'libelle': f"Créance passée en perte — {patient_nom}",
+               'credit': montant_creance}]
+    if montant_provisionne > 0:
+        lignes.append({'numero_compte': '491', 'libelle': f"Consommation provision — {patient_nom}", 'debit': montant_provisionne})
+    if reste_non_couvert > 0:
+        lignes.append({'numero_compte': '651', 'libelle': f"Perte sur créance irrécouvrable — {patient_nom}", 'debit': reste_non_couvert})
+
+    return creer_ecriture(
+        structure_id=structure_id, date_ecriture=datetime.utcnow().date(),
+        libelle=f"Créance irrécouvrable — {patient_nom}", lignes=lignes,
+        journal_code='OD', piece_justificative=f"PERTE-{provision_id}", auto=True,
+        source_type='perte_creance', source_id=provision_id, user_nom=user_nom,
+    )
+
+
+# ============================================================
+# IMMOBILISATIONS & AMORTISSEMENTS
+# ============================================================
+
+def generer_ecriture_acquisition_immobilisation(immo, user_nom='SYSTEME'):
+    """Achat d'une immobilisation : Débit compte d'immobilisation (2xxx) /
+    Crédit trésorerie (paiement comptant — le cas le plus courant pour une
+    petite structure ; pas de gestion de crédit fournisseur immobilisation
+    pour l'instant)."""
+    montant = _to_float(immo.valeur_acquisition)
+    if montant <= 0:
+        return None
+    lignes = [
+        {'numero_compte': immo.compte_immo_numero, 'libelle': f"Acquisition — {immo.designation}", 'debit': montant},
+        {'numero_compte': _compte_tresorerie(immo.mode_paiement), 'libelle': f"Achat — {immo.designation}", 'credit': montant},
+    ]
+    return creer_ecriture(
+        structure_id=immo.structure_id, date_ecriture=immo.date_acquisition,
+        libelle=f"Acquisition immobilisation — {immo.designation}", lignes=lignes,
+        journal_code='ACH', piece_justificative=f"IMMO-{immo.id}", auto=True,
+        source_type='immobilisation_acquisition', source_id=immo.id, user_nom=user_nom,
+    )
+
+
+def generer_ecriture_dotation_amortissement(immo, montant, annee, user_nom='SYSTEME'):
+    """Dotation annuelle aux amortissements : Débit 681 / Crédit compte
+    d'amortissement (28xx) de l'immobilisation concernée."""
+    montant = round(_to_float(montant), 2)
+    if montant <= 0:
+        return None
+    lignes = [
+        {'numero_compte': '681', 'libelle': f"Dotation {annee} — {immo.designation}", 'debit': montant},
+        {'numero_compte': immo.compte_amort_numero, 'libelle': f"Amortissement {annee} — {immo.designation}", 'credit': montant},
+    ]
+    return creer_ecriture(
+        structure_id=immo.structure_id, date_ecriture=date(annee, 12, 31),
+        libelle=f"Dotation aux amortissements {annee} — {immo.designation}", lignes=lignes,
+        journal_code='OD', piece_justificative=f"DOTA-{immo.id}-{annee}", auto=True,
+        source_type='dotation_amortissement', source_id=immo.id, user_nom=user_nom,
+    )
+
+
+# ============================================================
+# TAFIRE SIMPLIFIÉ (tableau des flux de trésorerie)
+# ============================================================
+# ⭐ NOTE HONNÊTE : ce n'est PAS le TAFIRE officiel OHADA au format exact
+# (qui a ~40 lignes normées ZA/ZB/ZC... et suppose un suivi complet des
+# retraitements de la CAFG). C'est un flux de trésorerie à 3 masses
+# (Exploitation / Investissement / Financement), construit à partir des
+# mouvements réels des comptes de trésorerie (521/571), catégorisés par le
+# type d'opération qui a généré chaque écriture — déjà très utile pour
+# suivre d'où vient et où part l'argent, mais à ne pas présenter comme LE
+# TAFIRE réglementaire sans revue par un expert-comptable.
+
+_CATEGORIE_FLUX_PAR_SOURCE = {
+    'vente': 'exploitation', 'paiement_facture': 'exploitation', 'paiement_assurance': 'exploitation',
+    'annulation_vente': 'exploitation', 'annulation_facture': 'exploitation', 'depense': 'exploitation',
+    'recette': 'exploitation', 'paie': 'exploitation',
+    'provision_creance': 'exploitation', 'reprise_provision': 'exploitation', 'perte_creance': 'exploitation',
+    'immobilisation_acquisition': 'investissement', 'immobilisation_cession': 'investissement',
+    'dotation_amortissement': None,  # n'affecte pas la trésorerie (écriture non-cash)
+    'capital': 'financement', 'emprunt': 'financement',
+}
+
+
+def get_tafire(structure_id, annee):
+    comptes_tresorerie = CompteComptable.query.filter(
+        CompteComptable.structure_id == structure_id,
+        CompteComptable.numero.in_(['571', '521'])
+    ).all()
+    compte_ids = [c.id for c in comptes_tresorerie]
+
+    date_debut = date(annee, 1, 1)
+    date_fin = date(annee, 12, 31)
+
+    tresorerie_debut = sum(_to_float(c.get_solde(date_fin=date_debut - timedelta(days=1)))
+                            for c in comptes_tresorerie)
+    tresorerie_fin = sum(_to_float(c.get_solde(date_fin=date_fin)) for c in comptes_tresorerie)
+
+    lignes = LigneEcriture.query.join(EcritureComptable).filter(
+        EcritureComptable.structure_id == structure_id,
+        EcritureComptable.statut == 'valide',
+        EcritureComptable.date_ecriture >= date_debut,
+        EcritureComptable.date_ecriture <= date_fin,
+        LigneEcriture.compte_id.in_(compte_ids),
+    ).all()
+
+    flux = {'exploitation': 0.0, 'investissement': 0.0, 'financement': 0.0, 'non_categorise': 0.0}
+    for l in lignes:
+        net = _to_float(l.debit) - _to_float(l.credit)  # entrée positive, sortie négative
+        categorie = _CATEGORIE_FLUX_PAR_SOURCE.get(l.ecriture.source_type)
+        if categorie is None and l.ecriture.source_type is not None:
+            continue  # ex: dotation aux amortissements, non-cash
+        cle = categorie or 'non_categorise'
+        flux[cle] = flux.get(cle, 0) + net
+
+    variation = flux['exploitation'] + flux['investissement'] + flux['financement'] + flux['non_categorise']
+
+    return {
+        'annee': annee,
+        'tresorerie_debut': round(tresorerie_debut, 2),
+        'flux_exploitation': round(flux['exploitation'], 2),
+        'flux_investissement': round(flux['investissement'], 2),
+        'flux_financement': round(flux['financement'], 2),
+        'flux_non_categorise': round(flux['non_categorise'], 2),
+        'variation_tresorerie': round(variation, 2),
+        'tresorerie_fin': round(tresorerie_fin, 2),
+        'coherent': abs((tresorerie_debut + variation) - tresorerie_fin) < 1,
+    }
 
 
 # ============================================================

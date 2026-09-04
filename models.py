@@ -695,6 +695,103 @@ class LigneReleve(db.Model):
     ecriture_id = db.Column(db.Integer, db.ForeignKey('ecritures_comptables.id'), nullable=True)
     commentaire = db.Column(db.Text)
 
+
+# ============================================================
+# ANOMALIES COMPTABLES (génération automatique d'écritures en échec)
+# ============================================================
+
+class AnomalieComptable(db.Model):
+    __tablename__ = 'anomalies_comptables'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    source_type = db.Column(db.String(50))   # 'vente', 'paiement_facture', ...
+    source_id = db.Column(db.Integer)
+    message = db.Column(db.Text, nullable=False)
+    date_creation = db.Column(db.DateTime, default=datetime.utcnow)
+    resolu = db.Column(db.Boolean, default=False)
+    resolu_par = db.Column(db.String(100))
+    date_resolution = db.Column(db.DateTime)
+    commentaire = db.Column(db.Text)
+
+
+# ============================================================
+# IMMOBILISATIONS & AMORTISSEMENTS
+# ============================================================
+
+class Immobilisation(db.Model):
+    __tablename__ = 'immobilisations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    designation = db.Column(db.String(255), nullable=False)
+    categorie = db.Column(db.String(100))
+    compte_immo_numero = db.Column(db.String(20), nullable=False)   # ex: 2183
+    compte_amort_numero = db.Column(db.String(20), nullable=False)  # ex: 2818
+    date_acquisition = db.Column(db.Date, nullable=False)
+    valeur_acquisition = db.Column(db.Numeric, nullable=False, default=0)
+    valeur_residuelle = db.Column(db.Numeric, default=0)
+    duree_annees = db.Column(db.Integer, nullable=False, default=5)
+    statut = db.Column(db.String(20), default='en_service')  # en_service, cede, reforme
+    date_cession = db.Column(db.Date)
+    valeur_cession = db.Column(db.Numeric)
+    cumul_amorti = db.Column(db.Numeric, default=0)
+    mode_paiement = db.Column(db.String(50), default='especes')
+    ecriture_acquisition_id = db.Column(db.Integer)
+    created_by = db.Column(db.String(100))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    dotations = db.relationship('DotationAmortissement', backref='immobilisation', lazy=True)
+
+    def valeur_nette_comptable(self):
+        return float(self.valeur_acquisition or 0) - float(self.cumul_amorti or 0)
+
+    def base_amortissable(self):
+        return float(self.valeur_acquisition or 0) - float(self.valeur_residuelle or 0)
+
+    def dotation_annuelle_theorique(self):
+        if not self.duree_annees:
+            return 0
+        return self.base_amortissable() / self.duree_annees
+
+
+class DotationAmortissement(db.Model):
+    __tablename__ = 'dotations_amortissement'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    immobilisation_id = db.Column(db.Integer, db.ForeignKey('immobilisations.id'), nullable=False)
+    annee = db.Column(db.Integer, nullable=False)
+    montant = db.Column(db.Numeric, nullable=False)
+    date_generation = db.Column(db.DateTime, default=datetime.utcnow)
+    ecriture_id = db.Column(db.Integer)
+    created_by = db.Column(db.String(100))
+
+
+# ============================================================
+# PROVISIONS POUR CRÉANCES DOUTEUSES
+# ============================================================
+
+class ProvisionCreance(db.Model):
+    __tablename__ = 'provisions_creances'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    facture_id = db.Column(db.Integer)
+    patient_id = db.Column(db.Integer)
+    patient_nom = db.Column(db.String(255))
+    montant_creance = db.Column(db.Numeric, nullable=False)
+    taux_provision = db.Column(db.Numeric, nullable=False, default=50)
+    montant_provisionne = db.Column(db.Numeric, nullable=False)
+    statut = db.Column(db.String(20), default='active')  # active, reprise, perte
+    ecriture_provision_id = db.Column(db.Integer)
+    ecriture_reprise_id = db.Column(db.Integer)
+    date_creation = db.Column(db.DateTime, default=datetime.utcnow)
+    date_cloture = db.Column(db.DateTime)
+    created_by = db.Column(db.String(100))
+    commentaire = db.Column(db.Text)
+
+
 # models.py - Modèle Vente EXACT (correspond à ta base)
 
 class Vente(db.Model):

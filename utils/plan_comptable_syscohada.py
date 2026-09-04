@@ -33,6 +33,7 @@ PLAN_COMPTABLE = [
     {'numero': '4011', 'nom': "Fournisseurs — médicaments et consommables", 'type': 'passif', 'classe': '4'},
     {'numero': '4111', 'nom': "Clients — patients (ventes courantes)", 'type': 'actif', 'classe': '4'},
     {'numero': '41171', 'nom': "Clients douteux ou litigieux", 'type': 'actif', 'classe': '4'},
+    {'numero': '491', 'nom': "Dépréciation des comptes clients", 'type': 'actif', 'classe': '4'},
     {'numero': '411211', 'nom': "AMU-CNSS — tiers-payant à recevoir", 'type': 'actif', 'classe': '4'},
     {'numero': '411212', 'nom': "AMU-INAM — tiers-payant à recevoir", 'type': 'actif', 'classe': '4'},
     {'numero': '411221', 'nom': "Assurance GTA — tiers-payant à recevoir", 'type': 'actif', 'classe': '4'},
@@ -78,8 +79,10 @@ PLAN_COMPTABLE = [
     {'numero': '663', 'nom': "Indemnités et avantages divers au personnel", 'type': 'charge', 'classe': '6'},
     {'numero': '664', 'nom': "Charges sociales — CNSS part patronale", 'type': 'charge', 'classe': '6'},
     {'numero': '6641', 'nom': "Charges sociales — INAM part patronale", 'type': 'charge', 'classe': '6'},
+    {'numero': '651', 'nom': "Pertes sur créances irrécouvrables", 'type': 'charge', 'classe': '6'},
     {'numero': '671', 'nom': "Intérêts et frais financiers", 'type': 'charge', 'classe': '6'},
     {'numero': '681', 'nom': "Dotations aux amortissements", 'type': 'charge', 'classe': '6'},
+    {'numero': '6591', 'nom': "Dotations aux provisions pour dépréciation des comptes clients", 'type': 'charge', 'classe': '6'},
     {'numero': '691', 'nom': "Rabais, remises et ristournes accordés", 'type': 'charge', 'classe': '6'},
 
     # ---------------- CLASSE 7 — Produits ----------------
@@ -93,6 +96,7 @@ PLAN_COMPTABLE = [
     {'numero': '754', 'nom': "Subventions et dons reçus", 'type': 'produit', 'classe': '7'},
     {'numero': '758', 'nom': "Produits divers", 'type': 'produit', 'classe': '7'},
     {'numero': '771', 'nom': "Intérêts et produits financiers", 'type': 'produit', 'classe': '7'},
+    {'numero': '7591', 'nom': "Reprises de provisions pour dépréciation des comptes clients", 'type': 'produit', 'classe': '7'},
 ]
 
 # Index rapide numero -> définition, pour la création à la volée dans le service.

@@ -8,9 +8,10 @@ from functools import lru_cache
 from models import (
     db, CompteComptable, EcritureComptable, LigneEcriture,
     Budget, ValidationComptable, HistoriqueEcriture, ReleveBancaire,
-    LigneReleve, Cloture, SequencePiece
+    LigneReleve, Cloture, SequencePiece, AnomalieComptable,
+    Immobilisation, DotationAmortissement, ProvisionCreance, Facture
 )
-from services.comptabilite_service import get_soldes_caisses
+from services.comptabilite_service import get_soldes_caisses, creer_ecriture, COMPTE_CLIENTS_PATIENTS
 
 compta_bp = Blueprint('comptabilite', __name__, url_prefix='/comptabilite')
 
@@ -1945,3 +1946,359 @@ def print_budget():
                          annee=annee,
                          structure_info=structure_info,
                          now=datetime.now())
+
+
+# ============================================================
+# ANOMALIES COMPTABLES (générations d'écritures automatiques échouées)
+# ============================================================
+
+@compta_bp.route('/api/anomalies')
+def api_liste_anomalies():
+    structure_id = session.get('structure_id')
+    resolu_param = request.args.get('resolu')  # 'true' / 'false' / absent = toutes
+
+    query = AnomalieComptable.query.filter_by(structure_id=structure_id)
+    if resolu_param == 'true':
+        query = query.filter_by(resolu=True)
+    elif resolu_param == 'false':
+        query = query.filter_by(resolu=False)
+
+    anomalies = query.order_by(AnomalieComptable.date_creation.desc()).limit(200).all()
+
+    return jsonify({
+        'total_non_resolues': AnomalieComptable.query.filter_by(structure_id=structure_id, resolu=False).count(),
+        'data': [{
+            'id': a.id,
+            'source_type': a.source_type or '-',
+            'source_id': a.source_id,
+            'message': a.message,
+            'date_creation': a.date_creation.strftime('%Y-%m-%d %H:%M') if a.date_creation else '',
+            'resolu': a.resolu,
+            'resolu_par': a.resolu_par or '',
+            'commentaire': a.commentaire or '',
+        } for a in anomalies]
+    })
+
+
+@compta_bp.route('/api/anomalies/<int:id>/resoudre', methods=['POST'])
+def api_resoudre_anomalie(id):
+    structure_id = session.get('structure_id')
+    user_name = session.get('user_name', 'System')
+    anomalie = AnomalieComptable.query.filter_by(id=id, structure_id=structure_id).first()
+    if not anomalie:
+        return jsonify({'error': 'Anomalie non trouvée'}), 404
+
+    anomalie.resolu = True
+    anomalie.resolu_par = user_name
+    anomalie.date_resolution = datetime.utcnow()
+    anomalie.commentaire = (request.json or {}).get('commentaire', '')
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+# ============================================================
+# CRÉANCES DOUTEUSES & PROVISIONS
+# ============================================================
+
+@compta_bp.route('/api/creances-douteuses')
+def api_creances_douteuses():
+    """Balance âgée des créances patients impayées (factures en attente ou
+    partielles), pour repérer celles à provisionner."""
+    structure_id = session.get('structure_id')
+    seuil_jours = request.args.get('seuil_jours', 60, type=int)
+
+    factures = Facture.query.filter(
+        Facture.structure_id == structure_id,
+        Facture.statut.in_(['en_attente', 'partielle']),
+        Facture.reste_a_payer > 0,
+    ).order_by(Facture.date_echeance).all()
+
+    provisions_actives = {p.facture_id: p for p in ProvisionCreance.query.filter_by(
+        structure_id=structure_id, statut='active').all()}
+
+    today = date.today()
+    result = []
+    for f in factures:
+        jours_retard = (today - f.date_echeance).days if f.date_echeance else 0
+        if jours_retard < seuil_jours:
+            continue
+        prov = provisions_actives.get(f.id)
+        tranche = '90j+' if jours_retard >= 90 else ('60-89j' if jours_retard >= 60 else ('31-59j' if jours_retard >= 31 else '0-30j'))
+        result.append({
+            'facture_id': f.id,
+            'numero_facture': f.numero_facture,
+            'patient_id': f.patient_id,
+            'patient_nom': f.patient_nom,
+            'date_echeance': f.date_echeance.strftime('%Y-%m-%d') if f.date_echeance else '',
+            'jours_retard': jours_retard,
+            'tranche': tranche,
+            'reste_a_payer': float(f.reste_a_payer or 0),
+            'deja_provisionnee': prov is not None,
+            'provision_id': prov.id if prov else None,
+            'montant_provisionne': float(prov.montant_provisionne) if prov else 0,
+        })
+
+    return jsonify(result)
+
+
+@compta_bp.route('/api/creances-douteuses/<int:facture_id>/provisionner', methods=['POST'])
+def api_provisionner_creance(facture_id):
+    structure_id = session.get('structure_id')
+    user_name = session.get('user_name', 'System')
+    data = request.json or {}
+    taux = float(data.get('taux', 50))
+
+    facture = Facture.query.filter_by(id=facture_id, structure_id=structure_id).first()
+    if not facture:
+        return jsonify({'error': 'Facture non trouvée'}), 404
+
+    existante = ProvisionCreance.query.filter_by(facture_id=facture_id, statut='active').first()
+    if existante:
+        return jsonify({'error': 'Cette créance est déjà provisionnée'}), 400
+
+    montant_creance = float(facture.reste_a_payer or 0)
+    if montant_creance <= 0:
+        return jsonify({'error': 'Aucun reste à payer sur cette facture'}), 400
+
+    montant_provisionne = round(montant_creance * taux / 100, 2)
+
+    provision = ProvisionCreance(
+        structure_id=structure_id, facture_id=facture.id, patient_id=facture.patient_id,
+        patient_nom=facture.patient_nom, montant_creance=montant_creance,
+        taux_provision=taux, montant_provisionne=montant_provisionne,
+        statut='active', created_by=user_name,
+    )
+    db.session.add(provision)
+    db.session.flush()
+
+    from services.comptabilite_service import generer_ecriture_provision
+    ecriture = generer_ecriture_provision(structure_id, montant_provisionne, facture.patient_nom, provision.id, user_name)
+    if ecriture:
+        provision.ecriture_provision_id = ecriture.id
+    db.session.commit()
+
+    return jsonify({'success': True, 'provision_id': provision.id, 'montant_provisionne': montant_provisionne})
+
+
+@compta_bp.route('/api/provisions')
+def api_liste_provisions():
+    structure_id = session.get('structure_id')
+    provisions = ProvisionCreance.query.filter_by(structure_id=structure_id).order_by(
+        ProvisionCreance.date_creation.desc()).all()
+    return jsonify([{
+        'id': p.id, 'facture_id': p.facture_id, 'patient_nom': p.patient_nom,
+        'montant_creance': float(p.montant_creance), 'taux_provision': float(p.taux_provision),
+        'montant_provisionne': float(p.montant_provisionne), 'statut': p.statut,
+        'date_creation': p.date_creation.strftime('%Y-%m-%d') if p.date_creation else '',
+    } for p in provisions])
+
+
+@compta_bp.route('/api/provisions/<int:id>/reprendre', methods=['POST'])
+def api_reprendre_provision(id):
+    structure_id = session.get('structure_id')
+    user_name = session.get('user_name', 'System')
+    provision = ProvisionCreance.query.filter_by(id=id, structure_id=structure_id, statut='active').first()
+    if not provision:
+        return jsonify({'error': 'Provision active non trouvée'}), 404
+
+    from services.comptabilite_service import generer_ecriture_reprise_provision
+    ecriture = generer_ecriture_reprise_provision(
+        structure_id, float(provision.montant_provisionne), provision.patient_nom, provision.id, user_name)
+
+    provision.statut = 'reprise'
+    provision.date_cloture = datetime.utcnow()
+    if ecriture:
+        provision.ecriture_reprise_id = ecriture.id
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@compta_bp.route('/api/provisions/<int:id>/passer-en-perte', methods=['POST'])
+def api_provision_passer_en_perte(id):
+    structure_id = session.get('structure_id')
+    user_name = session.get('user_name', 'System')
+    provision = ProvisionCreance.query.filter_by(id=id, structure_id=structure_id, statut='active').first()
+    if not provision:
+        return jsonify({'error': 'Provision active non trouvée'}), 404
+
+    from services.comptabilite_service import generer_ecriture_perte_creance
+    ecriture = generer_ecriture_perte_creance(
+        structure_id, float(provision.montant_creance), float(provision.montant_provisionne),
+        provision.patient_nom, provision.id, user_name)
+
+    provision.statut = 'perte'
+    provision.date_cloture = datetime.utcnow()
+    if ecriture:
+        provision.ecriture_reprise_id = ecriture.id
+
+    # La facture correspondante n'a plus de créance à recouvrer
+    if provision.facture_id:
+        facture = Facture.query.get(provision.facture_id)
+        if facture:
+            facture.reste_a_payer = 0
+            facture.statut = 'annulee'
+            facture.notes = (facture.notes or '') + ' [Créance passée en perte définitive]'
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@compta_bp.route('/api/creances-douteuses/<int:facture_id>/perte-directe', methods=['POST'])
+def api_perte_directe(facture_id):
+    """Passe directement une créance en perte, sans passer par l'étape
+    provision (cas d'un abandon de créance décidé immédiatement)."""
+    structure_id = session.get('structure_id')
+    user_name = session.get('user_name', 'System')
+
+    facture = Facture.query.filter_by(id=facture_id, structure_id=structure_id).first()
+    if not facture:
+        return jsonify({'error': 'Facture non trouvée'}), 404
+
+    montant = float(facture.reste_a_payer or 0)
+    if montant <= 0:
+        return jsonify({'error': 'Aucun reste à payer sur cette facture'}), 400
+
+    provision = ProvisionCreance(
+        structure_id=structure_id, facture_id=facture.id, patient_id=facture.patient_id,
+        patient_nom=facture.patient_nom, montant_creance=montant, taux_provision=100,
+        montant_provisionne=0, statut='active', created_by=user_name,
+        commentaire='Perte directe sans provision préalable',
+    )
+    db.session.add(provision)
+    db.session.flush()
+
+    from services.comptabilite_service import generer_ecriture_perte_creance
+    ecriture = generer_ecriture_perte_creance(structure_id, montant, 0, facture.patient_nom, provision.id, user_name)
+
+    provision.statut = 'perte'
+    provision.date_cloture = datetime.utcnow()
+    if ecriture:
+        provision.ecriture_reprise_id = ecriture.id
+
+    facture.reste_a_payer = 0
+    facture.statut = 'annulee'
+    facture.notes = (facture.notes or '') + ' [Créance passée en perte définitive]'
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+# ============================================================
+# IMMOBILISATIONS & AMORTISSEMENTS
+# ============================================================
+
+@compta_bp.route('/api/immobilisations')
+def api_liste_immobilisations():
+    structure_id = session.get('structure_id')
+    immos = Immobilisation.query.filter_by(structure_id=structure_id).order_by(
+        Immobilisation.date_acquisition.desc()).all()
+    return jsonify([{
+        'id': i.id, 'designation': i.designation, 'categorie': i.categorie or '',
+        'compte_immo_numero': i.compte_immo_numero, 'compte_amort_numero': i.compte_amort_numero,
+        'date_acquisition': i.date_acquisition.strftime('%Y-%m-%d') if i.date_acquisition else '',
+        'valeur_acquisition': float(i.valeur_acquisition or 0), 'valeur_residuelle': float(i.valeur_residuelle or 0),
+        'duree_annees': i.duree_annees, 'statut': i.statut,
+        'cumul_amorti': float(i.cumul_amorti or 0), 'vnc': i.valeur_nette_comptable(),
+        'dotation_annuelle_theorique': round(i.dotation_annuelle_theorique(), 2),
+    } for i in immos])
+
+
+@compta_bp.route('/api/immobilisations', methods=['POST'])
+def api_creer_immobilisation():
+    structure_id = session.get('structure_id')
+    user_name = session.get('user_name', 'System')
+    data = request.json or {}
+
+    date_acq = parse_date(data.get('date_acquisition'))
+    if not date_acq:
+        return jsonify({'error': 'Date d\'acquisition invalide'}), 400
+
+    immo = Immobilisation(
+        structure_id=structure_id,
+        designation=data.get('designation'),
+        categorie=data.get('categorie', ''),
+        compte_immo_numero=data.get('compte_immo_numero', '2183'),
+        compte_amort_numero=data.get('compte_amort_numero', '2818'),
+        date_acquisition=date_acq,
+        valeur_acquisition=data.get('valeur_acquisition', 0),
+        valeur_residuelle=data.get('valeur_residuelle', 0),
+        duree_annees=data.get('duree_annees', 5),
+        mode_paiement=data.get('mode_paiement', 'especes'),
+        created_by=user_name,
+    )
+    db.session.add(immo)
+    db.session.flush()
+
+    if data.get('generer_ecriture', True):
+        from services.comptabilite_service import generer_ecriture_acquisition_immobilisation
+        ecriture = generer_ecriture_acquisition_immobilisation(immo, user_name)
+        if ecriture:
+            immo.ecriture_acquisition_id = ecriture.id
+
+    db.session.commit()
+    return jsonify({'success': True, 'id': immo.id})
+
+
+@compta_bp.route('/api/immobilisations/dotations/generer', methods=['POST'])
+def api_generer_dotations():
+    """Génère (une seule fois par immobilisation et par année) la dotation
+    aux amortissements de l'année demandée, au prorata du nombre de mois
+    de détention si l'acquisition a eu lieu en cours d'année."""
+    structure_id = session.get('structure_id')
+    user_name = session.get('user_name', 'System')
+    annee = (request.json or {}).get('annee', datetime.now().year)
+
+    immos = Immobilisation.query.filter_by(structure_id=structure_id, statut='en_service').all()
+
+    from services.comptabilite_service import generer_ecriture_dotation_amortissement
+
+    nb_generees = 0
+    erreurs = []
+    for immo in immos:
+        if immo.date_acquisition.year > annee:
+            continue
+        deja = DotationAmortissement.query.filter_by(immobilisation_id=immo.id, annee=annee).first()
+        if deja:
+            continue
+
+        dotation_theorique_annuelle = immo.dotation_annuelle_theorique()
+        if dotation_theorique_annuelle <= 0:
+            continue
+
+        if immo.date_acquisition.year == annee:
+            mois_detention = 12 - immo.date_acquisition.month + 1
+        else:
+            mois_detention = 12
+        montant = round(dotation_theorique_annuelle * mois_detention / 12, 2)
+
+        # Ne pas amortir au-delà de la base amortissable (dernière année / arrondis)
+        restant_amortissable = immo.base_amortissable() - float(immo.cumul_amorti or 0)
+        montant = min(montant, max(restant_amortissable, 0))
+        if montant <= 0:
+            continue
+
+        ecriture = generer_ecriture_dotation_amortissement(immo, montant, annee, user_name)
+        dotation = DotationAmortissement(
+            structure_id=structure_id, immobilisation_id=immo.id, annee=annee,
+            montant=montant, ecriture_id=ecriture.id if ecriture else None, created_by=user_name,
+        )
+        db.session.add(dotation)
+        immo.cumul_amorti = float(immo.cumul_amorti or 0) + montant
+        nb_generees += 1
+        if not ecriture:
+            erreurs.append(immo.designation)
+
+    db.session.commit()
+    return jsonify({'success': True, 'nb_generees': nb_generees, 'erreurs': erreurs})
+
+
+# ============================================================
+# TAFIRE (flux de trésorerie simplifié)
+# ============================================================
+
+@compta_bp.route('/api/rapports/tafire')
+def api_tafire():
+    structure_id = session.get('structure_id')
+    annee = request.args.get('annee', datetime.now().year, type=int)
+    from services.comptabilite_service import get_tafire
+    return jsonify(get_tafire(structure_id, annee))
