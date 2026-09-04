@@ -4,6 +4,7 @@ from datetime import datetime, date, timedelta
 import json
 import re
 from functools import lru_cache
+from sqlalchemy import func
 
 from models import (
     db, CompteComptable, EcritureComptable, LigneEcriture,
@@ -2073,9 +2074,15 @@ def api_provisionner_creance(facture_id):
 
     from services.comptabilite_service import generer_ecriture_provision
     ecriture = generer_ecriture_provision(structure_id, montant_provisionne, facture.patient_nom, provision.id, user_name)
+    # ⭐ FIX : generer_ecriture_provision() committe déjà en interne, ce qui
+    # expire `provision` (expire_on_commit) — lui assigner un attribut
+    # ensuite peut déclencher un rafraîchissement en échec (ObjectDeletedError,
+    # observé en production sur un cas similaire). UPDATE direct par id à
+    # la place, qui ne nécessite pas de recharger l'instance.
     if ecriture:
-        provision.ecriture_provision_id = ecriture.id
-    db.session.commit()
+        db.session.query(ProvisionCreance).filter(ProvisionCreance.id == provision.id).update(
+            {'ecriture_provision_id': ecriture.id}, synchronize_session=False)
+        db.session.commit()
 
     return jsonify({'success': True, 'provision_id': provision.id, 'montant_provisionne': montant_provisionne})
 
@@ -2101,14 +2108,18 @@ def api_reprendre_provision(id):
     if not provision:
         return jsonify({'error': 'Provision active non trouvée'}), 404
 
+    provision_id = provision.id
     from services.comptabilite_service import generer_ecriture_reprise_provision
     ecriture = generer_ecriture_reprise_provision(
-        structure_id, float(provision.montant_provisionne), provision.patient_nom, provision.id, user_name)
+        structure_id, float(provision.montant_provisionne), provision.patient_nom, provision_id, user_name)
 
-    provision.statut = 'reprise'
-    provision.date_cloture = datetime.utcnow()
+    # ⭐ FIX : voir commentaire dans api_provisionner_creance — UPDATE direct
+    # plutôt que de muter l'instance chargée avant le commit interne.
+    maj = {'statut': 'reprise', 'date_cloture': datetime.utcnow()}
     if ecriture:
-        provision.ecriture_reprise_id = ecriture.id
+        maj['ecriture_reprise_id'] = ecriture.id
+    db.session.query(ProvisionCreance).filter(ProvisionCreance.id == provision_id).update(
+        maj, synchronize_session=False)
     db.session.commit()
     return jsonify({'success': True})
 
@@ -2121,23 +2132,32 @@ def api_provision_passer_en_perte(id):
     if not provision:
         return jsonify({'error': 'Provision active non trouvée'}), 404
 
+    provision_id, facture_id_lie = provision.id, provision.facture_id
     from services.comptabilite_service import generer_ecriture_perte_creance
     ecriture = generer_ecriture_perte_creance(
         structure_id, float(provision.montant_creance), float(provision.montant_provisionne),
-        provision.patient_nom, provision.id, user_name)
+        provision.patient_nom, provision_id, user_name)
 
-    provision.statut = 'perte'
-    provision.date_cloture = datetime.utcnow()
+    # ⭐ FIX : voir commentaire dans api_provisionner_creance — UPDATE direct
+    # (par id, sans recharger les instances) plutôt que de muter provision/
+    # facture après le commit interne de generer_ecriture_perte_creance().
+    maj = {'statut': 'perte', 'date_cloture': datetime.utcnow()}
     if ecriture:
-        provision.ecriture_reprise_id = ecriture.id
+        maj['ecriture_reprise_id'] = ecriture.id
+    db.session.query(ProvisionCreance).filter(ProvisionCreance.id == provision_id).update(
+        maj, synchronize_session=False)
 
-    # La facture correspondante n'a plus de créance à recouvrer
-    if provision.facture_id:
-        facture = Facture.query.get(provision.facture_id)
-        if facture:
-            facture.reste_a_payer = 0
-            facture.statut = 'annulee'
-            facture.notes = (facture.notes or '') + ' [Créance passée en perte définitive]'
+    if facture_id_lie:
+        # ⭐ Concaténation faite côté SQL (func.coalesce) pour ne jamais avoir
+        # à lire `facture.notes` sur une instance potentiellement expirée.
+        db.session.query(Facture).filter(Facture.id == facture_id_lie).update(
+            {
+                'reste_a_payer': 0,
+                'statut': 'annulee',
+                'notes': func.coalesce(Facture.notes, '') + ' [Créance passée en perte définitive]',
+            },
+            synchronize_session=False,
+        )
 
     db.session.commit()
     return jsonify({'success': True})
@@ -2167,17 +2187,25 @@ def api_perte_directe(facture_id):
     db.session.add(provision)
     db.session.flush()
 
+    provision_id, facture_id_lie = provision.id, facture.id
     from services.comptabilite_service import generer_ecriture_perte_creance
-    ecriture = generer_ecriture_perte_creance(structure_id, montant, 0, facture.patient_nom, provision.id, user_name)
+    ecriture = generer_ecriture_perte_creance(structure_id, montant, 0, facture.patient_nom, provision_id, user_name)
 
-    provision.statut = 'perte'
-    provision.date_cloture = datetime.utcnow()
+    # ⭐ FIX : voir commentaire dans api_provisionner_creance.
+    maj = {'statut': 'perte', 'date_cloture': datetime.utcnow()}
     if ecriture:
-        provision.ecriture_reprise_id = ecriture.id
+        maj['ecriture_reprise_id'] = ecriture.id
+    db.session.query(ProvisionCreance).filter(ProvisionCreance.id == provision_id).update(
+        maj, synchronize_session=False)
 
-    facture.reste_a_payer = 0
-    facture.statut = 'annulee'
-    facture.notes = (facture.notes or '') + ' [Créance passée en perte définitive]'
+    db.session.query(Facture).filter(Facture.id == facture_id_lie).update(
+        {
+            'reste_a_payer': 0,
+            'statut': 'annulee',
+            'notes': func.coalesce(Facture.notes, '') + ' [Créance passée en perte définitive]',
+        },
+        synchronize_session=False,
+    )
 
     db.session.commit()
     return jsonify({'success': True})
@@ -2229,14 +2257,18 @@ def api_creer_immobilisation():
     db.session.add(immo)
     db.session.flush()
 
+    immo_id = immo.id
     if data.get('generer_ecriture', True):
         from services.comptabilite_service import generer_ecriture_acquisition_immobilisation
         ecriture = generer_ecriture_acquisition_immobilisation(immo, user_name)
+        # ⭐ FIX : voir commentaire dans api_provisionner_creance — UPDATE
+        # direct plutôt que de muter `immo` après le commit interne.
         if ecriture:
-            immo.ecriture_acquisition_id = ecriture.id
+            db.session.query(Immobilisation).filter(Immobilisation.id == immo_id).update(
+                {'ecriture_acquisition_id': ecriture.id}, synchronize_session=False)
 
     db.session.commit()
-    return jsonify({'success': True, 'id': immo.id})
+    return jsonify({'success': True, 'id': immo_id})
 
 
 @compta_bp.route('/api/immobilisations/dotations/generer', methods=['POST'])
@@ -2250,45 +2282,63 @@ def api_generer_dotations():
 
     immos = Immobilisation.query.filter_by(structure_id=structure_id, statut='en_service').all()
 
+    # ⭐ FIX : chaque generer_ecriture_dotation_amortissement() committe en
+    # interne, ce qui expire TOUS les objets du session (dont les autres
+    # `immo` déjà chargés dans cette liste, pas encore traités par la
+    # boucle). Relire leurs attributs plus tard déclenche un rafraîchissement
+    # qui peut échouer (ObjectDeletedError, observé en production sur un cas
+    # similaire pour les ventes). On extrait donc tout ce dont on a besoin en
+    # valeurs Python simples AVANT la boucle, et on met à jour cumul_amorti
+    # par UPDATE direct (par id) plutôt qu'en mutant l'instance.
+    donnees_immos = [{
+        'id': i.id, 'designation': i.designation,
+        'date_acquisition': i.date_acquisition,
+        'dotation_annuelle_theorique': i.dotation_annuelle_theorique(),
+        'base_amortissable': i.base_amortissable(),
+        'cumul_amorti': float(i.cumul_amorti or 0),
+    } for i in immos]
+
     from services.comptabilite_service import generer_ecriture_dotation_amortissement
 
     nb_generees = 0
     erreurs = []
-    for immo in immos:
-        if immo.date_acquisition.year > annee:
+    for d in donnees_immos:
+        if d['date_acquisition'].year > annee:
             continue
-        deja = DotationAmortissement.query.filter_by(immobilisation_id=immo.id, annee=annee).first()
+        deja = DotationAmortissement.query.filter_by(immobilisation_id=d['id'], annee=annee).first()
         if deja:
             continue
 
-        dotation_theorique_annuelle = immo.dotation_annuelle_theorique()
-        if dotation_theorique_annuelle <= 0:
+        if d['dotation_annuelle_theorique'] <= 0:
             continue
 
-        if immo.date_acquisition.year == annee:
-            mois_detention = 12 - immo.date_acquisition.month + 1
+        if d['date_acquisition'].year == annee:
+            mois_detention = 12 - d['date_acquisition'].month + 1
         else:
             mois_detention = 12
-        montant = round(dotation_theorique_annuelle * mois_detention / 12, 2)
+        montant = round(d['dotation_annuelle_theorique'] * mois_detention / 12, 2)
 
         # Ne pas amortir au-delà de la base amortissable (dernière année / arrondis)
-        restant_amortissable = immo.base_amortissable() - float(immo.cumul_amorti or 0)
+        restant_amortissable = d['base_amortissable'] - d['cumul_amorti']
         montant = min(montant, max(restant_amortissable, 0))
         if montant <= 0:
             continue
 
-        ecriture = generer_ecriture_dotation_amortissement(immo, montant, annee, user_name)
-        dotation = DotationAmortissement(
-            structure_id=structure_id, immobilisation_id=immo.id, annee=annee,
+        immo_ref = Immobilisation.query.get(d['id'])
+        ecriture = generer_ecriture_dotation_amortissement(immo_ref, montant, annee, user_name)
+
+        db.session.add(DotationAmortissement(
+            structure_id=structure_id, immobilisation_id=d['id'], annee=annee,
             montant=montant, ecriture_id=ecriture.id if ecriture else None, created_by=user_name,
-        )
-        db.session.add(dotation)
-        immo.cumul_amorti = float(immo.cumul_amorti or 0) + montant
+        ))
+        db.session.query(Immobilisation).filter(Immobilisation.id == d['id']).update(
+            {'cumul_amorti': d['cumul_amorti'] + montant}, synchronize_session=False)
+        db.session.commit()
+
         nb_generees += 1
         if not ecriture:
-            erreurs.append(immo.designation)
+            erreurs.append(d['designation'])
 
-    db.session.commit()
     return jsonify({'success': True, 'nb_generees': nb_generees, 'erreurs': erreurs})
 
 

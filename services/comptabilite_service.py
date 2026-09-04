@@ -352,8 +352,17 @@ def generer_ecriture_vente(vente, user_nom='SYSTEME'):
         )
 
         if ecriture:
-            vente.ecriture_generee = True
-            vente.ecriture_id = ecriture.id
+            # ⭐ FIX : `creer_ecriture()` vient de committer (expire_on_commit
+            # expire `vente` avec les autres objets du session). Assigner un
+            # attribut sur une instance expirée déclenche un SELECT de
+            # rafraîchissement qui peut lever `ObjectDeletedError` selon
+            # l'état de la transaction (observé en production sur une vraie
+            # vente). Un UPDATE direct par id évite complètement de recharger
+            # l'instance — plus robuste.
+            db.session.query(Vente).filter(Vente.id == vente.id).update(
+                {'ecriture_generee': True, 'ecriture_id': ecriture.id},
+                synchronize_session=False,
+            )
             db.session.commit()
 
         return ecriture
