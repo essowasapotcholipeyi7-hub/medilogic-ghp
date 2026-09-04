@@ -1245,19 +1245,51 @@ def get_bilan(structure_id, date_fin):
 # RAPPROCHEMENT BANCAIRE
 # ============================================================
 
+def _compte_banque_par_defaut(structure_id):
+    """Compte de trésorerie utilisé quand un relevé n'a pas de compte_id
+    explicite (anciens relevés créés avant le support multi-comptes)."""
+    return CompteComptable.query.filter_by(structure_id=structure_id, numero='521').first()
+
+
+@compta_bp.route('/api/rapprochement/comptes')
+def api_rapprochement_comptes():
+    """⭐ NOUVEAU : liste des comptes de trésorerie (classe 5 — banques et
+    caisses) disponibles pour le rapprochement, pour gérer plusieurs comptes
+    bancaires séparément."""
+    structure_id = session.get('structure_id')
+    comptes = CompteComptable.query.filter(
+        CompteComptable.structure_id == structure_id,
+        CompteComptable.classe == '5',
+        CompteComptable.actif == True,
+    ).order_by(CompteComptable.numero).all()
+
+    return jsonify([{
+        'id': c.id, 'numero': c.numero, 'nom': c.nom,
+        'solde_comptable': float(c.get_solde() or 0),
+    } for c in comptes])
+
+
 @compta_bp.route('/api/rapprochement/releves', methods=['GET'])
 def api_get_releves():
     structure_id = session.get('structure_id')
-    
-    releves = ReleveBancaire.query.filter_by(structure_id=structure_id).order_by(
-        ReleveBancaire.date_releve.desc()
-    ).all()
-    
+
+    compte_id_filtre = request.args.get('compte_id', type=int)
+
+    query = ReleveBancaire.query.filter_by(structure_id=structure_id)
+    if compte_id_filtre:
+        query = query.filter_by(compte_id=compte_id_filtre)
+
+    releves = query.order_by(ReleveBancaire.date_releve.desc()).all()
+
     result = []
     for r in releves:
+        compte = r.compte_id and CompteComptable.query.get(r.compte_id)
         result.append({
             'id': r.id,
             'date_releve': r.date_releve.strftime('%Y-%m-%d') if r.date_releve else '',
+            'compte_id': r.compte_id,
+            'compte_numero': compte.numero if compte else '521',
+            'compte_nom': compte.nom if compte else 'Banque (compte par défaut)',
             'solde_initial': float(r.solde_initial),
             'solde_final': float(r.solde_final),
             'total_credits': float(r.total_credits) if r.total_credits else 0,
@@ -1268,7 +1300,7 @@ def api_get_releves():
             'nb_lignes': len(r.lignes),
             'nb_rapproche': sum(1 for l in r.lignes if l.rapproche)
         })
-    
+
     return jsonify(result)
 
 
@@ -1282,9 +1314,19 @@ def api_creer_releve():
         date_releve = parse_date(data.get('date_releve'))
         if not date_releve:
             return jsonify({'error': 'Format de date invalide'}), 400
-        
+
+        compte_id = data.get('compte_id')
+        if compte_id:
+            compte = CompteComptable.query.filter_by(id=compte_id, structure_id=structure_id).first()
+            if not compte:
+                return jsonify({'error': 'Compte de trésorerie invalide'}), 400
+        else:
+            compte = _compte_banque_par_defaut(structure_id)
+            compte_id = compte.id if compte else None
+
         releve = ReleveBancaire(
             structure_id=structure_id,
+            compte_id=compte_id,
             date_releve=date_releve,
             solde_initial=data.get('solde_initial', 0),
             created_by=user_name,
@@ -1361,22 +1403,32 @@ def api_get_lignes_releve(releve_id):
 
 @compta_bp.route('/api/rapprochement/releves/<int:releve_id>/rapprocher', methods=['POST'])
 def api_rapprocher_releve(releve_id):
+    """Rapprochement automatique, en 2 passes :
+    1) date exacte + montant exact (le plus fiable)
+    2) montant exact mais date à ± TOLERANCE_JOURS (la banque poste souvent
+       avec un décalage de quelques jours par rapport à la date de l'écriture)
+    Tout ce qui n'est pas apparié automatiquement reste disponible pour une
+    association manuelle (voir /lignes/<id>/associer)."""
+    TOLERANCE_JOURS = 3
     try:
         structure_id = session.get('structure_id')
-        
+
         releve = ReleveBancaire.query.filter_by(id=releve_id, structure_id=structure_id).first()
-        
+
         if not releve:
             return jsonify({'error': 'Releve non trouve'}), 404
-        
-        compte_bancaire = CompteComptable.query.filter_by(
-            structure_id=structure_id,
-            numero='212'
-        ).first()
-        
+
+        # ⭐ FIX : le compte "212" (ancienne numérotation) n'existe plus
+        # depuis la migration SYSCOHADA — on utilise le compte du relevé
+        # (multi-comptes) ou "521 Banque" par défaut pour les anciens relevés.
+        if releve.compte_id:
+            compte_bancaire = CompteComptable.query.get(releve.compte_id)
+        else:
+            compte_bancaire = _compte_banque_par_defaut(structure_id)
+
         if not compte_bancaire:
-            return jsonify({'error': 'Compte bancaire (212) non trouve'}), 400
-        
+            return jsonify({'error': 'Compte de trésorerie introuvable pour ce relevé'}), 400
+
         ecritures = db.session.query(EcritureComptable, LigneEcriture).join(
             LigneEcriture, EcritureComptable.id == LigneEcriture.ecriture_id
         ).filter(
@@ -1384,55 +1436,327 @@ def api_rapprocher_releve(releve_id):
             EcritureComptable.statut == 'valide',
             LigneEcriture.compte_id == compte_bancaire.id
         ).order_by(EcritureComptable.date_ecriture).all()
-        
-        ecritures_dict = {}
+
+        # Écritures déjà rapprochées (sur ce compte, tous relevés confondus) à exclure
+        deja_utilisees = {
+            l.ecriture_id for l in LigneReleve.query.join(ReleveBancaire).filter(
+                ReleveBancaire.compte_id == compte_bancaire.id,
+                LigneReleve.rapproche == True,
+                LigneReleve.ecriture_id != None,
+            ).all()
+        }
+
+        candidats = []
         for ecriture, ligne in ecritures:
+            if ecriture.id in deja_utilisees:
+                continue
             montant = float(ligne.debit) if ligne.debit > 0 else float(ligne.credit)
-            date_str = ecriture.date_ecriture.strftime('%Y-%m-%d')
-            key = f"{date_str}_{montant}"
-            if key not in ecritures_dict:
-                ecritures_dict[key] = []
-            ecritures_dict[key].append({
-                'ecriture': ecriture,
-                'ligne': ligne,
-                'montant': montant
-            })
-        
+            candidats.append({'ecriture_id': ecriture.id, 'date': ecriture.date_ecriture, 'montant': montant})
+
         nb_rapproche = 0
-        
+        nb_pass1 = 0
+
+        # --- Passe 1 : date exacte + montant exact ---
         for ligne in releve.lignes:
             if ligne.rapproche:
                 continue
-            
             montant = float(ligne.debit) if ligne.debit > 0 else float(ligne.credit)
-            date_str = ligne.date_operation.strftime('%Y-%m-%d')
-            key = f"{date_str}_{montant}"
-            
-            if key in ecritures_dict and ecritures_dict[key]:
-                match = ecritures_dict[key].pop(0)
+            for c in candidats:
+                if c['ecriture_id'] in deja_utilisees:
+                    continue
+                if c['date'] == ligne.date_operation and abs(c['montant'] - montant) < 0.5:
+                    ligne.rapproche = True
+                    ligne.ecriture_id = c['ecriture_id']
+                    deja_utilisees.add(c['ecriture_id'])
+                    nb_rapproche += 1
+                    nb_pass1 += 1
+                    break
+
+        # --- Passe 2 : montant exact, date à ± TOLERANCE_JOURS ---
+        for ligne in releve.lignes:
+            if ligne.rapproche:
+                continue
+            montant = float(ligne.debit) if ligne.debit > 0 else float(ligne.credit)
+            meilleur = None
+            for c in candidats:
+                if c['ecriture_id'] in deja_utilisees:
+                    continue
+                if abs(c['montant'] - montant) >= 0.5:
+                    continue
+                ecart_jours = abs((c['date'] - ligne.date_operation).days)
+                if ecart_jours <= TOLERANCE_JOURS and (meilleur is None or ecart_jours < meilleur[1]):
+                    meilleur = (c, ecart_jours)
+            if meilleur:
+                c = meilleur[0]
                 ligne.rapproche = True
-                ligne.ecriture_id = match['ecriture'].id
+                ligne.ecriture_id = c['ecriture_id']
+                deja_utilisees.add(c['ecriture_id'])
                 nb_rapproche += 1
-        
+
         total_lignes = len(releve.lignes)
         total_rapproche = sum(1 for l in releve.lignes if l.rapproche)
-        
+
         if total_rapproche == total_lignes and total_lignes > 0:
             releve.statut = 'en_attente'
-        
+
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'nb_rapproche': nb_rapproche,
+            'nb_rapproche_exact': nb_pass1,
+            'nb_rapproche_tolerance': nb_rapproche - nb_pass1,
             'total_lignes': total_lignes,
             'total_rapproche': total_rapproche,
             'statut': releve.statut
         })
-        
+
     except Exception as e:
         db.session.rollback()
         print(f"❌ Erreur: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@compta_bp.route('/api/rapprochement/releves/<int:releve_id>/lignes/<int:ligne_id>/candidats')
+def api_candidats_association(releve_id, ligne_id):
+    """⭐ NOUVEAU : liste des écritures candidates (même compte, montant
+    identique, non déjà rapprochées) pour associer manuellement une ligne de
+    relevé qui n'a pas été appariée automatiquement."""
+    structure_id = session.get('structure_id')
+    releve = ReleveBancaire.query.filter_by(id=releve_id, structure_id=structure_id).first()
+    if not releve:
+        return jsonify({'error': 'Releve non trouve'}), 404
+    ligne = LigneReleve.query.filter_by(id=ligne_id, releve_id=releve_id).first()
+    if not ligne:
+        return jsonify({'error': 'Ligne non trouvee'}), 404
+
+    compte = CompteComptable.query.get(releve.compte_id) if releve.compte_id else _compte_banque_par_defaut(structure_id)
+    if not compte:
+        return jsonify([])
+
+    montant = float(ligne.debit) if ligne.debit > 0 else float(ligne.credit)
+    deja_utilisees = {
+        l.ecriture_id for l in LigneReleve.query.filter(
+            LigneReleve.rapproche == True, LigneReleve.ecriture_id != None
+        ).all()
+    }
+
+    ecritures = db.session.query(EcritureComptable, LigneEcriture).join(
+        LigneEcriture, EcritureComptable.id == LigneEcriture.ecriture_id
+    ).filter(
+        EcritureComptable.structure_id == structure_id,
+        EcritureComptable.statut == 'valide',
+        LigneEcriture.compte_id == compte.id,
+    ).order_by(EcritureComptable.date_ecriture.desc()).all()
+
+    result = []
+    for ecriture, l in ecritures:
+        if ecriture.id in deja_utilisees and ecriture.id != ligne.ecriture_id:
+            continue
+        m = float(l.debit) if l.debit > 0 else float(l.credit)
+        result.append({
+            'ecriture_id': ecriture.id,
+            'date': ecriture.date_ecriture.strftime('%Y-%m-%d'),
+            'libelle': ecriture.libelle,
+            'piece': ecriture.piece_justificative or '',
+            'montant': m,
+            'correspond_exactement': abs(m - montant) < 0.5,
+        })
+
+    result.sort(key=lambda r: (not r['correspond_exactement'], r['date']), reverse=False)
+    return jsonify(result)
+
+
+@compta_bp.route('/api/rapprochement/releves/<int:releve_id>/lignes/<int:ligne_id>/associer', methods=['POST'])
+def api_associer_ligne(releve_id, ligne_id):
+    """Association manuelle (ou modification d'une association) d'une
+    ligne de relevé à une écriture comptable précise."""
+    try:
+        structure_id = session.get('structure_id')
+        releve = ReleveBancaire.query.filter_by(id=releve_id, structure_id=structure_id).first()
+        if not releve:
+            return jsonify({'error': 'Releve non trouve'}), 404
+        ligne = LigneReleve.query.filter_by(id=ligne_id, releve_id=releve_id).first()
+        if not ligne:
+            return jsonify({'error': 'Ligne non trouvee'}), 404
+
+        ecriture_id = request.json.get('ecriture_id')
+        ecriture = EcritureComptable.query.filter_by(id=ecriture_id, structure_id=structure_id).first()
+        if not ecriture:
+            return jsonify({'error': 'Ecriture non trouvee'}), 404
+
+        ligne.rapproche = True
+        ligne.ecriture_id = ecriture.id
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@compta_bp.route('/api/rapprochement/releves/<int:releve_id>/lignes/<int:ligne_id>/dissocier', methods=['POST'])
+def api_dissocier_ligne(releve_id, ligne_id):
+    """Annule un rapprochement (manuel ou automatique) sur une ligne."""
+    try:
+        structure_id = session.get('structure_id')
+        releve = ReleveBancaire.query.filter_by(id=releve_id, structure_id=structure_id).first()
+        if not releve:
+            return jsonify({'error': 'Releve non trouve'}), 404
+        ligne = LigneReleve.query.filter_by(id=ligne_id, releve_id=releve_id).first()
+        if not ligne:
+            return jsonify({'error': 'Ligne non trouvee'}), 404
+
+        ligne.rapproche = False
+        ligne.ecriture_id = None
+        if releve.statut == 'en_attente':
+            releve.statut = 'brouillon'
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@compta_bp.route('/api/rapprochement/releves/import', methods=['POST'])
+def api_importer_releve():
+    """⭐ NOUVEAU : import d'un relevé bancaire depuis un fichier CSV ou
+    Excel (.xlsx) au lieu de saisir chaque ligne à la main.
+
+    Colonnes attendues (insensible à la casse, ordre libre) : une colonne
+    date, une colonne libellé, et soit deux colonnes débit/crédit séparées,
+    soit une seule colonne "montant" (négatif = débit, positif = crédit).
+    """
+    try:
+        structure_id = session.get('structure_id')
+        user_name = session.get('user_name', 'System')
+
+        fichier = request.files.get('fichier')
+        if not fichier or not fichier.filename:
+            return jsonify({'error': 'Aucun fichier fourni'}), 400
+
+        date_releve = parse_date(request.form.get('date_releve')) or date.today()
+        solde_initial = float(request.form.get('solde_initial', 0) or 0)
+        compte_id = request.form.get('compte_id', type=int)
+        if compte_id:
+            compte = CompteComptable.query.filter_by(id=compte_id, structure_id=structure_id).first()
+            if not compte:
+                return jsonify({'error': 'Compte de trésorerie invalide'}), 400
+        else:
+            compte = _compte_banque_par_defaut(structure_id)
+            compte_id = compte.id if compte else None
+
+        nom_fichier = fichier.filename.lower()
+        lignes_brutes = []  # liste de dicts {date, libelle, reference, debit, credit}
+
+        def _trouver_colonne(en_tetes, *candidats):
+            for i, h in enumerate(en_tetes):
+                h_norm = (h or '').strip().lower()
+                if any(c in h_norm for c in candidats):
+                    return i
+            return None
+
+        def _to_float_safe(v):
+            if v is None or v == '':
+                return 0.0
+            try:
+                return float(str(v).replace(' ', '').replace(',', '.'))
+            except ValueError:
+                return 0.0
+
+        if nom_fichier.endswith('.xlsx') or nom_fichier.endswith('.xls'):
+            import openpyxl
+            wb = openpyxl.load_workbook(fichier, data_only=True)
+            ws = wb.active
+            rows = list(ws.iter_rows(values_only=True))
+            if not rows:
+                return jsonify({'error': 'Fichier vide'}), 400
+            entetes = [str(c) if c is not None else '' for c in rows[0]]
+            data_rows = rows[1:]
+        else:
+            import csv as csv_module
+            import io
+            contenu = fichier.read().decode('utf-8-sig', errors='replace')
+            delimiter = ';' if contenu.count(';') > contenu.count(',') else ','
+            reader = csv_module.reader(io.StringIO(contenu), delimiter=delimiter)
+            rows = list(reader)
+            if not rows:
+                return jsonify({'error': 'Fichier vide'}), 400
+            entetes = rows[0]
+            data_rows = rows[1:]
+
+        idx_date = _trouver_colonne(entetes, 'date')
+        idx_libelle = _trouver_colonne(entetes, 'libell', 'description', 'intitul', 'motif')
+        idx_ref = _trouver_colonne(entetes, 'ref', 'piece', 'pièce')
+        idx_debit = _trouver_colonne(entetes, 'debit', 'débit')
+        idx_credit = _trouver_colonne(entetes, 'credit', 'crédit')
+        idx_montant = _trouver_colonne(entetes, 'montant', 'amount')
+
+        if idx_date is None:
+            return jsonify({'error': "Colonne 'date' introuvable dans le fichier. En-têtes lus : " + ', '.join(entetes)}), 400
+
+        for row in data_rows:
+            if not row or all(c in (None, '') for c in row):
+                continue
+            raw_date = row[idx_date] if idx_date is not None and idx_date < len(row) else None
+            if hasattr(raw_date, 'strftime'):
+                date_operation = raw_date.date() if hasattr(raw_date, 'date') else raw_date
+            else:
+                date_operation = parse_date(str(raw_date)) if raw_date else None
+            if not date_operation:
+                continue
+
+            libelle = str(row[idx_libelle]) if idx_libelle is not None and idx_libelle < len(row) and row[idx_libelle] else 'Opération'
+            reference = str(row[idx_ref]) if idx_ref is not None and idx_ref < len(row) and row[idx_ref] else ''
+
+            if idx_debit is not None and idx_credit is not None:
+                debit = _to_float_safe(row[idx_debit] if idx_debit < len(row) else 0)
+                credit = _to_float_safe(row[idx_credit] if idx_credit < len(row) else 0)
+            elif idx_montant is not None:
+                montant = _to_float_safe(row[idx_montant] if idx_montant < len(row) else 0)
+                debit = abs(montant) if montant < 0 else 0
+                credit = montant if montant > 0 else 0
+            else:
+                continue
+
+            lignes_brutes.append({
+                'date_operation': date_operation, 'libelle': libelle,
+                'reference': reference, 'debit': debit, 'credit': credit,
+            })
+
+        if not lignes_brutes:
+            return jsonify({'error': 'Aucune ligne exploitable trouvée dans le fichier'}), 400
+
+        releve = ReleveBancaire(
+            structure_id=structure_id, compte_id=compte_id, date_releve=date_releve,
+            solde_initial=solde_initial, created_by=user_name, statut='brouillon',
+        )
+        db.session.add(releve)
+        db.session.flush()
+
+        solde_courant = solde_initial
+        total_credits = 0.0
+        total_debits = 0.0
+        for l in sorted(lignes_brutes, key=lambda x: x['date_operation']):
+            solde_courant += l['credit'] - l['debit']
+            total_credits += l['credit']
+            total_debits += l['debit']
+            db.session.add(LigneReleve(
+                releve_id=releve.id, date_operation=l['date_operation'], libelle=l['libelle'],
+                reference=l['reference'], debit=l['debit'], credit=l['credit'], solde=solde_courant,
+            ))
+
+        releve.total_credits = total_credits
+        releve.total_debits = total_debits
+        releve.solde_final = solde_courant
+        db.session.commit()
+
+        return jsonify({'success': True, 'id': releve.id, 'nb_lignes': len(lignes_brutes), 'solde_final': solde_courant})
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur import relevé: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 

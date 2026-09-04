@@ -108,7 +108,7 @@
                         </button>
                     </li>
                     <li class="nav-item">
-                        <button class="nav-link" id="rapprochement-tab" data-bs-toggle="tab" data-bs-target="#rapprochement" type="button" role="tab">
+                        <button class="nav-link" id="rapprochement-tab" data-bs-toggle="tab" data-bs-target="#rapprochement" type="button" role="tab" onclick="chargerComptesRapprochement()">
                             Rapprochement bancaire
                         </button>
                     </li>
@@ -480,19 +480,30 @@
                     <!-- ONGLET RAPPROCHEMENT BANCAIRE -->
                     <!-- ========================================== -->
                     <div class="tab-pane fade" id="rapprochement" role="tabpanel">
-                        <h6><i class="fas fa-handshake"></i> Rapprochement bancaire</h6>
-                        
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6><i class="fas fa-handshake"></i> Rapprochement bancaire</h6>
+                            <button class="btn btn-outline-primary btn-sm" onclick="ouvrirImportReleve()">
+                                <i class="fas fa-file-import"></i> Importer un relevé (CSV/Excel)
+                            </button>
+                        </div>
+
                         <div class="alert alert-info mb-3">
                             <i class="fas fa-info-circle"></i>
                             <strong>Comment ça fonctionne ?</strong>
                             <ol class="mb-0">
-                                <li>Saisissez les lignes de votre relevé bancaire</li>
-                                <li>Cliquez sur "Rapprocher" pour associer automatiquement les écritures comptables</li>
-                                <li>Vérifiez les écarts éventuels</li>
+                                <li>Choisissez le compte bancaire/caisse concerné, saisissez (ou importez) les lignes du relevé</li>
+                                <li>Cliquez sur "Rapprocher" : appariement automatique par date+montant exacts, puis par montant exact à ± 3 jours</li>
+                                <li>Pour les lignes restantes, cliquez sur "Associer" pour choisir manuellement l'écriture correspondante</li>
                             </ol>
                         </div>
-                        
+
                         <div class="row mb-2">
+                            <div class="col-md-3">
+                                <label class="form-label small">Compte bancaire / caisse</label>
+                                <select class="form-control form-control-sm" id="releveCompteId" onchange="chargerHistoriqueReleves()">
+                                    <option value="">Chargement...</option>
+                                </select>
+                            </div>
                             <div class="col-md-3">
                                 <label class="form-label small">Date du relevé</label>
                                 <input type="date" class="form-control form-control-sm" id="releveDate">
@@ -571,6 +582,7 @@
                                         <thead>
                                             <tr>
                                                 <th>Date</th>
+                                                <th>Compte</th>
                                                 <th>Solde initial</th>
                                                 <th>Solde final</th>
                                                 <th>Lignes</th>
@@ -581,7 +593,7 @@
                                             </tr>
                                         </thead>
                                         <tbody id="historiqueRelevesBody">
-                                            <tr><td colspan="8" class="text-center text-muted">Aucun relevé</td></tr>
+                                            <tr><td colspan="9" class="text-center text-muted">Aucun relevé</td></tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -729,6 +741,65 @@
 <!-- ============================================================ -->
 <!-- MODALS -->
 <!-- ============================================================ -->
+
+<!-- Modal Import Relevé -->
+<div class="modal fade" id="importReleveModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-file-import"></i> Importer un relevé bancaire</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted">Fichier CSV ou Excel (.xlsx) exporté de votre banque. Colonnes attendues : une colonne <strong>date</strong>, une colonne <strong>libellé</strong>, et soit <strong>débit/crédit</strong> séparés, soit une seule colonne <strong>montant</strong>.</p>
+                <div class="mb-2">
+                    <label class="form-label small">Compte bancaire / caisse</label>
+                    <select class="form-control form-control-sm" id="importCompteId"></select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Date du relevé</label>
+                    <input type="date" class="form-control form-control-sm" id="importDateReleve">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Solde initial</label>
+                    <input type="number" class="form-control form-control-sm" id="importSoldeInitial" value="0" step="100">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Fichier</label>
+                    <input type="file" class="form-control form-control-sm" id="importFichier" accept=".csv,.xlsx,.xls">
+                </div>
+                <div id="importReleveMessage"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-primary" onclick="importerReleve()"><i class="fas fa-upload"></i> Importer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Association manuelle -->
+<div class="modal fade" id="associerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Associer une écriture comptable</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="associerLigneInfo" class="alert alert-light small"></div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th class="text-end">Montant</th><th></th></tr></thead>
+                        <tbody id="associerCandidatsBody">
+                            <tr><td colspan="5" class="text-center text-muted">Chargement...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Modal Compte -->
 <div class="modal fade" id="compteModal" tabindex="-1" aria-hidden="true">
@@ -2275,6 +2346,157 @@ function imprimerRapportPDF() {
 // RAPPROCHEMENT BANCAIRE
 // ============================================================
 
+// ============================================================
+// MULTI-COMPTES DE TRÉSORERIE (rapprochement)
+// ============================================================
+
+let comptesRapprochementCache = [];
+
+function chargerComptesRapprochement() {
+    return fetch('/comptabilite/api/rapprochement/comptes')
+        .then(r => r.json())
+        .then(comptes => {
+            comptesRapprochementCache = comptes || [];
+            const options = comptesRapprochementCache.map(c =>
+                `<option value="${c.id}">${c.numero} - ${c.nom} (solde compta: ${Math.round(c.solde_comptable).toLocaleString()} F)</option>`
+            ).join('');
+            const selectPrincipal = document.getElementById('releveCompteId');
+            const selectImport = document.getElementById('importCompteId');
+            if (selectPrincipal) selectPrincipal.innerHTML = options || '<option value="">Aucun compte de trésorerie</option>';
+            if (selectImport) selectImport.innerHTML = options || '<option value="">Aucun compte de trésorerie</option>';
+            chargerHistoriqueReleves();
+        })
+        .catch(err => console.error('Erreur chargement comptes rapprochement:', err));
+}
+
+// ============================================================
+// IMPORT D'UN RELEVÉ (CSV / Excel)
+// ============================================================
+
+function ouvrirImportReleve() {
+    if (comptesRapprochementCache.length === 0) chargerComptesRapprochement();
+    document.getElementById('importReleveMessage').innerHTML = '';
+    document.getElementById('importDateReleve').value = new Date().toISOString().split('T')[0];
+    new bootstrap.Modal(document.getElementById('importReleveModal')).show();
+}
+
+function importerReleve() {
+    const fichierInput = document.getElementById('importFichier');
+    if (!fichierInput.files.length) {
+        document.getElementById('importReleveMessage').innerHTML = '<div class="alert alert-danger py-1">Choisissez un fichier</div>';
+        return;
+    }
+    const fd = new FormData();
+    fd.append('fichier', fichierInput.files[0]);
+    fd.append('compte_id', document.getElementById('importCompteId').value);
+    fd.append('date_releve', document.getElementById('importDateReleve').value);
+    fd.append('solde_initial', document.getElementById('importSoldeInitial').value || 0);
+
+    document.getElementById('importReleveMessage').innerHTML = '<div class="text-muted small">⏳ Import en cours...</div>';
+
+    fetch('/comptabilite/api/rapprochement/releves/import', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                document.getElementById('importReleveMessage').innerHTML =
+                    `<div class="alert alert-success py-1">${result.nb_lignes} ligne(s) importée(s) !</div>`;
+                setTimeout(() => {
+                    bootstrap.Modal.getInstance(document.getElementById('importReleveModal')).hide();
+                    chargerHistoriqueReleves();
+                    releveId = result.id;
+                    chargerLignesReleve(result.id);
+                }, 800);
+            } else {
+                document.getElementById('importReleveMessage').innerHTML =
+                    `<div class="alert alert-danger py-1">❌ ${result.error || 'Erreur inconnue'}</div>`;
+            }
+        })
+        .catch(error => {
+            document.getElementById('importReleveMessage').innerHTML = `<div class="alert alert-danger py-1">❌ ${error}</div>`;
+        });
+}
+
+// ============================================================
+// ASSOCIATION MANUELLE D'UNE LIGNE NON RAPPROCHÉE
+// ============================================================
+
+let associerLigneCourante = null; // { id, index }
+
+function ouvrirAssocierModal(index) {
+    const ligne = lignesReleve[index];
+    if (!ligne || !ligne.id) {
+        alert('Enregistrez le relevé avant d\'associer manuellement une ligne.');
+        return;
+    }
+    associerLigneCourante = { id: ligne.id, index };
+
+    const montant = (ligne.debit && ligne.debit > 0) ? ligne.debit : ligne.credit;
+    document.getElementById('associerLigneInfo').innerHTML =
+        `<strong>${ligne.libelle || 'Opération'}</strong> — ${ligne.date} — ${Math.round(montant).toLocaleString()} FCFA`;
+    document.getElementById('associerCandidatsBody').innerHTML = '<tr><td colspan="5" class="text-center text-muted">Chargement...</td></tr>';
+
+    new bootstrap.Modal(document.getElementById('associerModal')).show();
+
+    fetch(`/comptabilite/api/rapprochement/releves/${releveId}/lignes/${ligne.id}/candidats`)
+        .then(r => r.json())
+        .then(candidats => {
+            const tbody = document.getElementById('associerCandidatsBody');
+            if (!candidats || candidats.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Aucune écriture candidate trouvée sur ce compte</td></tr>';
+                return;
+            }
+            tbody.innerHTML = candidats.map(c => `
+                <tr class="${c.correspond_exactement ? 'table-success' : ''}">
+                    <td>${c.date}</td>
+                    <td>${c.piece || '-'}</td>
+                    <td>${c.libelle}</td>
+                    <td class="text-end">${Math.round(c.montant).toLocaleString()} F</td>
+                    <td><button class="btn btn-sm btn-primary" onclick="choisirCandidat(${c.ecriture_id})">Choisir</button></td>
+                </tr>
+            `).join('');
+        })
+        .catch(err => {
+            document.getElementById('associerCandidatsBody').innerHTML = `<tr><td colspan="5" class="text-danger text-center">${err}</td></tr>`;
+        });
+}
+
+function choisirCandidat(ecritureId) {
+    if (!associerLigneCourante) return;
+    fetch(`/comptabilite/api/rapprochement/releves/${releveId}/lignes/${associerLigneCourante.id}/associer`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ ecriture_id: ecritureId })
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('associerModal')).hide();
+            chargerLignesReleve(releveId);
+            chargerHistoriqueReleves();
+        } else {
+            alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => alert('❌ Erreur: ' + error));
+}
+
+function dissocierLigne(index) {
+    const ligne = lignesReleve[index];
+    if (!ligne || !ligne.id) return;
+    if (!confirm('Annuler ce rapprochement ?')) return;
+    fetch(`/comptabilite/api/rapprochement/releves/${releveId}/lignes/${ligne.id}/dissocier`, { method: 'POST' })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                chargerLignesReleve(releveId);
+                chargerHistoriqueReleves();
+            } else {
+                alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+            }
+        })
+        .catch(error => alert('❌ Erreur: ' + error));
+}
+
 function ajouterLigneReleve(date = '', libelle = '', reference = '', debit = 0, credit = 0) {
     const tbody = document.getElementById('releveBody');
     if (tbody.querySelector('tr.text-muted')) tbody.innerHTML = '';
@@ -2363,7 +2585,10 @@ function rafraichirReleve() {
                 ${idEcriture ? `<span class="badge bg-info ms-1" style="font-size:10px;">Écriture #${idEcriture}</span>` : ''}
             </td>
             <td>
-                ${!estRapproche ? `<button class="btn btn-sm btn-danger" onclick="supprimerLigneReleve(${i})"><i class="fas fa-times"></i></button>` : '-'}
+                ${estRapproche
+                    ? `<button class="btn btn-sm btn-outline-secondary" title="Annuler le rapprochement" onclick="dissocierLigne(${i})"><i class="fas fa-unlink"></i></button>`
+                    : `<button class="btn btn-sm btn-outline-primary me-1" title="Associer manuellement" onclick="ouvrirAssocierModal(${i})"><i class="fas fa-link"></i></button>
+                       <button class="btn btn-sm btn-danger" onclick="supprimerLigneReleve(${i})"><i class="fas fa-times"></i></button>`}
             </td>
         `;
     });
@@ -2397,6 +2622,7 @@ function sauvegarderReleve() {
     
     const data = {
         date_releve: dateReleve,
+        compte_id: document.getElementById('releveCompteId').value || null,
         solde_initial: soldeInitial,
         lignes: lignesReleve.map(l => ({
             date_operation: l.date || dateReleve,
@@ -2477,13 +2703,18 @@ function validerReleve() {
 }
 
 function chargerHistoriqueReleves() {
-    fetch('/comptabilite/api/rapprochement/releves')
+    const compteFiltre = document.getElementById('releveCompteId')?.value || '';
+    const url = compteFiltre
+        ? `/comptabilite/api/rapprochement/releves?compte_id=${compteFiltre}`
+        : '/comptabilite/api/rapprochement/releves';
+
+    fetch(url)
         .then(r => r.json())
         .then(data => {
             const tbody = document.getElementById('historiqueRelevesBody');
             tbody.innerHTML = '';
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Aucun relevé</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Aucun relevé</td></tr>';
                 return;
             }
             const badges = { 'brouillon': 'bg-secondary', 'en_attente': 'bg-warning', 'valide': 'bg-success' };
@@ -2491,6 +2722,7 @@ function chargerHistoriqueReleves() {
                 const row = tbody.insertRow();
                 row.innerHTML = `
                     <td>${r.date_releve}</td>
+                    <td><span class="badge bg-light text-dark border">${r.compte_numero} - ${r.compte_nom}</span></td>
                     <td>${(r.solde_initial || 0).toLocaleString()} F</td>
                     <td>${(r.solde_final || 0).toLocaleString()} F</td>
                     <td>${r.nb_lignes || 0}</td>
@@ -2590,6 +2822,7 @@ function chargerLignesReleve(id) {
             
             // ⭐ BIEN RÉCUPÉRER est_rapproche ET ecriture_id
             lignesReleve = data.map(l => ({
+                id: l.id,
                 date: l.date_operation || '',
                 libelle: l.libelle || '',
                 reference: l.reference || '',

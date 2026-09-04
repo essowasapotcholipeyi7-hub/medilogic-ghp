@@ -658,9 +658,14 @@ class Cloture(db.Model):
 
 class ReleveBancaire(db.Model):
     __tablename__ = 'releves_bancaires'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     structure_id = db.Column(db.Integer, nullable=False)
+    # ⭐ Compte de trésorerie (classe 5) concerné par ce relevé — permet de
+    # gérer plusieurs comptes bancaires/caisses séparément. NULL = ancien
+    # relevé créé avant cette colonne, traité comme le compte "521 Banque"
+    # par défaut dans le code.
+    compte_id = db.Column(db.Integer, db.ForeignKey('comptes_comptables.id'), nullable=True)
     date_releve = db.Column(db.Date, nullable=False)
     solde_initial = db.Column(db.Numeric, default=0)
     solde_final = db.Column(db.Numeric, default=0)
