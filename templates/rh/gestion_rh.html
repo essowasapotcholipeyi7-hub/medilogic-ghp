@@ -2189,6 +2189,14 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // ⭐ Charger UNE SEULE FOIS
     chargerToutesLesDonnees();
+
+    // ⭐ Activer l'onglet ciblé par l'URL (ex: /rh/dashboard -> #dashboardrh)
+    if (window.location.hash) {
+        const tabButton = document.getElementById(window.location.hash.substring(1) + '-tab');
+        if (tabButton) {
+            new bootstrap.Tab(tabButton).show();
+        }
+    }
 });
 
 function chargerToutesLesDonnees() {

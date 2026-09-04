@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}Paie du mois{% endblock %}
+
+{% block content %}
+        <div class="card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="fas fa-money-check-alt"></i> Paie du mois</h5>
+                <div class="d-flex gap-2 align-items-center">
+                    <select class="form-select form-select-sm" id="paieMois" style="width:auto"></select>
+                    <select class="form-select form-select-sm" id="paieAnnee" style="width:auto"></select>
+                    <a href="{{ url_for('rh.page_parametres_paie') }}" class="btn btn-light btn-sm">
+                        <i class="fas fa-sliders-h"></i> Paramètres (taux CNSS/INAM/IRPP)
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning small mb-3">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    Les taux CNSS/INAM/IRPP appliqués sont ceux définis dans
+                    <a href="{{ url_for('rh.page_parametres_paie') }}">Paramètres de paie</a> —
+                    vérifiez-les avec votre comptable avant la première paie réelle.
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Matricule</th>
+                                <th>Employé</th>
+                                <th>Poste</th>
+                                <th class="text-end">Salaire de base</th>
+                                <th class="text-end">Brut calculé</th>
+                                <th class="text-end">Net à payer</th>
+                                <th>Statut</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="paieBody">
+                            <tr><td colspan="8" class="text-center">Chargement...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal génération de paie (primes / indemnités) -->
+<div class="modal fade" id="genererPaieModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Générer le bulletin</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="gpEmployeId">
+                <p class="mb-2"><strong id="gpEmployeNom"></strong></p>
+                <div class="mb-3">
+                    <label class="form-label">Primes (FCFA)</label>
+                    <input type="number" class="form-control" id="gpPrimes" value="0" min="0">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Indemnités (FCFA)</label>
+                    <input type="number" class="form-control" id="gpIndemnites" value="0" min="0">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-primary" onclick="confirmerGenererPaie()">
+                    <i class="fas fa-calculator"></i> Calculer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal paiement -->
+<div class="modal fade" id="payerPaieModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">Marquer payé</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="ppPaieId">
+                <p>Cette action crée une dépense et une écriture comptable <strong>automatiquement validée</strong>.</p>
+                <div class="mb-3">
+                    <label class="form-label">Mode de paiement</label>
+                    <select class="form-control" id="ppModePaiement">
+                        <option value="especes">Espèces</option>
+                        <option value="carte">Carte bancaire</option>
+                        <option value="virement">Virement</option>
+                        <option value="cheque">Chèque</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-success" onclick="confirmerPayerPaie()">
+                    <i class="fas fa-check"></i> Confirmer le paiement
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const MOIS_NOMS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+function initSelecteurs() {
+    const now = new Date();
+    const selMois = document.getElementById('paieMois');
+    MOIS_NOMS.forEach((nom, idx) => {
+        const opt = document.createElement('option');
+        opt.value = idx + 1;
+        opt.textContent = nom;
+        if (idx + 1 === now.getMonth() + 1) opt.selected = true;
+        selMois.appendChild(opt);
+    });
+    selMois.onchange = chargerPaies;
+
+    const selAnnee = document.getElementById('paieAnnee');
+    for (let a = now.getFullYear() - 1; a <= now.getFullYear() + 1; a++) {
+        const opt = document.createElement('option');
+        opt.value = a;
+        opt.textContent = a;
+        if (a === now.getFullYear()) opt.selected = true;
+        selAnnee.appendChild(opt);
+    }
+    selAnnee.onchange = chargerPaies;
+}
+
+function badgeStatut(statut) {
+    const map = {
+        'non_generee': '<span class="badge bg-secondary">Non générée</span>',
+        'brouillon': '<span class="badge bg-secondary">Brouillon</span>',
+        'valide': '<span class="badge bg-info">Calculée</span>',
+        'payee': '<span class="badge bg-success">Payée</span>',
+    };
+    return map[statut] || statut;
+}
+
+function chargerPaies() {
+    const annee = document.getElementById('paieAnnee').value;
+    const mois = document.getElementById('paieMois').value;
+    const tbody = document.getElementById('paieBody');
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center">⏳ Chargement...</td></tr>';
+
+    fetch(`/rh/api/paie?annee=${annee}&mois=${mois}`)
+        .then(r => r.json())
+        .then(data => {
+            tbody.innerHTML = '';
+            if (!data.employes || data.employes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Aucun employé actif</td></tr>';
+                return;
+            }
+            data.employes.forEach(e => {
+                const row = tbody.insertRow();
+                let actions = '';
+                if (!e.paie_id) {
+                    actions = `<button class="btn btn-sm btn-primary" onclick="ouvrirGenererPaie(${e.employe_id}, '${(e.nom+' '+e.prenom).replace(/'/g, "\\'")}')">
+                        <i class="fas fa-calculator"></i> Générer
+                    </button>`;
+                } else if (e.statut === 'payee') {
+                    actions = `<a class="btn btn-sm btn-outline-secondary" href="/rh/paie/${e.paie_id}/bulletin" target="_blank">
+                        <i class="fas fa-file-invoice"></i> Bulletin
+                    </a>`;
+                } else {
+                    actions = `
+                        <a class="btn btn-sm btn-outline-secondary" href="/rh/paie/${e.paie_id}/bulletin" target="_blank">
+                            <i class="fas fa-file-invoice"></i>
+                        </a>
+                        <button class="btn btn-sm btn-success" onclick="ouvrirPayerPaie(${e.paie_id})">
+                            <i class="fas fa-money-bill-wave"></i> Payer
+                        </button>`;
+                }
+                row.innerHTML = `
+                    <td>${e.matricule || '-'}</td>
+                    <td><strong>${e.nom} ${e.prenom}</strong></td>
+                    <td>${e.poste || '-'}</td>
+                    <td class="text-end">${(e.salaire_base || 0).toLocaleString()} F</td>
+                    <td class="text-end">${e.salaire_brut != null ? e.salaire_brut.toLocaleString() + ' F' : '-'}</td>
+                    <td class="text-end fw-bold">${e.net_a_payer != null ? e.net_a_payer.toLocaleString() + ' F' : '-'}</td>
+                    <td>${badgeStatut(e.statut)}</td>
+                    <td>${actions}</td>
+                `;
+            });
+        })
+        .catch(err => {
+            console.error(err);
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Erreur de chargement</td></tr>';
+        });
+}
+
+function ouvrirGenererPaie(employeId, nom) {
+    document.getElementById('gpEmployeId').value = employeId;
+    document.getElementById('gpEmployeNom').textContent = nom;
+    document.getElementById('gpPrimes').value = 0;
+    document.getElementById('gpIndemnites').value = 0;
+    new bootstrap.Modal(document.getElementById('genererPaieModal')).show();
+}
+
+function confirmerGenererPaie() {
+    const employeId = document.getElementById('gpEmployeId').value;
+    const annee = document.getElementById('paieAnnee').value;
+    const mois = document.getElementById('paieMois').value;
+
+    fetch('/rh/api/paie/generer', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            employe_id: parseInt(employeId), annee: parseInt(annee), mois: parseInt(mois),
+            primes: parseFloat(document.getElementById('gpPrimes').value || 0),
+            indemnites: parseFloat(document.getElementById('gpIndemnites').value || 0),
+        })
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('genererPaieModal')).hide();
+            chargerPaies();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(err => alert('Erreur: ' + err));
+}
+
+function ouvrirPayerPaie(paieId) {
+    document.getElementById('ppPaieId').value = paieId;
+    new bootstrap.Modal(document.getElementById('payerPaieModal')).show();
+}
+
+function confirmerPayerPaie() {
+    const paieId = document.getElementById('ppPaieId').value;
+    fetch(`/rh/api/paie/${paieId}/payer`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ mode_paiement: document.getElementById('ppModePaiement').value })
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('payerPaieModal')).hide();
+            chargerPaies();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(err => alert('Erreur: ' + err));
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    initSelecteurs();
+    chargerPaies();
+});
+</script>
+{% endblock %}

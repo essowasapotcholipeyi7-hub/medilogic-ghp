@@ -120,6 +120,39 @@
                     <!-- ONGLET TABLEAU DE BORD -->
                     <!-- ========================================== -->
                     <div class="tab-pane fade show active" id="dashboard" role="tabpanel">
+
+                        <!-- ⭐ LES DEUX CAISSES — bien visibles, bien distinctes ⭐ -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <div class="card border-0 shadow-sm" style="background:linear-gradient(135deg,#0d6efd,#0a58ca); cursor:pointer;"
+                                     onclick="document.getElementById('rapports-tab').click(); setTimeout(()=>{document.getElementById('rapportType').value='grand_livre'; onChangeRapportType();}, 50);">
+                                    <div class="card-body text-white">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <div class="text-uppercase small opacity-75"><i class="fas fa-wallet"></i> Caisse Trésorerie</div>
+                                                <div class="fs-6 opacity-75">Argent réellement disponible (espèces + banque)</div>
+                                                <h2 class="mt-2 mb-0" id="caisseTresorerieMontant">0 FCFA</h2>
+                                            </div>
+                                        </div>
+                                        <hr class="opacity-25">
+                                        <div id="caisseTresorerieDetail" class="small"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-0 shadow-sm" style="background:linear-gradient(135deg,#198754,#146c43); cursor:pointer;"
+                                     onclick="document.getElementById('rapports-tab').click(); setTimeout(()=>{document.getElementById('rapportType').value='journal'; document.getElementById('rapportJournalCode').value='VTE'; onChangeRapportType();}, 50);">
+                                    <div class="card-body text-white">
+                                        <div class="text-uppercase small opacity-75"><i class="fas fa-chart-line"></i> Caisse Chiffre d'affaires</div>
+                                        <div class="fs-6 opacity-75">Total des ventes de la période (encaissé ou non)</div>
+                                        <h2 class="mt-2 mb-0" id="caisseChiffreAffairesMontant">0 FCFA</h2>
+                                        <hr class="opacity-25">
+                                        <div class="small opacity-75">Clic pour voir le journal des ventes</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="row g-3 mb-4" id="dashboardStats">
                             <div class="col-md-3">
                                 <div class="card stats-card bg-info bg-opacity-10">
@@ -383,7 +416,7 @@
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label small">Type</label>
-                                <select class="form-control form-control-sm" id="rapportType" onchange="chargerJournal()">
+                                <select class="form-control form-control-sm" id="rapportType" onchange="onChangeRapportType()">
                                     <option value="journal">Journal</option>
                                     <option value="grand_livre">Grand livre</option>
                                     <option value="balance">Balance</option>
@@ -395,6 +428,21 @@
                                 <button class="btn btn-primary btn-sm me-2" onclick="imprimerRapportPDF()">
                                     <i class="fas fa-file-pdf"></i> PDF
                                 </button>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-3" id="filtreJournalCodeWrap">
+                                <label class="form-label small">Journal</label>
+                                <select class="form-control form-control-sm" id="rapportJournalCode" onchange="chargerJournal()">
+                                    <option value="">Tous les journaux</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4" id="filtreCompteUniqueWrap" style="display:none;">
+                                <label class="form-label small">Compte (grand livre d'un seul compte)</label>
+                                <select class="form-control form-control-sm" id="rapportCompteId" onchange="chargerJournal()">
+                                    <option value="">Tous les comptes</option>
+                                </select>
                             </div>
                         </div>
 
@@ -806,10 +854,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 2. Dashboard (rapide)
     chargerDashboard();
+    chargerCaisses();
     genererAnnees();
-    
+
     // 3. ⭐ CHARGER LES COMPTES EN PRIORITÉ (car tout le monde en a besoin)
     chargerComptes();
+    initFiltresJournaux();
     
     // 4. ⭐ Budget après chargement des comptes
     setTimeout(() => {
@@ -919,6 +969,30 @@ function chargerDernieresEcritures() {
             });
         })
         .catch(error => console.error('Erreur dernieres ecritures:', error));
+}
+
+
+// ============================================================
+// LES DEUX CAISSES (Trésorerie vs Chiffre d'affaires)
+// ============================================================
+
+function chargerCaisses() {
+    fetch('/comptabilite/api/caisses')
+        .then(r => r.json())
+        .then(data => {
+            const elTreso = document.getElementById('caisseTresorerieMontant');
+            const elCA = document.getElementById('caisseChiffreAffairesMontant');
+            if (elTreso) elTreso.textContent = (data.caisse_tresorerie || 0).toLocaleString() + ' FCFA';
+            if (elCA) elCA.textContent = (data.caisse_chiffre_affaires || 0).toLocaleString() + ' FCFA';
+
+            const detailTreso = document.getElementById('caisseTresorerieDetail');
+            if (detailTreso) {
+                detailTreso.innerHTML = (data.detail_tresorerie || []).map(c =>
+                    `<div class="d-flex justify-content-between"><span>${c.numero} ${c.nom}</span><strong>${(c.solde || 0).toLocaleString()} F</strong></div>`
+                ).join('') || '<span class="text-muted">Aucun mouvement</span>';
+            }
+        })
+        .catch(error => console.error('Erreur caisses:', error));
 }
 
 
@@ -1713,6 +1787,43 @@ function cloturerAnnee() {
 // RAPPORTS
 // ============================================================
 
+function onChangeRapportType() {
+    const type = document.getElementById('rapportType').value;
+    document.getElementById('filtreJournalCodeWrap').style.display = (type === 'journal') ? '' : 'none';
+    document.getElementById('filtreCompteUniqueWrap').style.display = (type === 'grand_livre') ? '' : 'none';
+    chargerJournal();
+}
+
+function initFiltresJournaux() {
+    // Sélecteur des journaux auxiliaires (journal des ventes, caisse, banque...)
+    fetch('/comptabilite/api/rapports/journaux/liste')
+        .then(r => r.json())
+        .then(journaux => {
+            const sel = document.getElementById('rapportJournalCode');
+            journaux.forEach(j => {
+                const opt = document.createElement('option');
+                opt.value = j.code;
+                opt.textContent = j.nom;
+                sel.appendChild(opt);
+            });
+        })
+        .catch(err => console.error('Erreur chargement journaux:', err));
+
+    // Sélecteur "grand livre d'un seul compte" — réutilise la liste des comptes
+    fetch('/comptabilite/api/comptes')
+        .then(r => r.json())
+        .then(comptes => {
+            const sel = document.getElementById('rapportCompteId');
+            comptes.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = `${c.numero} - ${c.nom}`;
+                sel.appendChild(opt);
+            });
+        })
+        .catch(err => console.error('Erreur chargement comptes:', err));
+}
+
 function chargerJournal() {
     const tbody = document.getElementById('rapportBody');
     const thead = document.getElementById('rapportHeader');
@@ -1720,15 +1831,19 @@ function chargerJournal() {
     const type = document.getElementById('rapportType').value;
     const dateDebut = document.getElementById('rapportDateDebut').value;
     const dateFin = document.getElementById('rapportDateFin').value;
-    
+    const journalCode = document.getElementById('rapportJournalCode') ? document.getElementById('rapportJournalCode').value : '';
+    const compteId = document.getElementById('rapportCompteId') ? document.getElementById('rapportCompteId').value : '';
+
     tbody.innerHTML = '<tr><td colspan="6" class="text-center">⏳ Chargement...</td></tr>';
-    
+
     let url = `/comptabilite/api/rapports/${type}`;
     const params = [];
     if (dateDebut) params.push('date_debut=' + dateDebut);
     if (dateFin) params.push('date_fin=' + dateFin);
+    if (type === 'journal' && journalCode) params.push('journal_code=' + encodeURIComponent(journalCode));
+    if (type === 'grand_livre' && compteId) params.push('compte_id=' + encodeURIComponent(compteId));
     if (params.length) url += '?' + params.join('&');
-    
+
     fetch(url)
         .then(r => r.json())
         .then(data => {
@@ -1756,16 +1871,18 @@ function afficherRapport(data, type) {
     }
     
     if (type === 'journal') {
-        thead.innerHTML = '<th>Date</th><th>Pièce</th><th>Libellé</th><th>Compte</th><th>Débit</th><th>Crédit</th>';
+        thead.innerHTML = '<th>Date</th><th>Journal</th><th>Pièce</th><th>Libellé</th><th>Compte</th><th>Débit</th><th>Crédit</th>';
         data.forEach(item => {
             const debit = item.debit || 0;
             const credit = item.credit || 0;
             totalDebit += debit;
             totalCredit += credit;
+            const badgeAuto = item.generee_auto ? '<span class="badge bg-success ms-1" title="Générée automatiquement et validée">AUTO</span>' : '';
             html += `<tr>
                 <td>${item.date || ''}</td>
+                <td><span class="badge bg-secondary">${item.journal_code || '-'}</span></td>
                 <td><strong>${item.piece || '-'}</strong></td>
-                <td>${item.libelle || ''}</td>
+                <td>${item.libelle || ''}${badgeAuto}</td>
                 <td>${item.compte_numero || ''} - ${item.compte_nom || ''}</td>
                 <td class="text-end">${debit > 0 ? debit.toLocaleString() + ' F' : '-'}</td>
                 <td class="text-end">${credit > 0 ? credit.toLocaleString() + ' F' : '-'}</td>
@@ -1773,7 +1890,7 @@ function afficherRapport(data, type) {
         });
         tfoot.innerHTML = `
             <tr class="fw-bold">
-                <td colspan="4" class="text-end">TOTAUX :</td>
+                <td colspan="5" class="text-end">TOTAUX :</td>
                 <td class="text-end">${totalDebit.toLocaleString()} FCFA</td>
                 <td class="text-end">${totalCredit.toLocaleString()} FCFA</td>
             </tr>

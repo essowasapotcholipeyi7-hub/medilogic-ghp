@@ -24,15 +24,16 @@ CATEGORIES = {
 }
 
 
-# ⭐ Correspondance catégorie → compte comptable
+# ⭐ Correspondance catégorie → compte comptable (plan SYSCOHADA, voir
+# utils/plan_comptable_syscohada.py, source unique de vérité pour les numéros)
 COMPTE_PAR_CATEGORIE = {
-    'laboratoire': '716',        # Examens de laboratoire
-    'imagerie': '717',           # Imagerie médicale
-    'hospitalisation': '715',    # Hospitalisation
-    'consultation': '714',       # Consultations
-    'lunettes': '713',           # Ventes de lunettes
-    'autres': '718',             # Autres produits
-    'pharmacie': '712',          # Ventes de pharmacie
+    'laboratoire': '7062',       # Actes de laboratoire
+    'imagerie': '7063',          # Imagerie médicale
+    'hospitalisation': '7064',   # Hospitalisation
+    'consultation': '7061',      # Consultations
+    'lunettes': '7012',          # Ventes de lunetterie / optique
+    'autres': '7068',            # Autres prestations médicales
+    'pharmacie': '7011',         # Ventes de pharmacie
 }
 
 
@@ -108,7 +109,7 @@ def get_compte_par_categorie(categorie):
     """
     Retourne le compte comptable pour une catégorie
     """
-    return COMPTE_PAR_CATEGORIE.get(categorie, '718')
+    return COMPTE_PAR_CATEGORIE.get(categorie, '7068')
 
 
 def categoriser_acte(nom_acte):
@@ -120,12 +121,12 @@ def categoriser_acte(nom_acte):
     if not code:
         return {
             'categorie': 'autres',
-            'compte': '718',
+            'compte': '7068',
             'code': None
         }
-    
+
     categorie = get_categorie_par_code(code)
-    
+
     if categorie != 'inconnu':
         compte = get_compte_par_categorie(categorie)
         return {
@@ -133,10 +134,10 @@ def categoriser_acte(nom_acte):
             'compte': compte,
             'code': code
         }
-    
+
     # ⭐ Code inconnu → Autres produits
     return {
         'categorie': 'autres',
-        'compte': '718',
+        'compte': '7068',
         'code': code
     }

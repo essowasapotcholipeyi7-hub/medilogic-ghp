@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulletin de paie — {{ employe.nom }} {{ employe.prenom }} — {{ paie.get_periode_label() }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f0f2f5;
+            padding: 30px;
+        }
+        .document-container {
+            max-width: 800px;
+            width: 100%;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            padding: 30px 40px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 3px solid #1a2a6c;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+        }
+        .header .logo { font-size: 20px; font-weight: 700; color: #1a2a6c; text-transform: uppercase; }
+        .header .periode { text-align: right; font-size: 14px; color: #333; }
+        .header .periode .badge {
+            display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 4px;
+            font-size: 12px; font-weight: 600;
+            background: {{ '#d1e7dd' if paie.statut == 'payee' else '#fff3cd' }};
+            color: {{ '#0f5132' if paie.statut == 'payee' else '#664d03' }};
+        }
+        .infos-employe {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px;
+            font-size: 13px; margin-bottom: 20px; padding: 12px; background: #f8f9fa; border-radius: 6px;
+        }
+        .infos-employe div span.label { color: #6c757d; }
+        table.bulletin { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 10px; }
+        table.bulletin th, table.bulletin td { padding: 8px 10px; border: 1px solid #dee2e6; }
+        table.bulletin th { background: #1a2a6c; color: white; text-align: left; }
+        table.bulletin td.montant { text-align: right; font-variant-numeric: tabular-nums; }
+        table.bulletin tr.section td { background: #eef1f8; font-weight: 700; }
+        table.bulletin tr.net td { background: #d1e7dd; font-weight: 700; font-size: 15px; }
+        .footer-note { font-size: 11px; color: #888; margin-top: 20px; text-align: center; }
+        .btn-print {
+            display: block; margin: 20px auto 0; padding: 10px 24px; border: none; border-radius: 6px;
+            background: #1a2a6c; color: white; font-size: 14px; cursor: pointer;
+        }
+        @media print {
+            body { background: white; padding: 0; }
+            .document-container { box-shadow: none; }
+            .btn-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="document-container">
+        <div class="header">
+            <div class="logo">Bulletin de paie</div>
+            <div class="periode">
+                {{ paie.get_periode_label() }}
+                <br><span class="badge">{{ paie.get_statut_label() }}</span>
+            </div>
+        </div>
+
+        <div class="infos-employe">
+            <div><span class="label">Nom : </span><strong>{{ employe.nom }} {{ employe.prenom }}</strong></div>
+            <div><span class="label">Matricule : </span>{{ employe.matricule }}</div>
+            <div><span class="label">Poste : </span>{{ employe.poste or '-' }}</div>
+            <div><span class="label">Date d'embauche : </span>{{ employe.date_embauche.strftime('%d/%m/%Y') if employe.date_embauche else '-' }}</div>
+        </div>
+
+        <table class="bulletin">
+            <thead>
+                <tr><th>Élément</th><th style="text-align:right">Montant (FCFA)</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Salaire de base</td><td class="montant">{{ '{:,.0f}'.format(paie.salaire_base) }}</td></tr>
+                <tr><td>Primes</td><td class="montant">{{ '{:,.0f}'.format(paie.primes) }}</td></tr>
+                <tr><td>Indemnités</td><td class="montant">{{ '{:,.0f}'.format(paie.indemnites) }}</td></tr>
+                <tr class="section"><td>Salaire brut</td><td class="montant">{{ '{:,.0f}'.format(paie.salaire_brut) }}</td></tr>
+
+                <tr><td>CNSS (retenue salariale)</td><td class="montant">- {{ '{:,.0f}'.format(paie.cnss_salarial) }}</td></tr>
+                <tr><td>INAM (retenue salariale)</td><td class="montant">- {{ '{:,.0f}'.format(paie.inam_salarial) }}</td></tr>
+                <tr><td>IRPP</td><td class="montant">- {{ '{:,.0f}'.format(paie.irpp) }}</td></tr>
+                <tr class="section"><td>Total retenues</td><td class="montant">- {{ '{:,.0f}'.format(paie.total_retenues) }}</td></tr>
+
+                <tr class="net"><td>NET À PAYER</td><td class="montant">{{ '{:,.0f}'.format(paie.net_a_payer) }}</td></tr>
+
+                <tr><td>Charges patronales CNSS</td><td class="montant">{{ '{:,.0f}'.format(paie.cnss_patronal) }}</td></tr>
+                <tr><td>Charges patronales INAM</td><td class="montant">{{ '{:,.0f}'.format(paie.inam_patronal) }}</td></tr>
+                <tr class="section"><td>Total charges patronales</td><td class="montant">{{ '{:,.0f}'.format(paie.total_charges_patronales) }}</td></tr>
+            </tbody>
+        </table>
+
+        {% if paie.date_paiement %}
+        <p style="font-size:13px;">Payé le {{ paie.date_paiement.strftime('%d/%m/%Y') }}
+            {% if paie.mode_paiement %}— {{ paie.mode_paiement }}{% endif %}</p>
+        {% endif %}
+
+        <div class="footer-note">
+            Document généré le {{ date_actuelle }} — Taux CNSS/INAM/IRPP appliqués selon les
+            paramètres de paie de la structure en vigueur à la date de génération.
+        </div>
+
+        <button class="btn-print" onclick="window.print()">🖨️ Imprimer</button>
+    </div>
+</body>
+</html>

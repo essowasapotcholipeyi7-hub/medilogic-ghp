@@ -5,7 +5,7 @@ from sqlalchemy import or_, and_, extract, func
 import json
 import traceback
 
-from models import db, Employe, Service, Conge, Permission, DocumentRH, SignatureRH
+from models import db, Employe, Service, Conge, Permission, DocumentRH, SignatureRH, Paie, ParametragePaie
 
 rh_bp = Blueprint('rh', __name__, url_prefix='/rh')
 
@@ -50,69 +50,48 @@ def get_statut_label(statut):
 
 def calculer_solde_conges(employe_id, annee):
     """
-    Calcule le solde de congés pour un employé et une année donnée
-    ⭐ 30 jours par an
+    Calcule le solde de congés pour un employé et une année donnée.
+    ⭐ Fine couche au-dessus d'Employe.get_solde_detail() — SOURCE UNIQUE du
+    calcul (models.py). Ne pas dupliquer la logique ici : cette fonction
+    n'existe que pour garder la signature (employe_id, annee) attendue par
+    les appelants historiques de ce module.
     """
-    # Congés pris dans l'année
-    conges_pris = db.session.query(func.sum(Conge.nombre_jours)).filter(
-        Conge.employe_id == employe_id,
-        extract('year', Conge.date_debut) == annee,
-        Conge.statut.in_(['en_attente', 'approuve', 'termine'])
-    ).scalar() or 0
-    
-    # Permissions prises dans l'année
-    permissions_pris = db.session.query(func.sum(Permission.nombre_jours)).filter(
-        Permission.employe_id == employe_id,
-        extract('year', Permission.date_debut) == annee,
-        Permission.statut.in_(['en_attente', 'approuve'])
-    ).scalar() or 0
-    
-    total_pris = conges_pris + permissions_pris
-    solde = CONGES_ANNUELS - total_pris  # ⭐ 30 jours - pris
-    
-    return {
-        'solde': max(0, solde),
-        'pris': total_pris,
-        'conges_pris': conges_pris,
-        'permissions_pris': permissions_pris,
-        'total_annuel': CONGES_ANNUELS
-    }
+    employe = Employe.query.get(employe_id)
+    if not employe:
+        return {'solde': 0, 'pris': 0, 'conges_pris': 0, 'permissions_pris': 0, 'total_annuel': CONGES_ANNUELS}
+    return employe.get_solde_detail(annee)
 
 
 def verifier_solde_avec_anticipation(employe_id, jours_demandes, annee_demande):
     """
-    Vérifie si le solde est suffisant, sinon propose les années futures
-    ⭐ 30 jours par an
+    Vérifie si le solde est suffisant, sinon propose les années futures.
+    ⭐ Délègue à Employe.verifier_conges_disponibles() (models.py) — même
+    remarque que ci-dessus — en adaptant les noms de clés attendus par les
+    appelants existants de ce module (solde_actuel / annees_proposees).
     """
-    # Solde pour l'année demandée
-    solde_actuel = calculer_solde_conges(employe_id, annee_demande)
-    
-    if jours_demandes <= solde_actuel['solde']:
+    employe = Employe.query.get(employe_id)
+    if not employe:
+        return {'disponible': False, 'solde_actuel': 0, 'annee': annee_demande,
+                'jours_demandes': jours_demandes, 'annees_proposees': [],
+                'message': 'Employé introuvable'}
+
+    resultat = employe.verifier_conges_disponibles(jours_demandes, annee_demande)
+
+    if resultat['disponible']:
         return {
             'disponible': True,
-            'solde_actuel': solde_actuel['solde'],
-            'annee': annee_demande,
-            'message': f'Solde suffisant: {solde_actuel["solde"]} jours restants'
+            'solde_actuel': resultat['solde'],
+            'annee': resultat['annee'],
+            'message': resultat['message'],
         }
-    
-    # ⭐ Si solde insuffisant, vérifier les années futures
-    annees_proposees = []
-    for an in range(annee_demande + 1, annee_demande + 6):
-        solde_futur = calculer_solde_conges(employe_id, an)
-        if solde_futur['solde'] > 0:
-            annees_proposees.append({
-                'annee': an,
-                'solde': solde_futur['solde'],
-                'disponible': solde_futur['solde'] >= jours_demandes
-            })
-    
+
     return {
         'disponible': False,
-        'solde_actuel': solde_actuel['solde'],
-        'annee': annee_demande,
-        'jours_demandes': jours_demandes,
-        'annees_proposees': annees_proposees,
-        'message': f'Solde insuffisant: {solde_actuel["solde"]} jours restants en {annee_demande}'
+        'solde_actuel': resultat['solde'],
+        'annee': resultat['annee'],
+        'jours_demandes': resultat.get('jours_demandes', jours_demandes),
+        'annees_proposees': resultat.get('annees_futures', []),
+        'message': resultat['message'],
     }
 
 
@@ -158,8 +137,10 @@ def services(structure_id):
 @rh_bp.route('/dashboard')
 @require_structure
 def dashboard_rh(structure_id):
-    """Dashboard RH"""
-    return render_template('rh/dashboard_rh.html')
+    """Dashboard RH — le tableau de bord vit dans l'onglet "Dashboard RH" du
+    hub unique (gestion_rh.html) ; il n'y a pas de template dédié
+    (rh/dashboard_rh.html n'existe pas — route corrigée)."""
+    return redirect(url_for('rh.gestion_rh') + '#dashboardrh')
 
 
 # ============================================================
@@ -313,7 +294,19 @@ def employe_ajouter(structure_id):
         
         db.session.add(employe)
         db.session.commit()
-        
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        try:
+            from services.journal_service import JournalService
+            JournalService.creer_mouvement(
+                structure_id=structure_id, categorie='employe_ajoute',
+                description=f"Employé ajouté — {employe.nom} {employe.prenom} ({matricule})",
+                reference_type='employe', reference_id=employe.id,
+                utilisateur_nom=session.get('user_name', 'System'),
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur journal d'activité (employé #{employe.id}): {e}")
+
         return jsonify({
             'success': True,
             'id': employe.id,
@@ -687,9 +680,22 @@ def conge_changer_statut(structure_id, id):
         # ⭐ Mettre à jour le statut de l'employé
         employe = conge.employe
         employe.mettre_a_jour_statut()
-        
+
         db.session.commit()
-        
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        if nouveau_statut == 'approuve':
+            try:
+                from services.journal_service import JournalService
+                JournalService.creer_mouvement(
+                    structure_id=structure_id, categorie='conge_approuve',
+                    description=f"Congé approuvé — {employe.nom} {employe.prenom} ({conge.nombre_jours} j)",
+                    reference_type='conge', reference_id=conge.id,
+                    utilisateur_nom=session.get('user_name', 'System'),
+                )
+            except Exception as e:
+                print(f"⚠️ Erreur journal d'activité (congé #{conge.id}): {e}")
+
         return jsonify({
             'success': True,
             'message': f'Statut du congé mis à jour en "{nouveau_statut}"',
@@ -732,7 +738,20 @@ def conge_autorisation(structure_id, id):
         extract('year', DocumentRH.created_at) == annee
     ).count() + 1
     numero_ordre = f"{annee}/{str(count).zfill(3)}/CONGE"
-    
+
+    # ⭐ Enregistrer le document généré (le compteur ci-dessus n'a de sens
+    # que si chaque autorisation imprimée est réellement tracée)
+    try:
+        db.session.add(DocumentRH(
+            structure_id=structure_id, type_document='conge',
+            numero_ordre=numero_ordre, employe_id=employe.id,
+            statut='genere'
+        ))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"⚠️ Erreur enregistrement DocumentRH (congé #{conge.id}): {e}")
+
     # Détermination des pronoms
     if employe.sexe == 'Feminin':
         titre = 'Madame'
@@ -878,6 +897,7 @@ def permission_demander(structure_id):
         # ⭐ Créer la permission
         permission = Permission(
             employe_id=employe_id,
+            structure_id=structure_id,
             type_permission=type_permission,
             motif=motif,
             signataire=signataire,
@@ -937,9 +957,23 @@ def permission_changer_statut(structure_id, id):
         permission.approuve_par = session.get('user_name', 'System')
         permission.date_approbation = date.today()
         permission.commentaire = data.get('commentaire', '')
-        
+
         db.session.commit()
-        
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        if nouveau_statut == 'approuve':
+            try:
+                from services.journal_service import JournalService
+                employe = permission.employe
+                JournalService.creer_mouvement(
+                    structure_id=structure_id, categorie='permission_approuvee',
+                    description=f"Permission approuvée — {employe.nom} {employe.prenom}",
+                    reference_type='permission', reference_id=permission.id,
+                    utilisateur_nom=session.get('user_name', 'System'),
+                )
+            except Exception as e:
+                print(f"⚠️ Erreur journal d'activité (permission #{permission.id}): {e}")
+
         return jsonify({
             'success': True,
             'message': f'Statut de la permission mis à jour en "{nouveau_statut}"'
@@ -981,7 +1015,18 @@ def permission_autorisation(structure_id, id):
         extract('year', DocumentRH.created_at) == annee
     ).count() + 1
     numero_ordre = f"{annee}/{str(count).zfill(3)}/PERM"
-    
+
+    try:
+        db.session.add(DocumentRH(
+            structure_id=structure_id, type_document='permission',
+            numero_ordre=numero_ordre, employe_id=employe.id,
+            statut='genere'
+        ))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"⚠️ Erreur enregistrement DocumentRH (permission #{permission.id}): {e}")
+
     # Détermination du titre
     titre = 'Madame' if employe.sexe == 'Feminin' else 'Monsieur'
     autorisee = 'autorisee' if employe.sexe == 'Feminin' else 'autorise'
@@ -1295,3 +1340,168 @@ def api_conges_stats(structure_id, employe_id):
         'stats': stats,
         'annee_courante': annee_actuelle
     })
+
+
+# ============================================================
+# PAIE (bulletin de paie — CNSS / INAM / IRPP)
+# ============================================================
+
+@rh_bp.route('/paie')
+@require_structure
+def page_paie(structure_id):
+    """Page « Paie du mois »"""
+    return render_template('rh/paie.html')
+
+
+@rh_bp.route('/parametres-paie')
+@require_structure
+def page_parametres_paie(structure_id):
+    """Écran des taux CNSS / INAM / IRPP (éditables)"""
+    return render_template('rh/parametres_paie.html')
+
+
+@rh_bp.route('/api/parametres-paie', methods=['GET'])
+@require_structure
+def api_get_parametres_paie(structure_id):
+    p = ParametragePaie.get_ou_creer(structure_id)
+    return jsonify({
+        'taux_cnss_salarial': float(p.taux_cnss_salarial or 0),
+        'taux_cnss_patronal': float(p.taux_cnss_patronal or 0),
+        'plafond_cnss': float(p.plafond_cnss or 0),
+        'taux_inam_salarial': float(p.taux_inam_salarial or 0),
+        'taux_inam_patronal': float(p.taux_inam_patronal or 0),
+        'tranches_irpp': p.tranches_irpp or [],
+        'updated_at': p.updated_at.strftime('%Y-%m-%d %H:%M') if p.updated_at else None,
+    })
+
+
+@rh_bp.route('/api/parametres-paie', methods=['PUT'])
+@require_structure
+def api_maj_parametres_paie(structure_id):
+    if not session.get('is_admin'):
+        return jsonify({'success': False, 'error': 'Non autorisé'}), 403
+    try:
+        data = request.json
+        p = ParametragePaie.get_ou_creer(structure_id)
+        for champ in ['taux_cnss_salarial', 'taux_cnss_patronal', 'plafond_cnss',
+                      'taux_inam_salarial', 'taux_inam_patronal']:
+            if champ in data:
+                setattr(p, champ, data[champ])
+        if 'tranches_irpp' in data:
+            p.tranches_irpp = data['tranches_irpp']
+        p.updated_by = session.get('user_name', 'Admin')
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@rh_bp.route('/api/paie', methods=['GET'])
+@require_structure
+def api_liste_paies(structure_id):
+    """Liste des employés avec leur bulletin (existant ou à générer) pour
+    une période — base de l'écran « Paie du mois »."""
+    annee = request.args.get('annee', datetime.now().year, type=int)
+    mois = request.args.get('mois', datetime.now().month, type=int)
+
+    employes = Employe.query.filter_by(structure_id=structure_id, statut='Actif').order_by(Employe.nom).all()
+    paies_existantes = {p.employe_id: p for p in Paie.query.filter_by(
+        structure_id=structure_id, annee=annee, mois=mois).all()}
+
+    result = []
+    for e in employes:
+        paie = paies_existantes.get(e.id)
+        result.append({
+            'employe_id': e.id,
+            'matricule': e.matricule,
+            'nom': e.nom, 'prenom': e.prenom,
+            'poste': e.poste, 'salaire_base': float(e.salaire_base or 0),
+            'paie_id': paie.id if paie else None,
+            'salaire_brut': float(paie.salaire_brut) if paie else None,
+            'net_a_payer': float(paie.net_a_payer) if paie else None,
+            'statut': paie.statut if paie else 'non_generee',
+        })
+
+    return jsonify({'annee': annee, 'mois': mois, 'employes': result})
+
+
+@rh_bp.route('/api/paie/generer', methods=['POST'])
+@require_structure
+def api_generer_paie(structure_id):
+    if not session.get('is_admin'):
+        return jsonify({'success': False, 'error': 'Non autorisé'}), 403
+    try:
+        from services.paie_service import generer_ou_maj_paie
+        data = request.json
+        paie, erreur = generer_ou_maj_paie(
+            structure_id=structure_id,
+            employe_id=data.get('employe_id'),
+            annee=data.get('annee', datetime.now().year),
+            mois=data.get('mois', datetime.now().month),
+            primes=data.get('primes', 0),
+            indemnites=data.get('indemnites', 0),
+            user_nom=session.get('user_name', 'Admin'),
+        )
+        if erreur:
+            return jsonify({'success': False, 'error': erreur}), 400
+        return jsonify({'success': True, 'paie_id': paie.id, 'net_a_payer': float(paie.net_a_payer)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@rh_bp.route('/api/paie/<int:paie_id>', methods=['GET'])
+@require_structure
+def api_detail_paie(structure_id, paie_id):
+    paie = Paie.query.filter_by(id=paie_id, structure_id=structure_id).first()
+    if not paie:
+        return jsonify({'error': 'Paie non trouvée'}), 404
+    e = paie.employe
+    return jsonify({
+        'id': paie.id, 'periode': paie.get_periode_label(),
+        'employe': f"{e.nom} {e.prenom}", 'matricule': e.matricule, 'poste': e.poste,
+        'salaire_base': float(paie.salaire_base), 'primes': float(paie.primes),
+        'indemnites': float(paie.indemnites), 'salaire_brut': float(paie.salaire_brut),
+        'cnss_salarial': float(paie.cnss_salarial), 'cnss_patronal': float(paie.cnss_patronal),
+        'inam_salarial': float(paie.inam_salarial), 'inam_patronal': float(paie.inam_patronal),
+        'irpp': float(paie.irpp), 'total_retenues': float(paie.total_retenues),
+        'total_charges_patronales': float(paie.total_charges_patronales),
+        'net_a_payer': float(paie.net_a_payer), 'statut': paie.statut,
+        'statut_label': paie.get_statut_label(),
+        'date_paiement': paie.date_paiement.strftime('%Y-%m-%d') if paie.date_paiement else None,
+    })
+
+
+@rh_bp.route('/api/paie/<int:paie_id>/payer', methods=['POST'])
+@require_structure
+def api_payer_paie(structure_id, paie_id):
+    if not session.get('is_admin'):
+        return jsonify({'success': False, 'error': 'Non autorisé'}), 403
+    try:
+        from services.paie_service import marquer_paie_payee
+        paie = Paie.query.filter_by(id=paie_id, structure_id=structure_id).first()
+        if not paie:
+            return jsonify({'success': False, 'error': 'Paie non trouvée'}), 404
+
+        data = request.json or {}
+        paie, erreur = marquer_paie_payee(
+            paie, mode_paiement=data.get('mode_paiement', 'especes'),
+            user_nom=session.get('user_name', 'Admin')
+        )
+        if erreur:
+            return jsonify({'success': False, 'error': erreur}), 400
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@rh_bp.route('/paie/<int:paie_id>/bulletin')
+@require_structure
+def bulletin_paie(structure_id, paie_id):
+    """Bulletin de paie imprimable"""
+    paie = Paie.query.filter_by(id=paie_id, structure_id=structure_id).first()
+    if not paie:
+        flash('Bulletin de paie non trouvé', 'danger')
+        return redirect(url_for('rh.page_paie'))
+    return render_template('rh/bulletin_paie.html', paie=paie, employe=paie.employe,
+                            date_actuelle=datetime.now().strftime('%d/%m/%Y'))

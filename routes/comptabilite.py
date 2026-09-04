@@ -6,10 +6,11 @@ import re
 from functools import lru_cache
 
 from models import (
-    db, CompteComptable, EcritureComptable, LigneEcriture, 
-    Budget, ValidationComptable, HistoriqueEcriture, ReleveBancaire, 
+    db, CompteComptable, EcritureComptable, LigneEcriture,
+    Budget, ValidationComptable, HistoriqueEcriture, ReleveBancaire,
     LigneReleve, Cloture, SequencePiece
 )
+from services.comptabilite_service import get_soldes_caisses
 
 compta_bp = Blueprint('comptabilite', __name__, url_prefix='/comptabilite')
 
@@ -830,8 +831,15 @@ def api_journal():
     structure_id = session.get('structure_id')
     date_debut = request.args.get('date_debut')
     date_fin = request.args.get('date_fin')
-    
-    return jsonify(generer_journal(structure_id, date_debut, date_fin))
+    journal_code = request.args.get('journal_code')  # VTE / CAI / BQ / ACH / OD / None = tous
+
+    return jsonify(generer_journal(structure_id, date_debut, date_fin, journal_code))
+
+
+@compta_bp.route('/api/rapports/journaux/liste')
+def api_liste_journaux():
+    """Liste des journaux auxiliaires disponibles (pour le sélecteur)."""
+    return jsonify([{'code': code, 'nom': nom} for code, nom in EcritureComptable.JOURNAUX.items()])
 
 
 @compta_bp.route('/api/rapports/grand_livre')
@@ -839,8 +847,23 @@ def api_grand_livre():
     structure_id = session.get('structure_id')
     date_debut = request.args.get('date_debut')
     date_fin = request.args.get('date_fin')
-    
-    return jsonify(generer_grand_livre(structure_id, date_debut, date_fin))
+    compte_id = request.args.get('compte_id', type=int)  # vue "grand livre d'un seul compte"
+
+    return jsonify(generer_grand_livre(structure_id, date_debut, date_fin, compte_id))
+
+
+@compta_bp.route('/api/caisses')
+def api_caisses():
+    """Les deux caisses bien visibles : Trésorerie (disponible réel) et
+    Chiffre d'affaires (total des ventes de la période)."""
+    structure_id = session.get('structure_id')
+    date_debut = request.args.get('date_debut')
+    date_fin = request.args.get('date_fin')
+
+    date_debut_obj = parse_date(date_debut) if date_debut else None
+    date_fin_obj = parse_date(date_fin) if date_fin else None
+
+    return jsonify(get_soldes_caisses(structure_id, date_debut_obj, date_fin_obj))
 
 
 @compta_bp.route('/api/rapports/balance')
@@ -869,17 +892,19 @@ def api_rapport_bilan():
     return jsonify(get_bilan(structure_id, date_fin))
 
 
-def generer_journal(structure_id, date_debut, date_fin):
+def generer_journal(structure_id, date_debut, date_fin, journal_code=None):
     from sqlalchemy import text
-    
+
     date_debut_obj = parse_date(date_debut) if date_debut else None
     date_fin_obj = parse_date(date_fin) if date_fin else None
-    
+
     result = db.session.execute(text("""
-        SELECT 
+        SELECT
             e.date_ecriture,
             e.piece_justificative,
             e.libelle,
+            e.journal_code,
+            e.generee_auto,
             c.numero as compte_numero,
             c.nom as compte_nom,
             l.debit,
@@ -891,19 +916,23 @@ def generer_journal(structure_id, date_debut, date_fin):
         AND e.statut = 'valide'
         AND (:date_debut IS NULL OR e.date_ecriture >= :date_debut)
         AND (:date_fin IS NULL OR e.date_ecriture <= :date_fin)
+        AND (:journal_code IS NULL OR e.journal_code = :journal_code)
         ORDER BY e.date_ecriture
     """), {
         'structure_id': structure_id,
         'date_debut': date_debut_obj.strftime('%Y-%m-%d') if date_debut_obj else None,
-        'date_fin': date_fin_obj.strftime('%Y-%m-%d') if date_fin_obj else None
+        'date_fin': date_fin_obj.strftime('%Y-%m-%d') if date_fin_obj else None,
+        'journal_code': journal_code or None,
     })
-    
+
     rows = result.fetchall()
-    
+
     return [{
         'date': row.date_ecriture.strftime('%Y-%m-%d') if row.date_ecriture else '',
         'piece': row.piece_justificative or '',
         'libelle': row.libelle or '',
+        'journal_code': row.journal_code or '',
+        'generee_auto': bool(row.generee_auto),
         'compte_numero': row.compte_numero or '',
         'compte_nom': row.compte_nom or '',
         'debit': float(row.debit or 0),
@@ -911,18 +940,19 @@ def generer_journal(structure_id, date_debut, date_fin):
     } for row in rows]
 
 
-def generer_grand_livre(structure_id, date_debut, date_fin):
+def generer_grand_livre(structure_id, date_debut, date_fin, compte_id=None):
     from sqlalchemy import text
-    
+
     date_debut_obj = parse_date(date_debut) if date_debut else None
     date_fin_obj = parse_date(date_fin) if date_fin else None
-    
+
     result = db.session.execute(text("""
-        SELECT 
+        SELECT
             e.date_ecriture,
             c.numero as compte_numero,
             c.nom as compte_nom,
             e.libelle,
+            e.piece_justificative,
             l.debit,
             l.credit
         FROM ecritures_comptables e
@@ -932,20 +962,23 @@ def generer_grand_livre(structure_id, date_debut, date_fin):
         AND e.statut = 'valide'
         AND (:date_debut IS NULL OR e.date_ecriture >= :date_debut)
         AND (:date_fin IS NULL OR e.date_ecriture <= :date_fin)
+        AND (:compte_id IS NULL OR l.compte_id = :compte_id)
         ORDER BY c.numero, e.date_ecriture
     """), {
         'structure_id': structure_id,
         'date_debut': date_debut_obj.strftime('%Y-%m-%d') if date_debut_obj else None,
-        'date_fin': date_fin_obj.strftime('%Y-%m-%d') if date_fin_obj else None
+        'date_fin': date_fin_obj.strftime('%Y-%m-%d') if date_fin_obj else None,
+        'compte_id': compte_id,
     })
-    
+
     rows = result.fetchall()
-    
+
     return [{
         'date': row.date_ecriture.strftime('%Y-%m-%d') if row.date_ecriture else '',
         'compte_numero': row.compte_numero or '',
         'compte_nom': row.compte_nom or '',
         'libelle': row.libelle or '',
+        'piece': row.piece_justificative or '',
         'debit': float(row.debit or 0),
         'credit': float(row.credit or 0)
     } for row in rows]
@@ -1389,66 +1422,17 @@ def api_valider_releve(releve_id):
 
 @compta_bp.route('/api/init-comptes', methods=['POST'])
 def api_init_comptes():
+    """Initialise (ou complète) le plan comptable SYSCOHADA de la structure.
+    Voir utils/plan_comptable_syscohada.py pour la nomenclature de référence,
+    partagée avec scripts/seed_plan_comptable_syscohada.py."""
     structure_id = session.get('structure_id')
-    
-    comptes_standard = [
-        {'numero': '211', 'nom': 'Caisse', 'type': 'actif'},
-        {'numero': '212', 'nom': 'Banque', 'type': 'actif'},
-        {'numero': '213', 'nom': 'Caisse d\'avance', 'type': 'actif'},
-        {'numero': '214', 'nom': 'Depots et cautionnements', 'type': 'actif'},
-        {'numero': '411', 'nom': 'Clients', 'type': 'actif'},
-        {'numero': '412', 'nom': 'Clients - Effets a recevoir', 'type': 'actif'},
-        {'numero': '413', 'nom': 'Clients - Douteux', 'type': 'actif'},
-        {'numero': '414', 'nom': 'Clients - Autres', 'type': 'actif'},
-        {'numero': '421', 'nom': 'Fournisseurs', 'type': 'passif'},
-        {'numero': '422', 'nom': 'Fournisseurs - Effets a payer', 'type': 'passif'},
-        {'numero': '611', 'nom': 'Salaires et traitements', 'type': 'charge'},
-        {'numero': '612', 'nom': 'Charges sociales', 'type': 'charge'},
-        {'numero': '613', 'nom': 'Loyers', 'type': 'charge'},
-        {'numero': '614', 'nom': 'Electricite, eau, gaz', 'type': 'charge'},
-        {'numero': '615', 'nom': 'Entretien et reparations', 'type': 'charge'},
-        {'numero': '616', 'nom': 'Fournitures de bureau', 'type': 'charge'},
-        {'numero': '617', 'nom': 'Frais de deplacement', 'type': 'charge'},
-        {'numero': '618', 'nom': 'Frais de communication', 'type': 'charge'},
-        {'numero': '619', 'nom': 'Honoraires et consultations', 'type': 'charge'},
-        {'numero': '621', 'nom': 'Assurances', 'type': 'charge'},
-        {'numero': '622', 'nom': 'Impots et taxes', 'type': 'charge'},
-        {'numero': '623', 'nom': 'Publicite et promotion', 'type': 'charge'},
-        {'numero': '624', 'nom': 'Frais bancaires', 'type': 'charge'},
-        {'numero': '625', 'nom': 'Amortissements et provisions', 'type': 'charge'},
-        {'numero': '631', 'nom': 'Achats de materiel medical', 'type': 'charge'},
-        {'numero': '632', 'nom': 'Achats de medicaments', 'type': 'charge'},
-        {'numero': '633', 'nom': 'Achats de fournitures medicales', 'type': 'charge'},
-        {'numero': '711', 'nom': 'Ventes d\'actes medicaux', 'type': 'produit'},
-        {'numero': '712', 'nom': 'Ventes de pharmacie', 'type': 'produit'},
-        {'numero': '713', 'nom': 'Ventes de lunettes', 'type': 'produit'},
-        {'numero': '714', 'nom': 'Consultations', 'type': 'produit'},
-        {'numero': '715', 'nom': 'Hospitalisation', 'type': 'produit'},
-        {'numero': '716', 'nom': 'Examens de laboratoire', 'type': 'produit'},
-        {'numero': '717', 'nom': 'Imagerie medicale', 'type': 'produit'},
-        {'numero': '718', 'nom': 'Autres produits', 'type': 'produit'},
-        {'numero': '721', 'nom': 'Subventions et dons', 'type': 'produit'},
-        {'numero': '722', 'nom': 'Remboursements d\'assurances', 'type': 'produit'},
-    ]
-    
-    for compte in comptes_standard:
-        existing = CompteComptable.query.filter_by(
-            structure_id=structure_id,
-            numero=compte['numero']
-        ).first()
-        
-        if not existing:
-            nouveau_compte = CompteComptable(
-                structure_id=structure_id,
-                numero=compte['numero'],
-                nom=compte['nom'],
-                type=compte['type']
-            )
-            db.session.add(nouveau_compte)
-    
-    db.session.commit()
+    if not structure_id:
+        return jsonify({'success': False, 'error': 'Structure non trouvee'}), 400
+
+    from scripts.seed_plan_comptable_syscohada import seed_pour_structure
+    seed_pour_structure(structure_id)
     invalidate_cache(structure_id)
-    
+
     return jsonify({'success': True})
 
 # routes/comptabilite.py - Ajouter cette route

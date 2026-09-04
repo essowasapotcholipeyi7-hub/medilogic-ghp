@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Paramètres de paie{% endblock %}
+
+{% block content %}
+        <div class="card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-sliders-h"></i> Paramètres de paie (CNSS / INAM / IRPP)</h5>
+                <a href="{{ url_for('rh.page_paie') }}" class="btn btn-light btn-sm">
+                    <i class="fas fa-arrow-left"></i> Retour à la paie
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    <strong>Taux indicatifs.</strong> Ces valeurs par défaut doivent être vérifiées et
+                    ajustées avec votre comptable ou la DGI avant la première paie réelle — la
+                    législation sociale et fiscale togolaise évolue.
+                </div>
+
+                <h6 class="mt-4">CNSS</h6>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label small">Taux salarial (%)</label>
+                        <input type="number" step="0.01" class="form-control" id="tauxCnssSalarial">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">Taux patronal (%)</label>
+                        <input type="number" step="0.01" class="form-control" id="tauxCnssPatronal">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">Plafond mensuel (FCFA)</label>
+                        <input type="number" step="1" class="form-control" id="plafondCnss">
+                    </div>
+                </div>
+
+                <h6 class="mt-4">INAM (Assurance Maladie Universelle)</h6>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label small">Taux salarial (%)</label>
+                        <input type="number" step="0.01" class="form-control" id="tauxInamSalarial">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">Taux patronal (%)</label>
+                        <input type="number" step="0.01" class="form-control" id="tauxInamPatronal">
+                    </div>
+                </div>
+
+                <h6 class="mt-4 d-flex justify-content-between align-items-center">
+                    <span>Barème IRPP (progressif)</span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="ajouterTranche()">
+                        <i class="fas fa-plus"></i> Ajouter une tranche
+                    </button>
+                </h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th>De (FCFA)</th>
+                                <th>À (FCFA) — vide = illimité</th>
+                                <th>Taux (%)</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tranchesBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="text-end mt-3">
+                    <span class="text-muted small me-3" id="dernMaj"></span>
+                    <button class="btn btn-primary" onclick="sauvegarderParametres()">
+                        <i class="fas fa-save"></i> Enregistrer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function ligneTrancheHTML(t) {
+    t = t || {min: 0, max: null, taux: 0};
+    return `<tr>
+        <td><input type="number" class="form-control form-control-sm t-min" value="${t.min ?? 0}"></td>
+        <td><input type="number" class="form-control form-control-sm t-max" value="${t.max ?? ''}" placeholder="illimité"></td>
+        <td><input type="number" step="0.01" class="form-control form-control-sm t-taux" value="${t.taux ?? 0}"></td>
+        <td><button class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fas fa-trash"></i></button></td>
+    </tr>`;
+}
+
+function ajouterTranche() {
+    document.getElementById('tranchesBody').insertAdjacentHTML('beforeend', ligneTrancheHTML());
+}
+
+function chargerParametres() {
+    fetch('/rh/api/parametres-paie')
+        .then(r => r.json())
+        .then(p => {
+            document.getElementById('tauxCnssSalarial').value = p.taux_cnss_salarial;
+            document.getElementById('tauxCnssPatronal').value = p.taux_cnss_patronal;
+            document.getElementById('plafondCnss').value = p.plafond_cnss;
+            document.getElementById('tauxInamSalarial').value = p.taux_inam_salarial;
+            document.getElementById('tauxInamPatronal').value = p.taux_inam_patronal;
+            document.getElementById('dernMaj').textContent = p.updated_at ? ('Dernière modification : ' + p.updated_at) : '';
+
+            const tbody = document.getElementById('tranchesBody');
+            tbody.innerHTML = '';
+            (p.tranches_irpp || []).forEach(t => tbody.insertAdjacentHTML('beforeend', ligneTrancheHTML(t)));
+        })
+        .catch(err => console.error(err));
+}
+
+function sauvegarderParametres() {
+    const tranches = Array.from(document.querySelectorAll('#tranchesBody tr')).map(tr => ({
+        min: parseFloat(tr.querySelector('.t-min').value || 0),
+        max: tr.querySelector('.t-max').value === '' ? null : parseFloat(tr.querySelector('.t-max').value),
+        taux: parseFloat(tr.querySelector('.t-taux').value || 0),
+    }));
+
+    fetch('/rh/api/parametres-paie', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            taux_cnss_salarial: parseFloat(document.getElementById('tauxCnssSalarial').value || 0),
+            taux_cnss_patronal: parseFloat(document.getElementById('tauxCnssPatronal').value || 0),
+            plafond_cnss: parseFloat(document.getElementById('plafondCnss').value || 0),
+            taux_inam_salarial: parseFloat(document.getElementById('tauxInamSalarial').value || 0),
+            taux_inam_patronal: parseFloat(document.getElementById('tauxInamPatronal').value || 0),
+            tranches_irpp: tranches,
+        })
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            alert('Paramètres enregistrés avec succès !');
+            chargerParametres();
+        } else {
+            alert('Erreur: ' + (result.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(err => alert('Erreur: ' + err));
+}
+
+document.addEventListener('DOMContentLoaded', chargerParametres);
+</script>
+{% endblock %}

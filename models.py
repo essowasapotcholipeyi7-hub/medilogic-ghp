@@ -216,22 +216,37 @@ class Employe(db.Model):
         ).scalar() or 0
         return total_acquis - conges_pris
     
-    def get_solde_par_annee(self, annee):
-        """Retourne le solde de congés pour une année donnée"""
+    def get_solde_detail(self, annee):
+        """⭐ Source UNIQUE de calcul du solde de congés (jours acquis moins
+        congés + permissions pris sur l'année). Tout le reste (routes/rh.py
+        compris) doit passer par cette méthode — plus de logique dupliquée."""
         conges_pris = db.session.query(db.func.sum(Conge.nombre_jours)).filter(
             Conge.employe_id == self.id,
             db.extract('year', Conge.date_debut) == annee,
             Conge.statut.in_(['en_attente', 'approuve', 'termine'])
         ).scalar() or 0
-        
+
         permissions_pris = db.session.query(db.func.sum(Permission.nombre_jours)).filter(
             Permission.employe_id == self.id,
             db.extract('year', Permission.date_debut) == annee,
             Permission.statut.in_(['en_attente', 'approuve'])
         ).scalar() or 0
-        
+
+        total_annuel = self.conges_annuels or 30
         total_pris = conges_pris + permissions_pris
-        return 30 - total_pris
+        solde = max(0, total_annuel - total_pris)
+
+        return {
+            'solde': solde,
+            'pris': total_pris,
+            'conges_pris': conges_pris,
+            'permissions_pris': permissions_pris,
+            'total_annuel': total_annuel,
+        }
+
+    def get_solde_par_annee(self, annee):
+        """Retourne le solde de congés (nombre) pour une année donnée."""
+        return self.get_solde_detail(annee)['solde']
     
     def solde_conges_restant(self):
         """Calcule le solde de congés restant pour l'année en cours (incluant les permissions)"""
@@ -419,10 +434,13 @@ class Conge(db.Model):
 
 class Permission(db.Model):
     __tablename__ = 'permissions'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     employe_id = db.Column(db.Integer, db.ForeignKey('employes.id'), nullable=False)
-    
+    # ⭐ Cohérence multi-structure avec les autres tables RH (Employe, Conge,
+    # Service, DocumentRH) — backfillé depuis employe.structure_id.
+    structure_id = db.Column(db.Integer)
+
     type_permission = db.Column(db.String(20), default='heures')
     
     date_permission = db.Column(db.Date, nullable=True)
@@ -506,7 +524,16 @@ class CompteComptable(db.Model):
 
 class EcritureComptable(db.Model):
     __tablename__ = 'ecritures_comptables'
-    
+
+    # Journaux auxiliaires (journaux divisionnaires SYSCOHADA)
+    JOURNAUX = {
+        'VTE': "Journal des ventes",
+        'CAI': "Journal de caisse",
+        'BQ': "Journal de banque",
+        'ACH': "Journal des achats et charges",
+        'OD': "Journal des opérations diverses",
+    }
+
     id = db.Column(db.Integer, primary_key=True)
     structure_id = db.Column(db.Integer, nullable=False)
     date_ecriture = db.Column(db.Date, nullable=False)
@@ -524,10 +551,20 @@ class EcritureComptable(db.Model):
 
     cloturee = db.Column(db.Boolean, default=False)
     date_cloture = db.Column(db.DateTime)
-    
+
+    # ⭐ Automatisation (voir services/comptabilite_service.py)
+    journal_code = db.Column(db.String(10))          # VTE / CAI / BQ / ACH / OD
+    source_type = db.Column(db.String(50))           # 'vente', 'paiement_facture', ...
+    source_id = db.Column(db.Integer)                # id de l'objet source
+    generee_auto = db.Column(db.Boolean, default=False)
+    generation_erreur = db.Column(db.Text)            # renseigné si une génération auto a échoué
+
     lignes = db.relationship('LigneEcriture', backref='ecriture', lazy=True, cascade='all, delete-orphan')
     validations = db.relationship('ValidationComptable', backref='ecriture', lazy=True)
-    
+
+    def get_journal_label(self):
+        return self.JOURNAUX.get(self.journal_code, self.journal_code or '-')
+
     def est_equilibree(self):
         total_debit = sum(l.debit for l in self.lignes) or 0
         total_credit = sum(l.credit for l in self.lignes) or 0
@@ -1732,3 +1769,213 @@ class ProtocolePatient(db.Model):
     patient = db.relationship('Patient', backref='protocoles_appliques')
     protocole = db.relationship('ProtocoleMedical', backref='patients_associes')
     structure = db.relationship('Structure', backref='protocoles_patients')
+
+# ============================================================
+# MODÈLE JOURNAL DES MOUVEMENTS
+# ============================================================
+
+class JournalMouvement(db.Model):
+    """Journal centralisé des mouvements de l'établissement"""
+    
+    __tablename__ = 'journal_mouvements'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, db.ForeignKey('structures.id'), nullable=False)
+    
+    # Catégorie et type
+    categorie = db.Column(db.String(50), nullable=False)
+    # vente_actes, vente_pharmacie, vente_lunettes, annulation_vente,
+    # paiement_facture, paiement_assurance, facture_emise, avoir_emis,
+    # recette_encaisee, depense_enregistree, proforma_cree, rendez_vous_pris
+    
+    sous_categorie = db.Column(db.String(50))
+    
+    # Référence
+    reference_type = db.Column(db.String(50))  # vente, facture, paiement, etc.
+    reference_id = db.Column(db.Integer)
+    
+    # Date du mouvement
+    date_mouvement = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    # Description
+    description = db.Column(db.Text)
+    
+    # Montant
+    montant = db.Column(db.Numeric, default=0)
+    type_montant = db.Column(db.String(10), default='neutre')  # credit, debit, neutre
+    
+    # Patient
+    patient_id = db.Column(db.Integer)
+    patient_nom = db.Column(db.String(200))
+    
+    # Utilisateur
+    utilisateur_id = db.Column(db.Integer)
+    utilisateur_nom = db.Column(db.String(100))
+    
+    # Détails supplémentaires (JSON)
+    details = db.Column(db.JSON, default={})
+    
+    # Statut
+    statut = db.Column(db.String(20), default='valide')  # valide, annule, en_attente
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    structure = db.relationship('Structure', backref='journal_mouvements')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'structure_id': self.structure_id,
+            'categorie': self.categorie,
+            'categorie_label': self.get_categorie_label(),
+            'sous_categorie': self.sous_categorie,
+            'reference_type': self.reference_type,
+            'reference_id': self.reference_id,
+            'date_mouvement': self.date_mouvement.isoformat() if self.date_mouvement else None,
+            'date_affichage': self.date_mouvement.strftime('%d/%m/%Y %H:%M') if self.date_mouvement else '',
+            'description': self.description,
+            'montant': float(self.montant) if self.montant else 0,
+            'type_montant': self.type_montant,
+            'montant_affichage': self.get_montant_affichage(),
+            'patient_id': self.patient_id,
+            'patient_nom': self.patient_nom,
+            'utilisateur_id': self.utilisateur_id,
+            'utilisateur_nom': self.utilisateur_nom,
+            'details': self.details or {},
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+    def get_categorie_label(self):
+        labels = {
+            'vente_actes': 'Vente d\'actes',
+            'vente_pharmacie': 'Vente pharmacie',
+            'vente_lunettes': 'Vente lunettes',
+            'annulation_vente': 'Annulation vente',
+            'paiement_facture': 'Paiement facture',
+            'paiement_assurance': 'Paiement assurance',
+            'facture_emise': 'Facture émise',
+            'avoir_emis': 'Avoir émis',
+            'recette_encaisee': 'Recette encaissée',
+            'depense_enregistree': 'Dépense enregistrée',
+            'proforma_cree': 'Proforma créé',
+            'rendez_vous_pris': 'Rendez-vous pris',
+            'consultation_terminee': 'Consultation terminée',
+            'ecriture_generee': 'Écriture comptable générée',
+            'salaire_paye': 'Salaire payé',
+            'employe_ajoute': 'Employé ajouté',
+            'conge_approuve': 'Congé approuvé',
+            'permission_approuvee': 'Permission approuvée',
+            'cloture_exercice': "Clôture d'exercice",
+        }
+        return labels.get(self.categorie, self.categorie)
+    
+    def get_statut_label(self):
+        labels = {
+            'valide': 'Valide',
+            'annule': 'Annulé',
+            'en_attente': 'En attente'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def get_montant_affichage(self):
+        if self.type_montant == 'credit':
+            return f"+ {abs(float(self.montant)):,.0f} F"
+        elif self.type_montant == 'debit':
+            return f"- {abs(float(self.montant)):,.0f} F"
+        else:
+            return f"{float(self.montant):,.0f} F"
+
+
+# ============================================================
+# PAIE (bulletin de paie — CNSS / INAM / IRPP Togo)
+# ============================================================
+# ⚠️ Les taux par défaut ci-dessous (ParametragePaie) sont des valeurs
+# indicatives, éditables dans l'écran "Paramètres de paie". À faire
+# valider par votre comptable / la DGI avant la première paie réelle —
+# la législation sociale et fiscale togolaise évolue.
+
+class ParametragePaie(db.Model):
+    __tablename__ = 'parametrage_paie'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False, unique=True)
+
+    taux_cnss_salarial = db.Column(db.Numeric, default=4.0)     # % du brut plafonné
+    taux_cnss_patronal = db.Column(db.Numeric, default=17.5)    # % du brut plafonné
+    plafond_cnss = db.Column(db.Numeric, default=600000)        # FCFA / mois
+
+    taux_inam_salarial = db.Column(db.Numeric, default=3.5)     # % du brut
+    taux_inam_patronal = db.Column(db.Numeric, default=3.5)     # % du brut
+
+    # Barème IRPP progressif : liste de {min, max, taux} en JSON, éditable.
+    tranches_irpp = db.Column(db.JSON, default=lambda: [
+        {'min': 0, 'max': 60000, 'taux': 0},
+        {'min': 60000, 'max': 150000, 'taux': 7},
+        {'min': 150000, 'max': 300000, 'taux': 15},
+        {'min': 300000, 'max': 500000, 'taux': 22},
+        {'min': 500000, 'max': 800000, 'taux': 28},
+        {'min': 800000, 'max': None, 'taux': 35},
+    ])
+
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = db.Column(db.String(100))
+
+    @classmethod
+    def get_ou_creer(cls, structure_id):
+        """Retourne le paramétrage de la structure, en le créant avec les
+        valeurs par défaut (à vérifier) s'il n'existe pas encore."""
+        param = cls.query.filter_by(structure_id=structure_id).first()
+        if not param:
+            param = cls(structure_id=structure_id)
+            db.session.add(param)
+            db.session.commit()
+        return param
+
+
+class Paie(db.Model):
+    __tablename__ = 'paies'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    employe_id = db.Column(db.Integer, db.ForeignKey('employes.id'), nullable=False)
+
+    annee = db.Column(db.Integer, nullable=False)
+    mois = db.Column(db.Integer, nullable=False)  # 1-12
+
+    salaire_base = db.Column(db.Numeric, default=0)
+    primes = db.Column(db.Numeric, default=0)
+    indemnites = db.Column(db.Numeric, default=0)
+    salaire_brut = db.Column(db.Numeric, default=0)
+
+    cnss_salarial = db.Column(db.Numeric, default=0)
+    cnss_patronal = db.Column(db.Numeric, default=0)
+    inam_salarial = db.Column(db.Numeric, default=0)
+    inam_patronal = db.Column(db.Numeric, default=0)
+    irpp = db.Column(db.Numeric, default=0)
+
+    total_retenues = db.Column(db.Numeric, default=0)              # CNSS+INAM sal. + IRPP
+    total_charges_patronales = db.Column(db.Numeric, default=0)    # CNSS+INAM patronal
+    net_a_payer = db.Column(db.Numeric, default=0)
+
+    statut = db.Column(db.String(20), default='brouillon')  # brouillon, valide, payee
+    mode_paiement = db.Column(db.String(50), default='especes')
+    date_paiement = db.Column(db.Date)
+
+    depense_id = db.Column(db.Integer)
+    ecriture_id = db.Column(db.Integer)
+
+    created_by = db.Column(db.String(100))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    employe = db.relationship('Employe', backref='paies', lazy=True)
+
+    def get_statut_label(self):
+        return {'brouillon': 'Brouillon', 'valide': 'Validée', 'payee': 'Payée'}.get(self.statut, self.statut)
+
+    def get_periode_label(self):
+        mois_noms = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+        return f"{mois_noms[self.mois]} {self.annee}"
