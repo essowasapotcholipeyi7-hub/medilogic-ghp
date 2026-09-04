@@ -942,60 +942,56 @@ def dashboard():
     
     total_patients = result if result else 0
     
-    today = datetime.now().strftime('%Y-%m-%d')
-    
-    # ========== VENTES ACTES ==========
-    ventes_actes = sheets_helper.get_all_records('ventes_actes')
-    ventes_actes_filtrees = [v for v in ventes_actes if str(v.get('structure_id')) == str(structure_id)]
-    
+    # ⭐ FIX : les ventes vivent dans Postgres (table `ventes`) depuis
+    # longtemps déjà — ce tableau de bord lisait encore d'anciennes feuilles
+    # Google Sheets ('ventes_actes'/'ventes_pharma') qui n'existent plus
+    # ("Feuille struct_X_ventes_actes non trouvée"), donc les compteurs du
+    # jour et le CA affichaient toujours zéro. Lecture directe en base,
+    # comme partout ailleurs dans l'application (historique des ventes,
+    # comptabilité...).
+    stats_jour = db.session.execute(text("""
+        SELECT type,
+               COUNT(*) as nb,
+               COALESCE(SUM(net_a_payer), 0) as ca
+        FROM ventes
+        WHERE structure_id = :structure_id
+        AND DATE(date_vente) = CURRENT_DATE
+        AND (statut IS NULL OR statut != 'annulee')
+        GROUP BY type
+    """), {'structure_id': structure_id}).fetchall()
+
     actes_today = 0
-    ca_actes_today = 0
-    
-    for v in ventes_actes_filtrees:
-        date_vente = v.get('date', '')
-        if date_vente and date_vente.startswith(today):
-            actes_today += 1
-            ca_actes_today += float(v.get('net_a_payer', 0))
-    
-    # ========== VENTES PHARMACIE ==========
-    ventes_pharma = sheets_helper.get_all_records('ventes_pharma')
-    ventes_pharma_filtrees = [v for v in ventes_pharma if str(v.get('structure_id')) == str(structure_id)]
-    
+    ca_actes_today = 0.0
     ventes_pharma_today = 0
-    ca_pharma_today = 0
-    
-    for v in ventes_pharma_filtrees:
-        date_vente = v.get('date', '')
-        if date_vente and date_vente.startswith(today):
-            ventes_pharma_today += 1
-            ca_pharma_today += float(v.get('net_a_payer', 0))
-    
-    # ========== CA TOTAL ==========
+    ca_pharma_today = 0.0
+    for row in stats_jour:
+        nb, ca = int(row.nb or 0), float(row.ca or 0)
+        if row.type in ('pharma', 'pharmacie'):
+            ventes_pharma_today += nb
+            ca_pharma_today += ca
+        else:  # actes, mixte, lunettes...
+            actes_today += nb
+            ca_actes_today += ca
+
     ca_today = ca_actes_today + ca_pharma_today
-    
+
     # ========== ACTIVITÉS RÉCENTES ==========
-    toutes_ventes = []
-    
-    for v in ventes_actes_filtrees:
-        toutes_ventes.append({
-            'id': v.get('ID'),
-            'type': 'actes',
-            'patient_nom': v.get('patient_nom', 'Patient'),
-            'date': v.get('date', ''),
-            'montant': float(v.get('net_a_payer', 0))
-        })
-    
-    for v in ventes_pharma_filtrees:
-        toutes_ventes.append({
-            'id': v.get('ID'),
-            'type': 'pharma',
-            'patient_nom': v.get('patient_nom', 'Patient'),
-            'date': v.get('date', ''),
-            'montant': float(v.get('net_a_payer', 0))
-        })
-    
-    toutes_ventes.sort(key=lambda x: x.get('date', ''), reverse=True)
-    recentes = toutes_ventes[:10]
+    ventes_recentes = db.session.execute(text("""
+        SELECT id, type, patient_nom, date_vente, net_a_payer
+        FROM ventes
+        WHERE structure_id = :structure_id
+        AND (statut IS NULL OR statut != 'annulee')
+        ORDER BY date_vente DESC
+        LIMIT 10
+    """), {'structure_id': structure_id}).fetchall()
+
+    recentes = [{
+        'id': r.id,
+        'type': 'pharma' if r.type in ('pharma', 'pharmacie') else (r.type or 'actes'),
+        'patient_nom': r.patient_nom or 'Patient',
+        'date': r.date_vente.strftime('%Y-%m-%d %H:%M') if r.date_vente else '',
+        'montant': float(r.net_a_payer or 0),
+    } for r in ventes_recentes]
     
     return render_template('dashboard.html',
                          total_patients=total_patients,
