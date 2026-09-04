@@ -1706,22 +1706,26 @@ def facture(vente_id, type):
     prise_en_charge2 = 0
     numero_assure2 = ''
     
-    # CORRECTION : Accepter 'pharma' et 'pharmacie'
-    type_bd = 'pharmacie' if type == 'pharma' else type
-    
-    # Lire depuis NEON
+    # ⭐ FIX : même correctif que /recu — ne pas exiger v.type = %s en plus
+    # de l'id, sinon une vente réelle mais dont le type stocké diverge du
+    # type de l'URL (ex: mixte) renvoie un faux "non trouvée". On récupère
+    # par id + structure_id, puis on déduit type_bd de la ligne trouvée.
     vente = db.execute_query("""
         SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
-               p.assurance2_nom as patient_assurance2_nom, 
-               p.taux_assurance2 as patient_taux_assurance2, 
+               p.assurance2_nom as patient_assurance2_nom,
+               p.taux_assurance2 as patient_taux_assurance2,
                p.numero_assure2
         FROM ventes v
         LEFT JOIN patients p ON v.patient_id = p.id
-        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
-    """, (vente_id, structure_id, type_bd))
-    
+        WHERE v.id = %s AND v.structure_id = %s
+    """, (vente_id, structure_id))
+
     if not vente or len(vente) == 0:
         return f"Vente {vente_id} non trouvée", 404
+
+    v0 = vente[0]
+    type_bd_stockee = v0.get('type') if isinstance(v0, dict) else (v0[3] if len(v0) > 3 else None)
+    type_bd = type_bd_stockee or ('pharmacie' if type == 'pharma' else type)
     
     if isinstance(vente[0], dict):
         v = vente[0]
@@ -1864,22 +1868,26 @@ def facture_structure(vente_id, type):
     prise_en_charge2 = 0
     numero_assure2 = ''
     
-    # CORRECTION : Accepter 'pharma' et 'pharmacie'
-    type_bd = 'pharmacie' if type == 'pharma' else type
-    
-    # Lire depuis NEON
+    # ⭐ FIX : même correctif que /recu — ne pas exiger v.type = %s en plus
+    # de l'id, sinon une vente réelle mais dont le type stocké diverge du
+    # type de l'URL (ex: mixte) renvoie un faux "non trouvée". On récupère
+    # par id + structure_id, puis on déduit type_bd de la ligne trouvée.
     vente = db.execute_query("""
         SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
-               p.assurance2_nom as patient_assurance2_nom, 
-               p.taux_assurance2 as patient_taux_assurance2, 
+               p.assurance2_nom as patient_assurance2_nom,
+               p.taux_assurance2 as patient_taux_assurance2,
                p.numero_assure2
         FROM ventes v
         LEFT JOIN patients p ON v.patient_id = p.id
-        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
-    """, (vente_id, structure_id, type_bd))
-    
+        WHERE v.id = %s AND v.structure_id = %s
+    """, (vente_id, structure_id))
+
     if not vente or len(vente) == 0:
         return f"Vente {vente_id} non trouvée", 404
+
+    v0 = vente[0]
+    type_bd_stockee = v0.get('type') if isinstance(v0, dict) else (v0[3] if len(v0) > 3 else None)
+    type_bd = type_bd_stockee or ('pharmacie' if type == 'pharma' else type)
     
     if isinstance(vente[0], dict):
         v = vente[0]
@@ -2143,45 +2151,45 @@ def recu(vente_id, type):
     aide_hospitaliere = 0
     assurance_principale_active = True
     
-    # 🔥🔥🔥 CORRECTION : Gérer le type 'mixte' 🔥🔥🔥
-    # Si type = 'mixte', on ne filtre pas sur le type de vente
-    if type == 'mixte':
-        vente = db.execute_query("""
-            SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
-                   p.assurance2_nom as patient_assurance2_nom, 
-                   p.taux_assurance2 as patient_taux_assurance2, 
-                   p.numero_assure2,
-                   v.reste_a_payer,
-                   v.base_remboursement,
-                   v.assurance_principale_active,
-                   v.taux_aide,
-                   v.aide_hospitaliere
-            FROM ventes v
-            LEFT JOIN patients p ON v.patient_id = p.id
-            WHERE v.id = %s AND v.structure_id = %s
-        """, (vente_id, structure_id))
+    # ⭐ FIX : la route exigeait avant AND v.type = %s en plus de l'id — si le
+    # type stocké en base diverge de la moindre façon du type demandé dans
+    # l'URL (ex: vente réellement 'mixte' mais reçu ouvert avec type='actes',
+    # ou toute incohérence de saisie historique), une vente pourtant bien
+    # réelle et visible partout ailleurs dans l'appli renvoyait un 404. On
+    # cherche maintenant par id + structure_id UNIQUEMENT (identifiant fiable
+    # à lui seul), puis on détermine le type EFFECTIF à partir de la ligne
+    # trouvée pour savoir quels articles afficher.
+    vente = db.execute_query("""
+        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
+               p.assurance2_nom as patient_assurance2_nom,
+               p.taux_assurance2 as patient_taux_assurance2,
+               p.numero_assure2,
+               v.reste_a_payer,
+               v.base_remboursement,
+               v.assurance_principale_active,
+               v.taux_aide,
+               v.aide_hospitaliere
+        FROM ventes v
+        LEFT JOIN patients p ON v.patient_id = p.id
+        WHERE v.id = %s AND v.structure_id = %s
+    """, (vente_id, structure_id))
+
+    type_bd_stockee = None
+    if vente and len(vente) > 0:
+        v0 = vente[0]
+        type_bd_stockee = v0.get('type') if isinstance(v0, dict) else (v0[3] if len(v0) > 3 else None)
+
+    if type == 'mixte' or type_bd_stockee == 'mixte':
         type_bd = 'mixte'
+    elif type_bd_stockee:
+        type_bd = type_bd_stockee  # ⭐ on fait confiance à la valeur réelle en base
     else:
         type_bd = 'pharmacie' if type == 'pharma' else type
-        vente = db.execute_query("""
-            SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
-                   p.assurance2_nom as patient_assurance2_nom, 
-                   p.taux_assurance2 as patient_taux_assurance2, 
-                   p.numero_assure2,
-                   v.reste_a_payer,
-                   v.base_remboursement,
-                   v.assurance_principale_active,
-                   v.taux_aide,
-                   v.aide_hospitaliere
-            FROM ventes v
-            LEFT JOIN patients p ON v.patient_id = p.id
-            WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
-        """, (vente_id, structure_id, type_bd))
-    
-    print(f"🔍 Recherche vente {vente_id} (type reçu: {type}, type BD: {type_bd})")
-    
+
+    print(f"🔍 Recherche vente {vente_id} (type reçu: {type}, type en base: {type_bd_stockee}, type retenu: {type_bd})")
+
     if not vente or len(vente) == 0:
-        return f"Vente {vente_id} non trouvée (type: {type_bd})", 404
+        return f"Vente {vente_id} non trouvée (structure {structure_id})", 404
     
     if isinstance(vente[0], dict):
         v = vente[0]
@@ -2245,7 +2253,12 @@ def recu(vente_id, type):
                 produits_data = []
         
         # 🔥🔥🔥 SI MIXTE : Prendre actes + produits 🔥🔥🔥
-        if type == 'mixte':
+        # ⭐ FIX : se base sur type_bd (le type réellement stocké en base,
+        # déterminé plus haut) plutôt que sur `type` (paramètre d'URL, qui
+        # peut être un ancien lien 'actes'/'pharma' pour une vente en réalité
+        # mixte) — sinon une vente mixte affiche uniquement ses actes OU ses
+        # produits selon le lien utilisé pour ouvrir le reçu.
+        if type_bd == 'mixte':
             # Utiliser actes_data + produits_data
             tous_articles = actes_data + produits_data
             print(f"📊 MIXTE: {len(actes_data)} actes + {len(produits_data)} produits = {len(tous_articles)} articles")
@@ -2451,22 +2464,26 @@ def recu_structure(vente_id, type):
     prise_en_charge2 = 0
     numero_assure2 = ''
     
-    # CORRECTION : Accepter 'pharma' et 'pharmacie'
-    type_bd = 'pharmacie' if type == 'pharma' else type
-    
-    # Lire depuis NEON
+    # ⭐ FIX : même correctif que /recu — ne pas exiger v.type = %s en plus
+    # de l'id, sinon une vente réelle mais dont le type stocké diverge du
+    # type de l'URL (ex: mixte) renvoie un faux "non trouvée". On récupère
+    # par id + structure_id, puis on déduit type_bd de la ligne trouvée.
     vente = db.execute_query("""
         SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
-               p.assurance2_nom as patient_assurance2_nom, 
-               p.taux_assurance2 as patient_taux_assurance2, 
+               p.assurance2_nom as patient_assurance2_nom,
+               p.taux_assurance2 as patient_taux_assurance2,
                p.numero_assure2
         FROM ventes v
         LEFT JOIN patients p ON v.patient_id = p.id
-        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
-    """, (vente_id, structure_id, type_bd))
-    
+        WHERE v.id = %s AND v.structure_id = %s
+    """, (vente_id, structure_id))
+
     if not vente or len(vente) == 0:
         return f"Vente {vente_id} non trouvée", 404
+
+    v0 = vente[0]
+    type_bd_stockee = v0.get('type') if isinstance(v0, dict) else (v0[3] if len(v0) > 3 else None)
+    type_bd = type_bd_stockee or ('pharmacie' if type == 'pharma' else type)
     
     if isinstance(vente[0], dict):
         v = vente[0]
