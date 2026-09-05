@@ -79,12 +79,35 @@ class Patient(db.Model):
     assurance2_nom = db.Column(db.String(100))
     taux_assurance2 = db.Column(db.Float, default=0)
     numero_assure2 = db.Column(db.String(50))
+    # Société souscriptrice de l'assurance complémentaire (ex: l'employeur qui
+    # a souscrit le contrat groupe auprès de GTA/SUNU/NSIA...)
+    societe_assurance2 = db.Column(db.String(150))
     personne_a_prevenir_nom = db.Column(db.String(100))
     personne_a_prevenir_telephone = db.Column(db.String(50))
     personne_a_prevenir_relation = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-   
+
+# ============================================================
+# SOCIÉTÉS SOUSCRIPTRICES D'ASSURANCE COMPLÉMENTAIRE
+# ============================================================
+# Une assurance complémentaire (GTA, SUNU, NSIA...) est en général souscrite
+# par un employeur pour ses salariés (contrat groupe). Cette table mémorise,
+# par structure et par assurance, les sociétés déjà saisies une première
+# fois, pour proposer ensuite un simple choix au lieu d'une re-saisie.
+class SocieteAssurance(db.Model):
+    __tablename__ = 'societes_assurance'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, db.ForeignKey('structures.id'), nullable=False)
+    assurance_nom = db.Column(db.String(100), nullable=False)
+    nom_societe = db.Column(db.String(150), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('structure_id', 'assurance_nom', 'nom_societe', name='uq_societe_assurance'),
+    )
+
 
 # ============================================================
 # STRUCTURE MAPPING (pour la synchronisation)
@@ -824,6 +847,10 @@ class Vente(db.Model):
     taux_assurance2 = db.Column(db.Float, default=0)
     prise_en_charge2 = db.Column(db.Float, default=0)
     numero_assure2 = db.Column(db.String(50))
+    # Société souscriptrice de l'assurance complémentaire, capturée au moment
+    # de la vente (même logique que assurance2_nom/taux_assurance2 : un
+    # instantané, pas une référence vivante vers le patient).
+    societe_assurance2 = db.Column(db.String(150))
     montant_donne = db.Column(db.Float, default=0)
     rendu = db.Column(db.Float, default=0)
     reste_a_payer = db.Column(db.Float, default=0)

@@ -5,6 +5,7 @@ from collections import defaultdict
 from sqlalchemy import or_, func, and_
 import json
 from utils.categorisation import categoriser_acte
+from utils.nombres_lettres import montant_en_lettres_fcfa
 
 from models import db, Vente, Patient, Structure
 
@@ -572,21 +573,36 @@ def calculer_stats_actes(ventes):
     return stats
 
 
+def _societe_vente(vente, patients_dict_societe=None):
+    """Société souscriptrice de l'assurance complémentaire pour une vente :
+    l'instantané pris à la vente si disponible, sinon (ventes créées avant
+    l'existence du champ) la valeur courante sur la fiche patient."""
+    societe = getattr(vente, 'societe_assurance2', None)
+    if societe:
+        return societe
+    if patients_dict_societe:
+        return patients_dict_societe.get(vente.patient_id) or ''
+    return ''
+
+
 def calculer_stats_assurances(ventes, patients, patients_dict):
+    patients_dict_societe = {p.id: getattr(p, 'societe_assurance2', None) for p in patients}
+
     assurance_data = defaultdict(lambda: {
         'total_ventes': 0,
         'total_montant': 0,
         'total_prise_en_charge': 0,
         'total_reste': 0,
         'patients': set(),
-        'ventes': []
+        'ventes': [],
+        'societes': defaultdict(lambda: {'nb_ventes': 0, 'montant': 0, 'prise_en_charge': 0, 'patients': set()})
     })
-    
+
     for vente in ventes:
         assurance_principale = patients_dict.get(vente.patient_id, 'non_assure') or 'non_assure'
         if assurance_principale == '':
             assurance_principale = 'non_assure'
-        
+
         if assurance_principale != 'non_assure':
             data = assurance_data[assurance_principale]
             data['total_ventes'] += 1
@@ -596,7 +612,7 @@ def calculer_stats_assurances(ventes, patients, patients_dict):
             if vente.patient_id:
                 data['patients'].add(vente.patient_id)
             data['ventes'].append(vente)
-        
+
         if vente.assurance2_nom and vente.assurance2_nom != '' and vente.assurance2_nom != 'Aucune':
             assurance_complementaire = vente.assurance2_nom.lower()
             data = assurance_data[assurance_complementaire]
@@ -607,7 +623,16 @@ def calculer_stats_assurances(ventes, patients, patients_dict):
             if vente.patient_id:
                 data['patients'].add(vente.patient_id)
             data['ventes'].append(vente)
-        
+
+            societe = _societe_vente(vente, patients_dict_societe)
+            if societe:
+                sdata = data['societes'][societe]
+                sdata['nb_ventes'] += 1
+                sdata['montant'] += float(vente.net_a_payer or 0)
+                sdata['prise_en_charge'] += float(vente.prise_en_charge2 or 0)
+                if vente.patient_id:
+                    sdata['patients'].add(vente.patient_id)
+
         if assurance_principale == 'non_assure' and (not vente.assurance2_nom or vente.assurance2_nom == ''):
             data = assurance_data['non_assure']
             data['total_ventes'] += 1
@@ -617,7 +642,7 @@ def calculer_stats_assurances(ventes, patients, patients_dict):
             if vente.patient_id:
                 data['patients'].add(vente.patient_id)
             data['ventes'].append(vente)
-    
+
     result = []
     for assurance, data in assurance_data.items():
         if assurance == 'non_assure':
@@ -628,13 +653,25 @@ def calculer_stats_assurances(ventes, patients, patients_dict):
             assurance_label = 'AMU-INAM'
         else:
             assurance_label = ASSURANCE_LABELS.get(assurance, assurance.upper())
-        
+
         patients_details = []
         for patient_id in data['patients']:
             patient = next((p for p in patients if p.id == patient_id), None)
             patient_nom = f"{patient.prenom} {patient.nom}" if patient and patient.prenom else (patient.nom if patient else 'Patient')
             patients_details.append({'id': patient_id, 'nom': patient_nom})
-        
+
+        societes_details = [
+            {
+                'societe': nom_societe,
+                'nb_ventes': sdata['nb_ventes'],
+                'nb_patients': len(sdata['patients']),
+                'montant': round(sdata['montant'], 2),
+                'prise_en_charge': round(sdata['prise_en_charge'], 2),
+            }
+            for nom_societe, sdata in data['societes'].items()
+        ]
+        societes_details.sort(key=lambda s: s['societe'])
+
         result.append({
             'assurance': assurance,
             'assurance_label': assurance_label,
@@ -643,9 +680,10 @@ def calculer_stats_assurances(ventes, patients, patients_dict):
             'montant_total': round(data['total_montant'], 2),
             'prise_en_charge': round(data['total_prise_en_charge'], 2),
             'reste_a_payer': round(data['total_reste'], 2),
-            'patients': patients_details
+            'patients': patients_details,
+            'societes': societes_details
         })
-    
+
     return result
 
 
@@ -733,11 +771,13 @@ def get_patients_par_assurance(ventes, patients, patients_dict, type_assurance='
             assurance_principale = 'non_assure'
         
         assurance_complementaire = ''
+        societe_assurance2 = ''
         for v in ventes_patient:
             if v.assurance2_nom and v.assurance2_nom != '' and v.assurance2_nom != 'Aucune':
                 assurance_complementaire = v.assurance2_nom.lower()
+                societe_assurance2 = _societe_vente(v) or (patient.societe_assurance2 or '')
                 break
-        
+
         # ⭐ Calcul des montants à partir des actes/produits
         total_prix = 0
         total_part_amu = 0
@@ -768,14 +808,18 @@ def get_patients_par_assurance(ventes, patients, patients_dict, type_assurance='
                     'patient_nom': f"{patient.prenom} {patient.nom}".strip() or patient.nom,
                     'numero_assure': '',
                     'numero_assure2': patient.numero_assure2 or '',
+                    'societe': societe_assurance2,
                     'montant_beneficiaire': total_reste_patient,
                     'part_assurance': total_part_cac,
                     'nb_actes': nb_actes if nb_actes > 0 else len(ventes_patient),
                     'nb_ventes': len(ventes_patient),
                     'derniere_visite': derniere_visite.strftime('%d/%m/%Y') if derniere_visite else '',
-                    'est_double_assurance': True
+                    'est_double_assurance': True,
+                    'details': details_affichage,
+                    'details_complet': details_liste,
+                    'dates_ventes': [v.date_vente.strftime('%d/%m/%Y') for v in ventes_patient if v.date_vente]
                 })
-                
+
                 # Ligne de l'assurance PRINCIPALE
                 if assurance_principale != 'non_assure':
                     if assurance_principale == 'amu_cnss':
@@ -868,12 +912,16 @@ def get_patients_par_assurance(ventes, patients, patients_dict, type_assurance='
                     'patient_nom': f"{patient.prenom} {patient.nom}".strip() or patient.nom,
                     'numero_assure': '',
                     'numero_assure2': patient.numero_assure2 or '',
+                    'societe': societe_assurance2,
                     'montant_beneficiaire': total_reste_patient,
                     'part_assurance': total_part_cac,
                     'nb_actes': nb_actes if nb_actes > 0 else len(ventes_patient),
                     'nb_ventes': len(ventes_patient),
                     'derniere_visite': derniere_visite.strftime('%d/%m/%Y') if derniere_visite else '',
-                    'est_double_assurance': True
+                    'est_double_assurance': True,
+                    'details': details_affichage,
+                    'details_complet': details_liste,
+                    'dates_ventes': [v.date_vente.strftime('%d/%m/%Y') for v in ventes_patient if v.date_vente]
                 })
             
             # Non assuré
@@ -911,7 +959,11 @@ def get_patients_par_assurance(ventes, patients, patients_dict, type_assurance='
 @statistiques_bp.route('/assurance/bordereau')
 def bordereau_assurance():
     """Génère un bordereau imprimable détaillé pour UNE compagnie
-    d'assurance sur une période donnée (patients, prestations, montants)."""
+    d'assurance (optionnellement restreint à UNE société souscriptrice) sur
+    une période donnée (patients, prestations, montants), arrêté en toutes
+    lettres — prêt à imprimer en PDF (Ctrl+P > Enregistrer en PDF, comme les
+    autres documents imprimables de l'application) et à adresser à la
+    compagnie."""
     structure_id = session.get('structure_id')
     if not structure_id:
         return "Structure non trouvée", 400
@@ -919,6 +971,8 @@ def bordereau_assurance():
     assurance_code = request.args.get('assurance', '').strip()
     if not assurance_code or assurance_code == 'toutes':
         return "Veuillez préciser une compagnie d'assurance (paramètre 'assurance')", 400
+
+    societe_filtre = (request.args.get('societe') or '').strip()
 
     periode = request.args.get('periode', 'mois')
     date_debut_str = request.args.get('date_debut')
@@ -954,10 +1008,19 @@ def bordereau_assurance():
     total_reste = 0.0
 
     for v in ventes:
+        patient = Patient.query.get(v.patient_id)
+
+        # Filtre par société souscriptrice (assurance complémentaire
+        # uniquement) : instantané pris à la vente, sinon valeur courante
+        # sur la fiche patient (ventes antérieures à ce champ).
+        if not est_principale and societe_filtre:
+            societe_vente = _societe_vente(v) or (patient.societe_assurance2 if patient else '')
+            if (societe_vente or '').strip().lower() != societe_filtre.lower():
+                continue
+
         montants = calculer_montants_vente(v)
         part_assurance = montants['part_amu'] if est_principale else montants['part_cac']
         numero_assure = None
-        patient = Patient.query.get(v.patient_id)
         if patient:
             numero_assure = patient.numero_assure if est_principale else patient.numero_assure2
 
@@ -991,15 +1054,23 @@ def bordereau_assurance():
 
     structure = Structure.query.get(structure_id)
 
+    # Numéro de bordereau (traçabilité du document) et montant arrêté en
+    # toutes lettres, adressé à la compagnie/société.
+    numero_bordereau = f"BDX-{structure_id}-{assurance_code.upper()}-{datetime.now().strftime('%Y%m%d%H%M')}"
+    montant_lettres = montant_en_lettres_fcfa(total_part_assurance)
+
     return render_template(
         'statistiques_assurance_print.html',
         structure=structure,
         nom_compagnie=nom_compagnie,
+        nom_societe=societe_filtre,
+        numero_bordereau=numero_bordereau,
         periode_libelle=dates['libelle'],
         lignes=lignes,
         total_montant=total_montant,
         total_part_assurance=total_part_assurance,
         total_reste=total_reste,
+        montant_lettres=montant_lettres,
         nb_patients=len(set(l['patient_nom'] for l in lignes)),
         now=datetime.now(),
     )

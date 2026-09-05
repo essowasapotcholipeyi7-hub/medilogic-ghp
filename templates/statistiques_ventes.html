@@ -337,8 +337,14 @@
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label small">Assurance</label>
-                                    <select class="form-control form-control-sm" id="statsFiltreAssurance" onchange="chargerStatsAssurances()">
+                                    <select class="form-control form-control-sm" id="statsFiltreAssurance" onchange="onChangeFiltreAssurance()">
                                         <option value="toutes">Toutes</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2" id="statsFiltreSocieteGroup" style="display:none;">
+                                    <label class="form-label small">Société souscriptrice</label>
+                                    <select class="form-control form-control-sm" id="statsFiltreSociete" onchange="chargerStatsAssurances()">
+                                        <option value="toutes">Toutes les sociétés</option>
                                     </select>
                                 </div>
                                 <div class="col-md-2">
@@ -355,6 +361,16 @@
                                         <i class="fas fa-sync-alt"></i> Actualiser
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- SOCIÉTÉS SOUSCRIPTRICES PAR ASSURANCE COMPLÉMENTAIRE -->
+                        <div class="card mb-4" id="cardSocietesParAssurance" style="display:none;">
+                            <div class="card-header bg-secondary text-white">
+                                <i class="fas fa-building"></i> Sociétés souscriptrices — <span id="societesAssuranceLabel"></span>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-2" id="societesParAssuranceList"></div>
                             </div>
                         </div>
 
@@ -452,6 +468,7 @@
                 <thead class="table-light">
                     <tr>
                         <th>Assurance</th>
+                        <th>Société</th>
                         <th>Patient</th>
                         <th>N° Assuré</th>
                         <th>Date</th>
@@ -462,17 +479,33 @@
                     </tr>
                 </thead>
                 <tbody id="assurancePatientsBody">
-                    <tr><td colspan="8" class="text-center text-muted">Chargement...</td></tr>
+                    <tr><td colspan="9" class="text-center text-muted">Chargement...</td></tr>
                 </tbody>
                 <tfoot class="table-light" id="assurancePatientsFooter">
                     <tr class="fw-bold">
-                        <td colspan="5" class="text-end">TOTAUX :</td>
+                        <td colspan="6" class="text-end">TOTAUX :</td>
                         <td id="assuranceTotalBeneficiaire">0 FCFA</td>
                         <td id="assuranceTotalPartAssurance">0 FCFA</td>
                         <td></td>
                     </tr>
                 </tfoot>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL DÉTAIL PATIENT (articles payés, dates, part assuré/assurance) -->
+<div class="modal fade" id="detailArticlesAssuranceModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-file-medical"></i> Détail — <span id="detailArticlesPatientNom"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detailArticlesBody"></div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
         </div>
     </div>
 </div>
@@ -1152,7 +1185,8 @@ function chargerAssurances() {
                         }
                         
                         option.textContent = `${label} (${item.nb_patients} patients)`;
-                        
+                        option.dataset.type = item.type || '';
+
                         if (option.value === currentValue) {
                             option.selected = true;
                         }
@@ -1167,6 +1201,37 @@ function chargerAssurances() {
             });
     });
 }
+// ⭐ Quand l'assurance change : affiche/masque le filtre "Société
+// souscriptrice" (uniquement pertinent pour une assurance complémentaire)
+// et le repeuple via l'autocomplétion déjà utilisée dans la fiche patient.
+function onChangeFiltreAssurance() {
+    const select = document.getElementById('statsFiltreAssurance');
+    const societeGroup = document.getElementById('statsFiltreSocieteGroup');
+    const societeSelect = document.getElementById('statsFiltreSociete');
+    const type = select.selectedOptions[0]?.dataset.type || '';
+
+    if (type === 'complementaire') {
+        societeGroup.style.display = 'block';
+        fetch(`/api/societes-assurance?assurance=${encodeURIComponent(select.value.toUpperCase())}`)
+            .then(r => r.json())
+            .then(societes => {
+                societeSelect.innerHTML = '<option value="toutes">Toutes les sociétés</option>';
+                (societes || []).forEach(nom => {
+                    const opt = document.createElement('option');
+                    opt.value = nom;
+                    opt.textContent = nom;
+                    societeSelect.appendChild(opt);
+                });
+            })
+            .catch(() => { societeSelect.innerHTML = '<option value="toutes">Toutes les sociétés</option>'; });
+    } else {
+        societeGroup.style.display = 'none';
+        societeSelect.innerHTML = '<option value="toutes">Toutes les sociétés</option>';
+    }
+
+    chargerStatsAssurances();
+}
+
 function chargerStatsAssurances() {
     if (chargementEnCours) {
         console.log('⏳ Chargement déjà en cours...');
@@ -1264,7 +1329,18 @@ function chargerStatsAssurances() {
             if (statsTotalVentes) statsTotalVentes.textContent = data.stats_globales?.total_ventes || 0;
             
             afficherStatsCategories(data.stats_actes);
-            afficherPatientsAssurances(data.patients_par_assurance || []);
+
+            // ⭐ Filtre société (client-side : le backend renvoie déjà le
+            // champ `societe` sur chaque ligne d'assurance complémentaire)
+            const societeSelect = document.getElementById('statsFiltreSociete');
+            const societeFiltre = societeSelect && societeSelect.closest('div').style.display !== 'none'
+                ? societeSelect.value : 'toutes';
+            let patientsAssurances = data.patients_par_assurance || [];
+            if (societeFiltre && societeFiltre !== 'toutes') {
+                patientsAssurances = patientsAssurances.filter(p => (p.societe || '') === societeFiltre);
+            }
+            afficherPatientsAssurances(patientsAssurances);
+            afficherSocietesParAssurance(data.stats_assurances || []);
             mettreAJourStatsPatients(data.ventes || []);
             
             console.log('✅ Statistiques chargées avec succès');
@@ -1347,7 +1423,7 @@ function afficherPatientsAssurances(patients) {
     tbody.innerHTML = '';
 
     if (!patients || patients.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Aucun patient trouvé</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Aucun patient trouvé</td></tr>';
         document.getElementById('assuranceTotalBeneficiaire').textContent = '0 FCFA';
         document.getElementById('assuranceTotalPartAssurance').textContent = '0 FCFA';
         return;
@@ -1387,6 +1463,7 @@ function afficherPatientsAssurances(patients) {
         const row = tbody.insertRow();
         row.innerHTML = `
             <td><span class="badge ${badgeClass}">${assuranceDisplay}</span></td>
+            <td>${p.societe ? `<small>${p.societe}</small>` : '-'}</td>
             <td><strong>${p.patient_nom}</strong></td>
             <td>${numeroAssure}</td>
             <td>${p.derniere_visite || '-'}</td>
@@ -1395,6 +1472,11 @@ function afficherPatientsAssurances(patients) {
             <td>${partAssurance.toLocaleString('fr-FR')} FCFA</td>
             <td>${doubleBadge}</td>
         `;
+        if (p.details) {
+            row.style.cursor = 'pointer';
+            row.title = 'Cliquer pour voir le détail des articles payés';
+            row.onclick = () => afficherDetailArticlesPatientAssurance(p);
+        }
 
         // ⭐ Montant bénéficiaire : chaque patient compté une seule fois
         if (!patientsUniques.has(p.patient_id)) {
@@ -1407,6 +1489,107 @@ function afficherPatientsAssurances(patients) {
 
     document.getElementById('assuranceTotalBeneficiaire').textContent = totalBeneficiaire.toLocaleString('fr-FR') + ' FCFA';
     document.getElementById('assuranceTotalPartAssurance').textContent = totalPartAssurance.toLocaleString('fr-FR') + ' FCFA';
+}
+
+// ⭐ Détail au clic : articles payés, dates, part assuré / part assurance
+// pour un patient (ligne assurance complémentaire ou société).
+function afficherDetailArticlesPatientAssurance(p) {
+    document.getElementById('detailArticlesPatientNom').textContent = p.patient_nom || '';
+
+    const articles = (p.details_complet && p.details_complet.length)
+        ? p.details_complet.map(a => `<li>${a}</li>`).join('')
+        : '<li class="text-muted">Aucun détail disponible</li>';
+
+    const dates = (p.dates_ventes && p.dates_ventes.length)
+        ? p.dates_ventes.join(', ')
+        : (p.derniere_visite || '-');
+
+    document.getElementById('detailArticlesBody').innerHTML = `
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <strong>Assurance :</strong> ${p.assurance_label || p.assurance || '-'}
+                ${p.societe ? `<br><strong>Société :</strong> ${p.societe}` : ''}
+            </div>
+            <div class="col-md-6">
+                <strong>N° assuré :</strong> ${p.numero_assure2 || p.numero_assure || '-'}<br>
+                <strong>Date(s) de vente :</strong> ${dates}
+            </div>
+        </div>
+        <h6><i class="fas fa-pills"></i> Articles payés</h6>
+        <ul>${articles}</ul>
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <div class="card bg-success bg-opacity-10 border-0">
+                    <div class="card-body text-center">
+                        <div class="text-muted small">Part assurance</div>
+                        <div class="fw-bold fs-5">${(p.part_assurance || 0).toLocaleString('fr-FR')} FCFA</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card bg-warning bg-opacity-10 border-0">
+                    <div class="card-body text-center">
+                        <div class="text-muted small">Part patient / bénéficiaire</div>
+                        <div class="fw-bold fs-5">${(p.montant_beneficiaire || 0).toLocaleString('fr-FR')} FCFA</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    new bootstrap.Modal(document.getElementById('detailArticlesAssuranceModal')).show();
+}
+
+// ⭐ Sociétés souscriptrices de l'assurance complémentaire actuellement
+// filtrée : cliquer sur une société applique le filtre société + rouvre
+// le détail (patients concernés, articles payés...) dans le tableau du bas.
+function afficherSocietesParAssurance(statsAssurances) {
+    const card = document.getElementById('cardSocietesParAssurance');
+    const list = document.getElementById('societesParAssuranceList');
+    const assurance = document.getElementById('statsFiltreAssurance').value;
+
+    if (assurance === 'toutes' || assurance === 'non_assure') {
+        card.style.display = 'none';
+        return;
+    }
+
+    const entry = (statsAssurances || []).find(a => a.assurance === assurance.toLowerCase());
+    if (!entry || !entry.societes || entry.societes.length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+
+    document.getElementById('societesAssuranceLabel').textContent = entry.assurance_label;
+    const societeActive = document.getElementById('statsFiltreSociete')?.value || 'toutes';
+
+    list.innerHTML = entry.societes.map(s => `
+        <div class="col-md-3">
+            <div class="card ${s.societe === societeActive ? 'border-primary border-2' : 'border-0'} shadow-sm h-100"
+                 style="cursor:pointer;" onclick="filtrerParSociete('${s.societe.replace(/'/g, "\\'")}')">
+                <div class="card-body p-2">
+                    <div class="fw-bold small">${s.societe}</div>
+                    <div class="text-muted" style="font-size:11px;">${s.nb_patients} patient(s) — ${s.nb_ventes} vente(s)</div>
+                    <div class="text-success small">${s.prise_en_charge.toLocaleString('fr-FR')} FCFA pris en charge</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    card.style.display = 'block';
+}
+
+function filtrerParSociete(nomSociete) {
+    const select = document.getElementById('statsFiltreSociete');
+    if (!select) return;
+    if (![...select.options].some(o => o.value === nomSociete)) {
+        const opt = document.createElement('option');
+        opt.value = nomSociete;
+        opt.textContent = nomSociete;
+        select.appendChild(opt);
+    }
+    select.value = nomSociete;
+    chargerStatsAssurances();
+    document.getElementById('assurancePatientsTable')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function mettreAJourStatsPatients(ventes) {
@@ -1585,12 +1768,12 @@ function exporterStatsCategorieCSV() {
 
 function exporterListeAssuranceCSV() {
     const rows = document.querySelectorAll('#assurancePatientsBody tr');
-    let csv = "Assurance;Patient;N° Assuré;Date;Actes;Montant bénéficiaire;Part assurance;Double assurance\n";
+    let csv = "Assurance;Société;Patient;N° Assuré;Date;Actes;Montant bénéficiaire;Part assurance;Double assurance\n";
 
     rows.forEach(row => {
         const cells = row.cells;
         if (cells.length > 1 && cells[0].innerText !== 'Chargement...' && cells[0].innerText !== 'Aucun patient trouvé') {
-            csv += `"${cells[0].innerText}";"${cells[1].innerText}";"${cells[2].innerText}";"${cells[3].innerText}";"${cells[4].innerText}";"${cells[5].innerText}";"${cells[6].innerText}";"${cells[7].innerText}"\n`;
+            csv += `"${cells[0].innerText}";"${cells[1].innerText}";"${cells[2].innerText}";"${cells[3].innerText}";"${cells[4].innerText}";"${cells[5].innerText}";"${cells[6].innerText}";"${cells[7].innerText}";"${cells[8].innerText}"\n`;
         }
     });
 
@@ -1620,6 +1803,12 @@ function imprimerBordereauAssurance() {
     let url = `/api/statistiques/assurance/bordereau?assurance=${encodeURIComponent(assurance)}&periode=${periode}`;
     if (dateDebut) url += `&date_debut=${dateDebut}`;
     if (dateFin) url += `&date_fin=${dateFin}`;
+
+    const societeSelect = document.getElementById('statsFiltreSociete');
+    const societeGroup = document.getElementById('statsFiltreSocieteGroup');
+    if (societeSelect && societeGroup.style.display !== 'none' && societeSelect.value !== 'toutes') {
+        url += `&societe=${encodeURIComponent(societeSelect.value)}`;
+    }
 
     window.open(url, '_blank');
 }

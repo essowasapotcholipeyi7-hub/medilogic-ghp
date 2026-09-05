@@ -201,6 +201,27 @@ db.execute_query = execute_query
 print("✅ db.execute_query défini avec succès")  # Pour vérifier
 
 
+def upsert_societe_assurance(structure_id, assurance_nom, nom_societe):
+    """Mémorise (une seule fois) le nom d'une société souscriptrice pour une
+    assurance complémentaire donnée, afin que la prochaine saisie propose un
+    simple choix au lieu d'une re-saisie manuelle. Ne doit jamais faire
+    échouer l'appelant (patient/vente) si l'enregistrement échoue."""
+    if not assurance_nom or not nom_societe:
+        return
+    assurance_nom = str(assurance_nom).strip()
+    nom_societe = str(nom_societe).strip()
+    if not assurance_nom or not nom_societe or not structure_id:
+        return
+    try:
+        db.execute_query("""
+            INSERT INTO societes_assurance (structure_id, assurance_nom, nom_societe)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (structure_id, assurance_nom, nom_societe) DO NOTHING
+        """, (structure_id, assurance_nom, nom_societe), commit=True)
+    except Exception as e:
+        print(f"⚠️ upsert_societe_assurance: {e}")
+
+
 # ========== CONFIGURATION EMAIL ==========
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
@@ -1040,13 +1061,13 @@ def patients():
         patients = db.execute_query("""
             SELECT id, nom, prenom, telephone, adresse, date_naissance,
                    type_assurance, taux_prise_charge, numero_assure,
-                   assurance2_nom, taux_assurance2, numero_assure2,
+                   assurance2_nom, taux_assurance2, numero_assure2, societe_assurance2,
                    personne_a_prevenir_nom, personne_a_prevenir_telephone, personne_a_prevenir_relation
-            FROM patients 
-            WHERE structure_id = %s 
+            FROM patients
+            WHERE structure_id = %s
             ORDER BY id DESC
         """, (structure_id,))
-        
+
         patients_list = []
         if patients:
             for p in patients:
@@ -1066,6 +1087,7 @@ def patients():
                         'assurance2_nom': p.get('assurance2_nom', ''),
                         'taux_assurance2': p.get('taux_assurance2', 0),
                         'numero_assure2': p.get('numero_assure2', ''),
+                        'societe_assurance2': p.get('societe_assurance2', ''),
                         # 🔥 NOUVEAUX CHAMPS
                         'personne_a_prevenir_nom': p.get('personne_a_prevenir_nom', ''),
                         'personne_a_prevenir_telephone': p.get('personne_a_prevenir_telephone', ''),
@@ -1087,10 +1109,11 @@ def patients():
                         'assurance2_nom': p[9] if len(p) > 9 else '',
                         'taux_assurance2': p[10] if len(p) > 10 else 0,
                         'numero_assure2': p[11] if len(p) > 11 else '',
+                        'societe_assurance2': p[12] if len(p) > 12 else '',
                         # 🔥 NOUVEAUX CHAMPS
-                        'personne_a_prevenir_nom': p[12] if len(p) > 12 else '',
-                        'personne_a_prevenir_telephone': p[13] if len(p) > 13 else '',
-                        'personne_a_prevenir_relation': p[14] if len(p) > 14 else ''
+                        'personne_a_prevenir_nom': p[13] if len(p) > 13 else '',
+                        'personne_a_prevenir_telephone': p[14] if len(p) > 14 else '',
+                        'personne_a_prevenir_relation': p[15] if len(p) > 15 else ''
                     })
         
         return render_template('patients.html', patients=patients_list)
@@ -1100,22 +1123,44 @@ def patients():
         flash(f'Erreur: {str(e)}', 'error')
         return render_template('patients.html', patients=[])
 
+@app.route('/api/societes-assurance', methods=['GET'])
+@login_required
+def api_societes_assurance():
+    """Autocomplétion : sociétés déjà saisies pour une assurance
+    complémentaire donnée (?assurance=GTA) — pour proposer un choix au lieu
+    d'une re-saisie manuelle."""
+    structure_id = session.get('structure_id')
+    assurance = (request.args.get('assurance') or '').strip()
+    if not structure_id or not assurance:
+        return jsonify([])
+    try:
+        rows = db.execute_query("""
+            SELECT nom_societe FROM societes_assurance
+            WHERE structure_id = %s AND assurance_nom = %s
+            ORDER BY nom_societe
+        """, (structure_id, assurance))
+        return jsonify([r['nom_societe'] for r in (rows or [])])
+    except Exception as e:
+        print(f"❌ api_societes_assurance: {e}")
+        return jsonify([])
+
+
 @app.route('/api/patients', methods=['POST'])
 @login_required
 def api_add_patient():
     try:
         data = request.json
         structure_id = session.get('structure_id')
-        
+
         # 🔥 Ajouter les colonnes de la personne à prévenir
         result = db.execute_query("""
             INSERT INTO patients (
-                structure_id, nom, prenom, telephone, adresse, 
+                structure_id, nom, prenom, telephone, adresse,
                 date_naissance, type_assurance, taux_prise_charge, numero_assure,
-                assurance2_nom, taux_assurance2, numero_assure2,
+                assurance2_nom, taux_assurance2, numero_assure2, societe_assurance2,
                 personne_a_prevenir_nom, personne_a_prevenir_telephone, personne_a_prevenir_relation
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             structure_id,
@@ -1130,15 +1175,17 @@ def api_add_patient():
             data.get('assurance2_nom'),
             data.get('taux_assurance2', 0),
             data.get('numero_assure2'),
+            data.get('societe_assurance2'),
             data.get('personne_a_prevenir_nom'),
             data.get('personne_a_prevenir_telephone'),
             data.get('personne_a_prevenir_relation')
         ))
-        
+
         if result and len(result) > 0:
+            upsert_societe_assurance(structure_id, data.get('assurance2_nom'), data.get('societe_assurance2'))
             return jsonify({'success': True, 'id': result[0]['id']})
         return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
-        
+
     except Exception as e:
         print(f"❌ Erreur: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1187,6 +1234,7 @@ def api_get_patient(id):
                 'assurance2_nom': row.get('assurance2_nom', ''),
                 'taux_assurance2': row.get('taux_assurance2', 0),
                 'numero_assure2': row.get('numero_assure2', ''),
+                'societe_assurance2': row.get('societe_assurance2', ''),
                 'personne_a_prevenir_nom': row.get('personne_a_prevenir_nom', ''),
                 'personne_a_prevenir_telephone': row.get('personne_a_prevenir_telephone', ''),
                 'personne_a_prevenir_relation': row.get('personne_a_prevenir_relation', ''),
@@ -1213,13 +1261,13 @@ def api_get_patients():
         patients = db.execute_query("""
             SELECT id, nom, prenom, telephone, adresse, date_naissance,
                    type_assurance, taux_prise_charge, numero_assure,
-                   assurance2_nom, taux_assurance2, numero_assure2,
+                   assurance2_nom, taux_assurance2, numero_assure2, societe_assurance2,
                    personne_a_prevenir_nom, personne_a_prevenir_telephone, personne_a_prevenir_relation
-            FROM patients 
-            WHERE structure_id = %s 
+            FROM patients
+            WHERE structure_id = %s
             ORDER BY nom, prenom
         """, (structure_id,))
-        
+
         result = []
         for p in patients:
             if isinstance(p, dict):
@@ -1237,6 +1285,7 @@ def api_get_patients():
                     'assurance2_nom': p.get('assurance2_nom', ''),
                     'taux_assurance2': p.get('taux_assurance2', 0),
                     'numero_assure2': p.get('numero_assure2', ''),
+                    'societe_assurance2': p.get('societe_assurance2', ''),
                     # 🔥 NOUVEAUX CHAMPS
                     'personne_a_prevenir_nom': p.get('personne_a_prevenir_nom', ''),
                     'personne_a_prevenir_telephone': p.get('personne_a_prevenir_telephone', ''),
@@ -1257,10 +1306,11 @@ def api_get_patients():
                     'assurance2_nom': p[9] if len(p) > 9 else '',
                     'taux_assurance2': p[10] if len(p) > 10 else 0,
                     'numero_assure2': p[11] if len(p) > 11 else '',
+                    'societe_assurance2': p[12] if len(p) > 12 else '',
                     # 🔥 NOUVEAUX CHAMPS
-                    'personne_a_prevenir_nom': p[12] if len(p) > 12 else '',
-                    'personne_a_prevenir_telephone': p[13] if len(p) > 13 else '',
-                    'personne_a_prevenir_relation': p[14] if len(p) > 14 else ''
+                    'personne_a_prevenir_nom': p[13] if len(p) > 13 else '',
+                    'personne_a_prevenir_telephone': p[14] if len(p) > 14 else '',
+                    'personne_a_prevenir_relation': p[15] if len(p) > 15 else ''
                 })
         
         return jsonify(result)
@@ -1745,6 +1795,7 @@ def facture(vente_id, type):
         taux_assurance2 = float(v.get('taux_assurance2', 0))
         prise_en_charge2 = float(v.get('prise_en_charge2', 0))
         numero_assure2 = v.get('numero_assure2', '')
+        societe_assurance2 = v.get('societe_assurance2', '')
         
         # Récupérer le taux original du patient
         patient_taux_original = float(v.get('patient_taux_assurance2', 0))
@@ -1822,6 +1873,7 @@ def facture(vente_id, type):
                          taux_assurance2=taux_assurance2,
                          prise_en_charge2=prise_en_charge2,
                          numero_assure2=numero_assure2,
+                         societe_assurance2=societe_assurance2,
                          assurance2_appliquee=assurance2_appliquee,
                          taux_modifie=taux_modifie,
                          taux_original=taux_original)
@@ -1907,6 +1959,7 @@ def facture_structure(vente_id, type):
         taux_assurance2 = float(v.get('taux_assurance2', 0))
         prise_en_charge2 = float(v.get('prise_en_charge2', 0))
         numero_assure2 = v.get('numero_assure2', '')
+        societe_assurance2 = v.get('societe_assurance2', '')
         
         # Récupérer le taux original du patient
         patient_taux_original = float(v.get('patient_taux_assurance2', 0))
@@ -1984,6 +2037,7 @@ def facture_structure(vente_id, type):
                          taux_assurance2=taux_assurance2,
                          prise_en_charge2=prise_en_charge2,
                          numero_assure2=numero_assure2,
+                         societe_assurance2=societe_assurance2,
                          assurance2_appliquee=assurance2_appliquee,
                          taux_modifie=taux_modifie,
                          taux_original=taux_original)
@@ -2208,6 +2262,7 @@ def recu(vente_id, type):
         taux_assurance2 = float(v.get('taux_assurance2', 0))
         prise_en_charge2 = float(v.get('prise_en_charge2', 0))
         numero_assure2 = v.get('numero_assure2', '')
+        societe_assurance2 = v.get('societe_assurance2', '')
         
         assurance2_appliquee = assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and prise_en_charge2 > 0
         
@@ -2411,6 +2466,7 @@ def recu(vente_id, type):
                          taux_assurance2=taux_assurance2,
                          prise_en_charge2=prise_en_charge2,
                          numero_assure2=numero_assure2,
+                         societe_assurance2=societe_assurance2,
                          assurance2_appliquee=assurance2_appliquee,
                          taux_modifie=taux_modifie,
                          taux_original=taux_original,
@@ -2502,6 +2558,7 @@ def recu_structure(vente_id, type):
         taux_assurance2 = float(v.get('taux_assurance2', 0))
         prise_en_charge2 = float(v.get('prise_en_charge2', 0))
         numero_assure2 = v.get('numero_assure2', '')
+        societe_assurance2 = v.get('societe_assurance2', '')
         
         # Récupérer le taux original du patient
         patient_taux_original = float(v.get('patient_taux_assurance2', 0))
@@ -2578,6 +2635,7 @@ def recu_structure(vente_id, type):
                          taux_assurance2=taux_assurance2,
                          prise_en_charge2=prise_en_charge2,
                          numero_assure2=numero_assure2,
+                         societe_assurance2=societe_assurance2,
                          assurance2_appliquee=assurance2_appliquee,
                          taux_modifie=taux_modifie,
                          taux_original=taux_original)
@@ -5358,11 +5416,11 @@ def api_update_patient(patient_id):
         
         # 🔥 Ajouter les colonnes de la personne à prévenir
         db.execute_query("""
-            UPDATE patients 
+            UPDATE patients
             SET nom = %s, prenom = %s, telephone = %s, adresse = %s,
                 date_naissance = %s,
                 type_assurance = %s, taux_prise_charge = %s, numero_assure = %s,
-                assurance2_nom = %s, taux_assurance2 = %s, numero_assure2 = %s,
+                assurance2_nom = %s, taux_assurance2 = %s, numero_assure2 = %s, societe_assurance2 = %s,
                 personne_a_prevenir_nom = %s, personne_a_prevenir_telephone = %s, personne_a_prevenir_relation = %s
             WHERE id = %s AND structure_id = %s
         """, (
@@ -5377,13 +5435,16 @@ def api_update_patient(patient_id):
             data.get('assurance2_nom'),
             data.get('taux_assurance2', 0),
             data.get('numero_assure2'),
+            data.get('societe_assurance2'),
             data.get('personne_a_prevenir_nom'),
             data.get('personne_a_prevenir_telephone'),
             data.get('personne_a_prevenir_relation'),
             patient_id,
             structure_id
         ))
-        
+
+        upsert_societe_assurance(structure_id, data.get('assurance2_nom'), data.get('societe_assurance2'))
+
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -6002,16 +6063,17 @@ def api_vente_pharma():
         taux_assurance = float(data.get('taux_assurance', 0))
         assurance2_nom = data.get('assurance2_nom', '')
         taux_assurance2 = float(data.get('taux_assurance2', 0))
+        societe_assurance2 = data.get('societe_assurance2', '') or None
         prise_en_charge = float(data.get('prise_en_charge', 0))
         prise_en_charge2 = float(data.get('prise_en_charge2', 0))
-        
+
         # 🔥 Récupérer le montant donné et le rendu
         montant_donne = float(data.get('montant_donne', 0))
         rendu = float(data.get('rendu', 0))
-        
+
         # 🔥 Récupérer le base_remboursement (PBR total)
         base_remboursement = float(data.get('base_remboursement', 0))
-        
+
         # 🔥 Récupérer le reste à payer
         reste_a_payer = float(data.get('reste_a_payer', 0))
         
@@ -6077,6 +6139,7 @@ def api_vente_pharma():
                 assurances,
                 assurance2_nom,
                 taux_assurance2,
+                societe_assurance2,
                 prise_en_charge2,
                 montant_donne,
                 rendu,
@@ -6088,7 +6151,7 @@ def api_vente_pharma():
                 taux_aide,
                 aide_hospitaliere
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, 'validee', %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, 'validee', %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             patient_id,
@@ -6105,6 +6168,7 @@ def api_vente_pharma():
             json.dumps(assurances_data, ensure_ascii=False),
             assurance2_nom,
             taux_assurance2,
+            societe_assurance2,
             prise_en_charge2,
             montant_donne,
             rendu,
@@ -6116,11 +6180,13 @@ def api_vente_pharma():
             taux_aide,                    # 🔥 NOUVEAU
             aide_hospitaliere             # 🔥 NOUVEAU
         ))
-        
+
         if not result or len(result) == 0:
             print("❌ Erreur: Aucun ID retourné pour la vente")
             return jsonify({'success': False, 'error': 'Erreur insertion vente'}), 500
-        
+
+        upsert_societe_assurance(structure_id, assurance2_nom, societe_assurance2)
+
         vente_id = result[0]['id']
         print(f"✅ Vente pharmacie enregistrée dans Neon avec ID: {vente_id}")
         
@@ -6492,16 +6558,17 @@ def api_add_acte_vente():
         taux_assurance = float(data.get('taux_assurance', 0))
         assurance2_nom = data.get('assurance2_nom', '')
         taux_assurance2 = float(data.get('taux_assurance2', 0))
+        societe_assurance2 = data.get('societe_assurance2', '') or None
         prise_en_charge = float(data.get('prise_en_charge', 0))
         prise_en_charge2 = float(data.get('prise_en_charge2', 0))
-        
+
         # 🔥 Récupérer le montant donné et le rendu
         montant_donne = float(data.get('montant_donne', 0))
         rendu = float(data.get('rendu', 0))
-        
+
         # 🔥 Récupérer le base_remboursement (PBR total)
         base_remboursement = float(data.get('base_remboursement', 0))
-        
+
         # 🔥 Récupérer le reste à payer
         reste_a_payer = float(data.get('reste_a_payer', 0))
         
@@ -6566,6 +6633,7 @@ def api_add_acte_vente():
                 assurances,
                 assurance2_nom,
                 taux_assurance2,
+                societe_assurance2,
                 prise_en_charge2,
                 montant_donne,
                 rendu,
@@ -6577,7 +6645,7 @@ def api_add_acte_vente():
                 taux_aide,
                 aide_hospitaliere
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             patient_id,
@@ -6594,6 +6662,7 @@ def api_add_acte_vente():
             json.dumps(assurances_data, ensure_ascii=False),
             assurance2_nom,
             taux_assurance2,
+            societe_assurance2,
             prise_en_charge2,
             montant_donne,
             rendu,
@@ -6605,11 +6674,13 @@ def api_add_acte_vente():
             taux_aide,                    # 🔥 NOUVEAU
             aide_hospitaliere             # 🔥 NOUVEAU
         ))
-        
+
         if not result or len(result) == 0:
             print("❌ Erreur: Aucun ID retourné pour la vente")
             return jsonify({'success': False, 'error': 'Erreur insertion vente'}), 500
-        
+
+        upsert_societe_assurance(structure_id, assurance2_nom, societe_assurance2)
+
         vente_id = result[0]['id']
         print(f"✅ Vente actes enregistrée dans Neon avec ID: {vente_id}")
         
@@ -9173,6 +9244,18 @@ def api_convertir_proforma():
         assurance2_nom = proforma.get('assurance2_nom', '')
         taux_assurance2 = float(proforma.get('taux_assurance2', 0))
 
+        # 🔥 Société souscriptrice de l'assurance complémentaire : la proforma
+        # ne porte pas ce champ (créée avant son existence éventuelle), on la
+        # relit donc depuis la fiche patient au moment de la conversion.
+        societe_assurance2 = None
+        if assurance2_nom:
+            pat_societe = db.execute_query(
+                "SELECT societe_assurance2 FROM patients WHERE id = %s AND structure_id = %s",
+                (proforma.get('patient_id'), structure_id)
+            )
+            if pat_societe:
+                societe_assurance2 = pat_societe[0].get('societe_assurance2')
+
         # 🔥🔥🔥 RECALCULER LES TOTAUX AVEC PBR 🔥🔥🔥
         sous_total = 0
         pbr_total_amu = 0
@@ -9288,13 +9371,13 @@ def api_convertir_proforma():
                 patient_id, patient_nom, structure_id, type, sous_total, 
                 prise_en_charge, net_a_payer, mode_paiement, taux_assurance,
                 date_vente, actes, produits, created_by_nom, statut,
-                assurance2_nom, taux_assurance2, prise_en_charge2,
+                assurance2_nom, taux_assurance2, societe_assurance2, prise_en_charge2,
                 montant_donne, rendu, reste_a_payer,
                 assurance_principale_active, proforma_id,
                 base_remboursement,
                 taux_aide, aide_hospitaliere
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s::jsonb, %s, 'validee', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s::jsonb, %s, 'validee', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             data.get('patient_id'),
@@ -9311,6 +9394,7 @@ def api_convertir_proforma():
             user_name,
             assurance2_nom if assurance2_active else '',
             taux_assurance2 if assurance2_active else 0,
+            societe_assurance2 if assurance2_active else None,
             prise_en_charge2,
             montant_donne,
             rendu,
@@ -9321,12 +9405,14 @@ def api_convertir_proforma():
             0,  # taux_aide
             0   # aide_hospitaliere
         ))
-        
+
         if not result or len(result) == 0:
             return jsonify({'success': False, 'error': 'Erreur insertion vente'}), 500
-        
+
         vente_id = result[0]['id']
         print(f"✅ Vente créée depuis proforma #{proforma_id} avec ID: {vente_id}")
+        if assurance2_active:
+            upsert_societe_assurance(structure_id, assurance2_nom, societe_assurance2)
         
         # Marquer la proforma comme convertie
         db.execute_query("""

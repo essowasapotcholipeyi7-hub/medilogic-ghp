@@ -83,11 +83,18 @@
                 </div>
             </div>
             <div class="droite">
-                <h2>Bordereau — {{ nom_compagnie }}</h2>
+                <h2>Bordereau — {{ nom_compagnie }}{% if nom_societe %} / {{ nom_societe }}{% endif %}</h2>
+                <div class="periode">N° {{ numero_bordereau }}</div>
                 <div class="periode">{{ periode_libelle }}</div>
                 <div class="periode">Édité le {{ now.strftime('%d/%m/%Y à %H:%M') }}</div>
             </div>
         </div>
+
+        {% if nom_societe %}
+        <div style="background:#eef1fa; border:1px solid #dde3ea; border-radius:8px; padding:10px 14px; margin-bottom:18px; font-size:12.5px;">
+            <strong>Société souscriptrice :</strong> {{ nom_societe }} — contrat groupe {{ nom_compagnie }}
+        </div>
+        {% endif %}
 
         <div class="kpis">
             <div class="kpi">
@@ -147,9 +154,18 @@
             </tfoot>
         </table>
 
+        <div style="margin-top:24px; padding:14px 18px; border:1.5px solid #1a2a6c; border-radius:8px; background:#f7f9fc;">
+            <strong>Arrêtée la présente facture à la somme de :</strong><br>
+            <span style="font-size:14px; font-weight:700; color:#1a2a6c; text-transform:uppercase;">{{ montant_lettres }}</span>
+            <div style="font-size:11px; color:#6c7a89; margin-top:6px;">
+                (soit {{ '{:,.0f}'.format(total_part_assurance).replace(',', ' ') }} F CFA en chiffres)
+                — à adresser à {{ nom_compagnie }}{% if nom_societe %} pour le compte de la société {{ nom_societe }}{% endif %}.
+            </div>
+        </div>
+
         <div class="signatures">
             <div>Pour la structure</div>
-            <div>Pour {{ nom_compagnie }}</div>
+            <div>Pour {{ nom_compagnie }}{% if nom_societe %}<br><small>({{ nom_societe }})</small>{% endif %}</div>
         </div>
 
         <div class="footer">

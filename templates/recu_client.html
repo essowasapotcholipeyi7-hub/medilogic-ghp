@@ -172,8 +172,9 @@
                             {% endif %}
                             <div>
                                 <h4 style="margin: 0; font-size: 14px;">{{ structure_nom or "SSoftone v10" }}</h4>
-                                <p style="margin: 3px 0 0 0; font-size: 9px; opacity: 0.9;">
-                                    {{ structure_adresse or "" }}<br>
+
+                                <p style="margin: 3px 0 0 0; font-size: 9px; opacity: 0.9; white-space: pre-line;">
+                                    {{ structure_adresse or "" }}
                                     Tél: {{ structure_telephone or "" }} | Email: {{ structure_email or "" }}
                                 </p>
                             </div>
@@ -214,8 +215,11 @@
     {% if numero_assure2 and numero_assure2 != '' %}
     <strong>N° Assuré 2 :</strong> {{ numero_assure2 }}<br>
     {% endif %}
+    {% if societe_assurance2 and societe_assurance2 != '' %}
+    <strong>Société :</strong> {{ societe_assurance2 }}<br>
     {% endif %}
-    
+    {% endif %}
+
     <!-- 🔥 AIDE HOSPITALIÈRE - S'affiche si > 0 -->
     {% if taux_aide and taux_aide > 0 and aide_hospitaliere and aide_hospitaliere > 0 %}
     <strong>Aide hospitalière :</strong> {{ taux_aide }}%

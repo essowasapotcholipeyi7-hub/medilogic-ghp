@@ -463,7 +463,7 @@
                     </div>
                     <div class="badge-rdv">DOC-{{ "%04d"|format(protocole.id) }}</div>
                 </div>
-                <div class="sub-info">
+                <div class="sub-info" style="white-space: pre-line;">
                     {% if structure and structure.adresse %}
                     <span id="structureAdresse">{{ structure.adresse }}</span>
                     {% endif %}
@@ -783,16 +783,21 @@ function mettreAJourDocument() {
     var medecinId = document.getElementById('medecinSelect').value;
     var medecin = medecinsListe.find(function(m) { return m.id == medecinId; });
     
+    var medecinTitre = '';
     var medecinNom = '';
     var medecinPrenom = '';
     var medecinSpecialite = '';
     var medecinComplet = '';
     
     if (medecin) {
+        medecinTitre = medecin.titre || 'Dr';
         medecinNom = medecin.nom || '';
         medecinPrenom = medecin.prenom || '';
         medecinSpecialite = medecin.specialite || '';
-        medecinComplet = (medecinNom + ' ' + medecinPrenom).trim();
+        
+        // 🔥 CONSTRUIRE LE NOM COMPLET AVEC LE TITRE
+        var nomComplet = (medecinTitre ? medecinTitre + ' ' : '') + medecinNom + ' ' + (medecinPrenom || '');
+        medecinComplet = nomComplet.trim();
     }
     
     // 3. Mettre à jour le patient (en haut)
@@ -817,10 +822,10 @@ function mettreAJourDocument() {
     
     document.getElementById('docContenu').innerHTML = contenu;
 
-// 6. Mettre à jour le titre (nettoyé)
-var titre = titreOriginal;
-titre = nettoyerTitre(titre);
-document.getElementById('docTitre').textContent = titre;
+    // 6. Mettre à jour le titre (nettoyé)
+    var titre = titreOriginal;
+    titre = nettoyerTitre(titre);
+    document.getElementById('docTitre').textContent = titre;
     
     // 6. Mettre à jour le titre
     var titre = titreOriginal;

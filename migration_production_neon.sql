@@ -217,3 +217,27 @@ ORDER BY table_name;
 -- créances douteuses — sinon ils se créent automatiquement au premier
 -- usage, mais n'apparaîtront pas tout de suite dans les listes déroulantes.
 -- ----------------------------------------------------------
+
+
+-- ----------------------------------------------------------
+-- 6) Société souscriptrice de l'assurance complémentaire
+-- ----------------------------------------------------------
+-- Une assurance complémentaire (GTA, SUNU, NSIA...) est en général un
+-- contrat groupe souscrit par un employeur pour ses salariés. On mémorise
+-- désormais cette société : sur le patient (valeur courante), sur chaque
+-- vente (instantané au moment de la vente, même logique que
+-- assurance2_nom/taux_assurance2), et dans une table de référence qui sert
+-- à l'autocomplétion ("saisie une fois, choix ensuite").
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS societe_assurance2 VARCHAR(150);
+ALTER TABLE ventes ADD COLUMN IF NOT EXISTS societe_assurance2 VARCHAR(150);
+
+CREATE TABLE IF NOT EXISTS societes_assurance (
+    id SERIAL PRIMARY KEY,
+    structure_id INTEGER NOT NULL REFERENCES structures(id),
+    assurance_nom VARCHAR(100) NOT NULL,
+    nom_societe VARCHAR(150) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT uq_societe_assurance UNIQUE (structure_id, assurance_nom, nom_societe)
+);
+CREATE INDEX IF NOT EXISTS idx_societes_assurance_lookup ON societes_assurance (structure_id, assurance_nom);
+-- ----------------------------------------------------------

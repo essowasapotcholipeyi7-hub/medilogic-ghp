@@ -66,6 +66,7 @@
                 data-prix="{{ acte.prix }}" 
                 data-pbr="{{ acte.pbr or acte.prix }}"
                 data-nom="{{ acte.nom }}"
+                data-statut="{{ acte.statut or 'direct' }}"
                 data-prise-en-charge-amu="{{ 'true' if acte.prise_en_charge_amu else 'false' }}"
                 data-commentaire-amu="{{ acte.commentaire_amu|default('') }}"
                 data-prise-en-charge-cac="{{ 'true' if acte.prise_en_charge_cac else 'false' }}"
@@ -363,6 +364,7 @@ let patientTaux = 0;
 let patientName = '';
 let patientAssurance = '';
 let patientAssurance2 = '';
+let patientSocieteAssurance2 = '';
 let patientTaux2 = 0;
 let patientTaux2Original = 0;
 let tauxTempModifie = false;
@@ -425,7 +427,8 @@ function checkSelectedPatient() {
     let taux = sessionStorage.getItem('selectedPatientTaux');
     patientAssurance2 = sessionStorage.getItem('selectedPatientAssurance2') || '';
     patientTaux2 = parseFloat(sessionStorage.getItem('selectedPatientTaux2')) || 0;
-    
+    patientSocieteAssurance2 = sessionStorage.getItem('selectedPatientSocieteAssurance2') || '';
+
     if (!patientId || patientId === 'null' || patientId === 'undefined') {
         patientId = localStorage.getItem('selectedPatientId');
         patientName = localStorage.getItem('selectedPatientName');
@@ -433,6 +436,7 @@ function checkSelectedPatient() {
         taux = localStorage.getItem('selectedPatientTaux');
         patientAssurance2 = localStorage.getItem('selectedPatientAssurance2') || '';
         patientTaux2 = parseFloat(localStorage.getItem('selectedPatientTaux2')) || 0;
+        patientSocieteAssurance2 = localStorage.getItem('selectedPatientSocieteAssurance2') || '';
     }
     
     if (patientId && patientId !== 'null' && patientId !== 'undefined' && patientId !== '') {
@@ -456,7 +460,9 @@ function checkSelectedPatient() {
         
         if (assurance2Display) {
             if (patientAssurance2 && patientAssurance2 !== '' && patientAssurance2 !== 'Aucune' && patientTaux2 > 0) {
-                assurance2Display.textContent = patientAssurance2;
+                assurance2Display.textContent = patientSocieteAssurance2
+                    ? `${patientAssurance2} (${patientSocieteAssurance2})`
+                    : patientAssurance2;
                 if (taux2Display) taux2Display.textContent = patientTaux2 + '%';
                 if (cacBadge) cacBadge.style.display = 'inline-block';
             } else {
@@ -726,6 +732,7 @@ function ajouterActe() {
         alert('Erreur: Données de l\'acte invalides');
         return;
     }
+
     
     // 🔥 Détection P160 pour ajuster le taux
     if (acteNom && acteNom.includes('P160')) {
@@ -768,6 +775,19 @@ function ajouterActe() {
                            priseEnChargeAMU, commentaireAMU, priseEnChargeCAC, commentaireCAC);
         return;
     }
+
+    // Récupérer le statut de l'acte
+    let statutActe = selectedOption.getAttribute('data-statut') || 'direct';
+    statutActe = statutActe.toUpperCase().trim();
+
+
+    // 🔥 UNIQUEMENT SI PATIENT ASSURÉ ET STATUT EP
+    if (isAMU && statutActe === 'EP') {
+        if (!confirm('⚠️ ENTENTE PRÉALABLE (EP)\n\nL\'acte "' + acteNom + '" est sous Entente Préalable.\n\nAvez-vous reçu un accord écrit de l\'assurance ?\n\nCliquez sur OK si vous avez l\'accord, sinon Annulez.')) {
+            return;  // Bloque l'ajout
+        }
+    }
+
     
     // 🔥 SI LE PATIENT EST ASSURÉ → VÉRIFICATION
     let message = '';
@@ -1860,6 +1880,7 @@ function finaliserVente() {
         taux_assurance: parseFloat(tauxPrincipal),
         assurance2_nom: assurance2Active ? (patientAssurance2 || '') : '',
         taux_assurance2: assurance2Active ? parseFloat(tauxComplementaire || 0) : 0,
+        societe_assurance2: assurance2Active ? (patientSocieteAssurance2 || '') : '',
         assurance2_active: assurance2Active,
         taux_temp_modifie: tauxTempModifie,
         taux_original: patientTaux2Original || 0,

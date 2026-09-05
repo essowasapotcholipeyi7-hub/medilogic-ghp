@@ -287,8 +287,15 @@ def generer_ecriture_vente(vente, user_nom='SYSTEME'):
         if prise_en_charge2 > 0:
             nom_assurance2 = _nom_assurance(vente, principale=False)
             compte_num2 = compte_assurance(nom_assurance2)
+            # ⭐ La société souscriptrice (contrat groupe employeur) est
+            # tracée dans le libellé de la ligne — même compte tiers-payant
+            # par assurance (pas d'explosion du plan comptable par société),
+            # mais visible dans le grand livre/journal et sur le bordereau.
+            societe = getattr(vente, 'societe_assurance2', None)
+            libelle_assurance2 = f"Tiers-payant à recevoir ({nom_assurance2 or 'assurance 2'}"
+            libelle_assurance2 += f" — {societe})" if societe else ")"
             lignes.append({'numero_compte': compte_num2,
-                            'libelle': f"Tiers-payant à recevoir ({nom_assurance2 or 'assurance 2'})",
+                            'libelle': libelle_assurance2,
                             'debit': prise_en_charge2})
             total_debit += prise_en_charge2
 
