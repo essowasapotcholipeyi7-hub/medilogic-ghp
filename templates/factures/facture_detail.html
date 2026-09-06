@@ -33,6 +33,7 @@
                             <strong>Assurance :</strong> {{ facture.assurance_nom }} ({{ facture.taux_assurance }}%)<br>
                             {% if facture.assurance2_nom and facture.assurance2_nom != 'Aucune' %}
                             <strong>CAC :</strong> {{ facture.assurance2_nom }} ({{ facture.taux_assurance2 }}%)
+                            {% if facture.societe_assurance2 %}<br><strong>Société :</strong> {{ facture.societe_assurance2 }}{% endif %}
                             {% endif %}
                         </p>
                         {% endif %}

@@ -6815,19 +6815,21 @@ def api_get_all_ventes():
                 v.produits, 
                 v.created_by_nom, 
                 v.statut,
-                v.assurance2_nom, 
-                v.taux_assurance2, 
+                v.assurance2_nom,
+                v.taux_assurance2,
                 v.prise_en_charge2,
-                v.assurances, 
-                v.montant_donne, 
-                v.rendu, 
+                v.societe_assurance2,
+                v.assurances,
+                v.montant_donne,
+                v.rendu,
                 v.reste_a_payer,
-                v.base_remboursement, 
-                v.taux_temp_modifie, 
+                v.base_remboursement,
+                v.taux_temp_modifie,
                 v.taux_original,
                 p.type_assurance,
                 p.assurance2_nom as patient_assurance2_nom,
                 p.taux_assurance2 as patient_taux_assurance2,
+                p.societe_assurance2 as patient_societe_assurance2,
                 v.taux_aide,
                 v.aide_hospitaliere,
                 v.prise_en_charge
@@ -6932,7 +6934,9 @@ def api_get_all_ventes():
                 taux_assurance2 = float(v.get('taux_assurance2', 0))
                 if taux_assurance2 == 0 and v.get('patient_taux_assurance2'):
                     taux_assurance2 = float(v.get('patient_taux_assurance2', 0))
-                
+
+                societe_assurance2 = v.get('societe_assurance2') or v.get('patient_societe_assurance2') or ''
+
                 prise_en_charge2 = float(v.get('prise_en_charge2', 0))
                 montant_donne = float(v.get('montant_donne', 0))
                 rendu = float(v.get('rendu', 0))
@@ -6967,6 +6971,7 @@ def api_get_all_ventes():
                     'assurance2_nom': assurance2_nom,
                     'taux_assurance2': float(taux_assurance2 or 0),
                     'prise_en_charge2': float(prise_en_charge2 or 0),
+                    'societe_assurance2': societe_assurance2,
                     'assurances': assurances,
                     'montant_donne': montant_donne,
                     'rendu': rendu,
@@ -9909,9 +9914,27 @@ def facture_detail(facture_id):
     if isinstance(f, dict):
         f['statut_label'] = statut_labels.get(f.get('statut'), f.get('statut'))
         f['statut_color'] = statut_colors.get(f.get('statut'), 'secondary')
-    
-    return render_template('factures/facture_detail.html', 
-                         facture=f, 
+
+        # Société souscriptrice de l'assurance complémentaire : reprise
+        # depuis la vente d'origine (source de vérité), sinon depuis la
+        # fiche patient si la vente ne l'a pas (facture antérieure à ce champ).
+        f['societe_assurance2'] = None
+        if f.get('vente_id'):
+            v_societe = db.execute_query(
+                "SELECT societe_assurance2 FROM ventes WHERE id = %s", (f.get('vente_id'),)
+            )
+            if v_societe:
+                f['societe_assurance2'] = v_societe[0].get('societe_assurance2')
+        if not f.get('societe_assurance2'):
+            p_societe = db.execute_query(
+                "SELECT societe_assurance2 FROM patients WHERE id = %s AND structure_id = %s",
+                (f.get('patient_id'), structure_id)
+            )
+            if p_societe:
+                f['societe_assurance2'] = p_societe[0].get('societe_assurance2')
+
+    return render_template('factures/facture_detail.html',
+                         facture=f,
                          paiements=paiements,
                          statut_labels=statut_labels,
                          statut_colors=statut_colors)
@@ -9972,7 +9995,24 @@ def facture_print(facture_id):
                 'mode': p[3] if len(p) > 3 else '',
                 'notes': p[4] if len(p) > 4 else ''
             })
-    
+
+    # Société souscriptrice de l'assurance complémentaire (voir facture_detail)
+    if isinstance(f, dict):
+        f['societe_assurance2'] = None
+        if f.get('vente_id'):
+            v_societe = db.execute_query(
+                "SELECT societe_assurance2 FROM ventes WHERE id = %s", (f.get('vente_id'),)
+            )
+            if v_societe:
+                f['societe_assurance2'] = v_societe[0].get('societe_assurance2')
+        if not f.get('societe_assurance2'):
+            p_societe = db.execute_query(
+                "SELECT societe_assurance2 FROM patients WHERE id = %s AND structure_id = %s",
+                (f.get('patient_id'), structure_id)
+            )
+            if p_societe:
+                f['societe_assurance2'] = p_societe[0].get('societe_assurance2')
+
     return render_template('factures/facture_print.html',
                          facture=f,
                          articles=articles,
