@@ -1723,6 +1723,17 @@ def page_pointage(structure_id):
     return redirect(url_for('rh.gestion_rh') + '#pointage')
 
 
+@rh_bp.route('/borne')
+@require_structure
+def page_borne_pointage(structure_id):
+    """Borne de pointage plein écran — RIEN d'administratif dessus (pas de
+    réglages, pas de gestion des employés/empreintes), pensée pour rester
+    ouverte toute la journée sur un poste partagé (accueil...). Un admin
+    l'ouvre une fois (session valide), puis le personnel n'a plus qu'à
+    poser le doigt — voir onglet Pointage du hub RH pour l'administration."""
+    return render_template('rh/borne_pointage.html')
+
+
 @rh_bp.route('/api/pointage/parametrage', methods=['GET'])
 @require_structure
 def api_get_parametrage_pointage(structure_id):

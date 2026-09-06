@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Borne de pointage — {{ session.get('structure_nom') or 'Structure' }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            height: 100%;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden;
+        }
+        .borne {
+            width: 100%; max-width: 520px; padding: 20px;
+            text-align: center; color: white;
+        }
+        .structure-nom { font-size: 18px; opacity: .85; margin-bottom: 4px; }
+        .horloge { font-size: 48px; font-weight: 700; font-variant-numeric: tabular-nums; margin-bottom: 4px; }
+        .date-jour { font-size: 16px; opacity: .85; margin-bottom: 30px; text-transform: capitalize; }
+
+        .carte {
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 20px;
+            padding: 40px 30px;
+            backdrop-filter: blur(6px);
+        }
+        .icone-empreinte { font-size: 90px; margin-bottom: 10px; }
+        .consigne { font-size: 15px; opacity: .9; margin-bottom: 26px; }
+
+        .btn-pointer {
+            display: inline-flex; align-items: center; gap: 10px;
+            background: white; color: #4b3f91;
+            border: none; border-radius: 14px;
+            padding: 18px 50px; font-size: 20px; font-weight: 700;
+            cursor: pointer; transition: transform .15s ease;
+        }
+        .btn-pointer:hover:not(:disabled) { transform: translateY(-2px); }
+        .btn-pointer:disabled { opacity: .6; cursor: wait; }
+
+        .resultat { margin-top: 24px; font-size: 17px; min-height: 26px; }
+        .resultat.succes { color: #b6ffcf; }
+        .resultat.erreur { color: #ffd0d0; }
+
+        .liste-jour {
+            margin-top: 30px; text-align: left; max-height: 130px; overflow-y: auto;
+            font-size: 13px; opacity: .85;
+        }
+        .liste-jour .ligne { display: flex; justify-content: space-between; padding: 3px 6px; }
+        .avertissement {
+            margin-top: 18px; font-size: 12px; opacity: .7;
+        }
+    </style>
+</head>
+<body>
+    <div class="borne">
+        <div class="structure-nom">{{ session.get('structure_nom') or '' }}</div>
+        <div class="horloge" id="horloge">--:--:--</div>
+        <div class="date-jour" id="dateJour">-</div>
+
+        <div class="carte">
+            <div class="icone-empreinte"><i class="fas fa-fingerprint"></i></div>
+            <div class="consigne">Posez le doigt sur le capteur du poste</div>
+            <button class="btn-pointer" id="btnPointer" onclick="pointer()">
+                <i class="fas fa-hand-point-up"></i> Pointer
+            </button>
+            <div class="resultat" id="resultat"></div>
+
+            <div class="liste-jour" id="listeJour"></div>
+        </div>
+
+        <div class="avertissement" id="avertissementContexte"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@10.0.0/dist/bundle/index.umd.min.js"></script>
+    <script>
+        function majHorloge() {
+            const maintenant = new Date();
+            document.getElementById('horloge').textContent = maintenant.toLocaleTimeString('fr-FR');
+            document.getElementById('dateJour').textContent = maintenant.toLocaleDateString('fr-FR', {
+                weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+            });
+        }
+        setInterval(majHorloge, 1000);
+        majHorloge();
+
+        if (!window.SimpleWebAuthnBrowser || !SimpleWebAuthnBrowser.browserSupportsWebAuthn()) {
+            document.getElementById('avertissementContexte').textContent =
+                "Empreinte indisponible sur ce poste/navigateur (nécessite http://localhost ou HTTPS).";
+        }
+
+        async function pointer() {
+            const btn = document.getElementById('btnPointer');
+            const resultat = document.getElementById('resultat');
+            resultat.className = 'resultat';
+
+            if (!window.SimpleWebAuthnBrowser || !SimpleWebAuthnBrowser.browserSupportsWebAuthn()) {
+                resultat.className = 'resultat erreur';
+                resultat.textContent = "Empreinte non disponible sur ce poste/navigateur.";
+                return;
+            }
+
+            btn.disabled = true;
+            resultat.textContent = 'Posez le doigt sur le capteur...';
+
+            try {
+                const rOpt = await fetch('/rh/api/pointage/webauthn/options', {method: 'POST'});
+                const dOpt = await rOpt.json();
+                if (!dOpt.success) {
+                    resultat.className = 'resultat erreur';
+                    resultat.textContent = dOpt.message;
+                    return;
+                }
+
+                const assertion = await SimpleWebAuthnBrowser.startAuthentication(dOpt.options);
+
+                const rVer = await fetch('/rh/api/pointage/webauthn/verifier', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({credential: assertion})
+                });
+                const dVer = await rVer.json();
+
+                if (dVer.success) {
+                    const d = dVer.data;
+                    resultat.className = 'resultat succes';
+                    if (d.type === 'arrivee') {
+                        const statutTxt = d.statut === 'retard' ? `retard de ${d.retard_minutes} min` : 'à l\'heure';
+                        resultat.innerHTML = `<i class="fas fa-circle-check"></i> Bonjour ${d.employe_nom} — arrivée ${d.heure} (${statutTxt})`;
+                    } else {
+                        resultat.innerHTML = `<i class="fas fa-circle-check"></i> Au revoir ${d.employe_nom} — départ ${d.heure}`;
+                    }
+                    chargerListeJour();
+                } else {
+                    resultat.className = 'resultat erreur';
+                    resultat.textContent = dVer.message;
+                }
+            } catch (err) {
+                console.error(err);
+                resultat.className = 'resultat erreur';
+                resultat.textContent = "Échec : " + (err.message || err);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function chargerListeJour() {
+            fetch('/rh/api/pointage/liste?date=' + new Date().toISOString().split('T')[0])
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.success) return;
+                    const zone = document.getElementById('listeJour');
+                    if (d.pointages.length === 0) { zone.innerHTML = ''; return; }
+                    zone.innerHTML = d.pointages.slice(-6).reverse().map(p => `
+                        <div class="ligne">
+                            <span>${p.employe_nom}</span>
+                            <span>${p.heure_arrivee || ''}${p.heure_depart ? ' → ' + p.heure_depart : ''}</span>
+                        </div>`).join('');
+                })
+                .catch(() => {});
+        }
+        chargerListeJour();
+        setInterval(chargerListeJour, 30000);
+    </script>
+</body>
+</html>
