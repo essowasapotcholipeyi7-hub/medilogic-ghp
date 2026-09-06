@@ -331,3 +331,32 @@ ALTER TABLE paies ADD COLUMN IF NOT EXISTS acomptes_deduction NUMERIC DEFAULT 0;
 ALTER TABLE paies ADD COLUMN IF NOT EXISTS autres_retenues JSON DEFAULT '[]';
 ALTER TABLE paies ADD COLUMN IF NOT EXISTS autres_retenues_total NUMERIC DEFAULT 0;
 -- ----------------------------------------------------------
+
+
+-- ----------------------------------------------------------
+-- 10) Plan comptable OHADA adapté à la paie (CNSS/CRT, AMU-CNSS/AMU-INAM)
+-- ----------------------------------------------------------
+-- Le moteur de paie utilisait au départ des comptes génériques et
+-- partiellement incorrects au regard du plan OHADA :
+--   - 664/6641 pour les charges sociales patronales : 664 désigne en
+--     réalité les rémunérations du personnel EXTÉRIEUR (intérimaires),
+--     pas les charges sociales — corrigé vers la classe 666 dédiée.
+--   - 431/432/433/434 réutilisés indifféremment pour CNSS ou CRT, AMU-CNSS
+--     ou AMU-INAM selon le salarié — un même compte "CNSS" recevait donc
+--     aussi bien les cotisations d'un agent public. Remplacé par un compte
+--     dédié par organisme (comme pour les assurances 411211/411221...).
+--   - Le compte 421 initialement prévu pour "Personnel — avances et
+--     acomptes" (prêts/acomptes sur salaire) s'est révélé DÉJÀ utilisé par
+--     plusieurs structures pour "Fournisseurs" — déplacé vers 4211 pour
+--     éviter toute collision.
+-- utils/plan_comptable_syscohada.py définit désormais les bons numéros
+-- (4211, 4311-4319, 6661-6665) ; ce bloc désactive uniquement les ANCIENS
+-- comptes 431/432/433/434/664/6641 qui ne sont référencés par AUCUNE
+-- écriture (vérifié avant désactivation, ci-dessous) — les écritures déjà
+-- passées avec ces numéros restent intactes et lisibles, seule la création
+-- de NOUVELLES écritures avec ces anciens numéros est désormais évitée.
+UPDATE comptes_comptables cc
+SET actif = FALSE
+WHERE cc.numero IN ('431', '432', '433', '434', '664', '6641')
+AND NOT EXISTS (SELECT 1 FROM lignes_ecritures le WHERE le.compte_id = cc.id);
+-- ----------------------------------------------------------

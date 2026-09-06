@@ -44,11 +44,23 @@ PLAN_COMPTABLE = [
     {'numero': '411226', 'nom': "Assurance C2A — tiers-payant à recevoir", 'type': 'actif', 'classe': '4'},
     {'numero': '411227', 'nom': "Assurance OLEA — tiers-payant à recevoir", 'type': 'actif', 'classe': '4'},
     {'numero': '411228', 'nom': "Autres assurances / tiers-payants à recevoir", 'type': 'actif', 'classe': '4'},
-    {'numero': '421', 'nom': "Personnel — rémunérations dues", 'type': 'passif', 'classe': '4'},
-    {'numero': '431', 'nom': "CNSS — part salariale à reverser", 'type': 'passif', 'classe': '4'},
-    {'numero': '432', 'nom': "CNSS — part patronale à reverser", 'type': 'passif', 'classe': '4'},
-    {'numero': '433', 'nom': "INAM — part salariale à reverser", 'type': 'passif', 'classe': '4'},
-    {'numero': '434', 'nom': "INAM — part patronale à reverser", 'type': 'passif', 'classe': '4'},
+    # ⭐ Sous-compte dédié (4211), pas 421/422 : ces deux numéros sont déjà
+    # utilisés par des structures existantes pour "Fournisseurs" / "Fournisseurs
+    # - Effets à payer" — les réutiliser aurait fait atterrir les avances sur
+    # salaire dans un compte déjà nommé (et affiché) comme un compte fournisseur.
+    {'numero': '4211', 'nom': "Personnel — avances et acomptes", 'type': 'actif', 'classe': '4'},
+    # ⭐ Organismes sociaux, subdivisés par organisme réel (comme pour les
+    # assurances 411211/411221...) — un salarié du privé et un salarié du
+    # public ne doivent jamais créditer le même compte "CNSS" générique.
+    {'numero': '4311', 'nom': "CNSS — part salariale à reverser", 'type': 'passif', 'classe': '4'},
+    {'numero': '4312', 'nom': "CNSS — part patronale à reverser", 'type': 'passif', 'classe': '4'},
+    {'numero': '4313', 'nom': "CRT — part salariale à reverser", 'type': 'passif', 'classe': '4'},
+    {'numero': '4314', 'nom': "CRT — part patronale à reverser", 'type': 'passif', 'classe': '4'},
+    {'numero': '4315', 'nom': "AMU-CNSS — part salariale à reverser", 'type': 'passif', 'classe': '4'},
+    {'numero': '4316', 'nom': "AMU-CNSS — part patronale à reverser", 'type': 'passif', 'classe': '4'},
+    {'numero': '4317', 'nom': "AMU-INAM — part salariale à reverser", 'type': 'passif', 'classe': '4'},
+    {'numero': '4318', 'nom': "AMU-INAM — part patronale à reverser", 'type': 'passif', 'classe': '4'},
+    {'numero': '4319', 'nom': "Formation professionnelle — à reverser", 'type': 'passif', 'classe': '4'},
     {'numero': '447', 'nom': "État — IRPP à reverser", 'type': 'passif', 'classe': '4'},
     {'numero': '4713', 'nom': "Écarts et opérations d'attente (caisse)", 'type': 'actif', 'classe': '4'},
 
@@ -77,8 +89,15 @@ PLAN_COMPTABLE = [
     {'numero': '635', 'nom': "Autres impôts et taxes", 'type': 'charge', 'classe': '6'},
     {'numero': '661', 'nom': "Salaires et appointements du personnel", 'type': 'charge', 'classe': '6'},
     {'numero': '663', 'nom': "Indemnités et avantages divers au personnel", 'type': 'charge', 'classe': '6'},
-    {'numero': '664', 'nom': "Charges sociales — CNSS part patronale", 'type': 'charge', 'classe': '6'},
-    {'numero': '6641', 'nom': "Charges sociales — INAM part patronale", 'type': 'charge', 'classe': '6'},
+    # ⭐ Charges sociales patronales (classe 666 SYSCOHADA), subdivisées par
+    # organisme réel (privé/CNSS ou public/CRT, AMU-CNSS ou AMU-INAM) — la
+    # classe 664 (rémunérations du personnel extérieur à l'entreprise) ne
+    # convient pas ici, elle concerne le personnel intérimaire/prestataire.
+    {'numero': '6661', 'nom': "Charges sociales — CNSS part patronale", 'type': 'charge', 'classe': '6'},
+    {'numero': '6662', 'nom': "Charges sociales — CRT part patronale", 'type': 'charge', 'classe': '6'},
+    {'numero': '6663', 'nom': "Charges sociales — AMU-CNSS part patronale", 'type': 'charge', 'classe': '6'},
+    {'numero': '6664', 'nom': "Charges sociales — AMU-INAM part patronale", 'type': 'charge', 'classe': '6'},
+    {'numero': '6665', 'nom': "Charges sociales — Formation professionnelle", 'type': 'charge', 'classe': '6'},
     {'numero': '651', 'nom': "Pertes sur créances irrécouvrables", 'type': 'charge', 'classe': '6'},
     {'numero': '671', 'nom': "Intérêts et frais financiers", 'type': 'charge', 'classe': '6'},
     {'numero': '681', 'nom': "Dotations aux amortissements", 'type': 'charge', 'classe': '6'},
@@ -141,6 +160,27 @@ COMPTE_PAR_ASSURANCE = {
     'c2a': '411226',
     'olea': '411227',
 }
+
+
+# ============================================================
+# COMPTES DE PAIE — retraite (CNSS/CRT) et AMU (AMU-CNSS/AMU-INAM)
+# ============================================================
+# ⭐ Adapté aux précisions du bulletin de paie (voir services/paie_service.py) :
+# chaque organisme réel a ses propres comptes de tiers à reverser et sa
+# propre charge patronale, pour ne jamais mélanger, par exemple, la CNSS
+# d'un salarié du privé avec la CRT d'un salarié du public.
+COMPTES_RETRAITE_PAR_ORGANISME = {
+    'CNSS': {'salarial': '4311', 'patronal': '4312', 'charge': '6661'},
+    'CRT': {'salarial': '4313', 'patronal': '4314', 'charge': '6662'},
+}
+COMPTES_AMU_PAR_ORGANISME = {
+    'AMU-CNSS': {'salarial': '4315', 'patronal': '4316', 'charge': '6663'},
+    'AMU-INAM': {'salarial': '4317', 'patronal': '4318', 'charge': '6664'},
+}
+COMPTE_FORMATION_PRO_CHARGE = '6665'
+COMPTE_FORMATION_PRO_A_REVERSER = '4319'
+COMPTE_IRPP_A_REVERSER = '447'
+COMPTE_PERSONNEL_AVANCES = '4211'   # prêts / acomptes / autres retenues sur salaire
 
 
 def compte_assurance(nom_assurance):

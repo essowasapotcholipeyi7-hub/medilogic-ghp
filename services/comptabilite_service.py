@@ -27,7 +27,10 @@ from models import (
 )
 from utils.plan_comptable_syscohada import (
     PLAN_COMPTABLE_PAR_NUMERO, COMPTE_CLIENTS_PATIENTS, COMPTE_ATTENTE,
-    compte_assurance
+    compte_assurance,
+    COMPTES_RETRAITE_PAR_ORGANISME, COMPTES_AMU_PAR_ORGANISME,
+    COMPTE_FORMATION_PRO_CHARGE, COMPTE_FORMATION_PRO_A_REVERSER,
+    COMPTE_IRPP_A_REVERSER, COMPTE_PERSONNEL_AVANCES,
 )
 from utils.categorisation import categoriser_acte
 
@@ -648,8 +651,8 @@ def generer_ecriture_paie(paie, employe, user_nom='SYSTEME'):
         organisme_amu = paie.organisme_amu or 'AMU-CNSS'
 
         # Retenues diverses (prêts/acomptes/autres) : réduisent le net versé
-        # sans être un decaissement en soi — elles diminuent une créance sur
-        # le personnel déjà avancée (compte 425), donc créditées ici.
+        # sans être un décaissement en soi — elles diminuent une créance sur
+        # le personnel déjà avancée (compte 421), donc créditées ici.
         autres = (_to_float(getattr(paie, 'prets_deduction', 0))
                   + _to_float(getattr(paie, 'acomptes_deduction', 0))
                   + _to_float(getattr(paie, 'autres_retenues_total', 0)))
@@ -657,34 +660,41 @@ def generer_ecriture_paie(paie, employe, user_nom='SYSTEME'):
         if salaire_brut <= 0:
             return None
 
+        # ⭐ Comptes spécifiques à l'organisme réellement appliqué sur cette
+        # paie (CNSS ou CRT, AMU-CNSS ou AMU-INAM) — jamais un compte
+        # générique partagé entre secteurs. Repli sur CNSS/AMU-CNSS si
+        # l'organisme n'est pas reconnu (ancien bulletin, valeur inattendue).
+        comptes_retraite = COMPTES_RETRAITE_PAR_ORGANISME.get(organisme_retraite, COMPTES_RETRAITE_PAR_ORGANISME['CNSS'])
+        comptes_amu = COMPTES_AMU_PAR_ORGANISME.get(organisme_amu, COMPTES_AMU_PAR_ORGANISME['AMU-CNSS'])
+
         libelle = f"Paie {paie.get_periode_label()} — {employe.nom} {employe.prenom}"
         lignes = [
             {'numero_compte': '661', 'libelle': 'Salaires et appointements', 'debit': salaire_brut},
         ]
         if retraite_pat > 0:
-            lignes.append({'numero_compte': '664', 'libelle': f'Charges sociales {organisme_retraite} patronal', 'debit': retraite_pat})
+            lignes.append({'numero_compte': comptes_retraite['charge'], 'libelle': f'Charges sociales {organisme_retraite} patronal', 'debit': retraite_pat})
         if amu_pat > 0:
-            lignes.append({'numero_compte': '6641', 'libelle': f'Charges sociales {organisme_amu} patronal', 'debit': amu_pat})
+            lignes.append({'numero_compte': comptes_amu['charge'], 'libelle': f'Charges sociales {organisme_amu} patronal', 'debit': amu_pat})
         if formation_pro > 0:
-            lignes.append({'numero_compte': '6642', 'libelle': 'Taxe formation professionnelle', 'debit': formation_pro})
+            lignes.append({'numero_compte': COMPTE_FORMATION_PRO_CHARGE, 'libelle': 'Taxe formation professionnelle', 'debit': formation_pro})
 
         if net > 0:
             lignes.append({'numero_compte': _compte_tresorerie(paie.mode_paiement),
                             'libelle': 'Net payé au salarié', 'credit': net})
         if retraite_sal > 0:
-            lignes.append({'numero_compte': '431', 'libelle': f'{organisme_retraite} salarial à reverser', 'credit': retraite_sal})
+            lignes.append({'numero_compte': comptes_retraite['salarial'], 'libelle': f'{organisme_retraite} salarial à reverser', 'credit': retraite_sal})
         if retraite_pat > 0:
-            lignes.append({'numero_compte': '432', 'libelle': f'{organisme_retraite} patronal à reverser', 'credit': retraite_pat})
+            lignes.append({'numero_compte': comptes_retraite['patronal'], 'libelle': f'{organisme_retraite} patronal à reverser', 'credit': retraite_pat})
         if amu_sal > 0:
-            lignes.append({'numero_compte': '433', 'libelle': f'{organisme_amu} salarial à reverser', 'credit': amu_sal})
+            lignes.append({'numero_compte': comptes_amu['salarial'], 'libelle': f'{organisme_amu} salarial à reverser', 'credit': amu_sal})
         if amu_pat > 0:
-            lignes.append({'numero_compte': '434', 'libelle': f'{organisme_amu} patronal à reverser', 'credit': amu_pat})
+            lignes.append({'numero_compte': comptes_amu['patronal'], 'libelle': f'{organisme_amu} patronal à reverser', 'credit': amu_pat})
         if formation_pro > 0:
-            lignes.append({'numero_compte': '4474', 'libelle': 'Formation professionnelle à reverser', 'credit': formation_pro})
+            lignes.append({'numero_compte': COMPTE_FORMATION_PRO_A_REVERSER, 'libelle': 'Formation professionnelle à reverser', 'credit': formation_pro})
         if irpp > 0:
-            lignes.append({'numero_compte': '447', 'libelle': 'IRPP à reverser', 'credit': irpp})
+            lignes.append({'numero_compte': COMPTE_IRPP_A_REVERSER, 'libelle': 'IRPP à reverser', 'credit': irpp})
         if autres > 0:
-            lignes.append({'numero_compte': '425', 'libelle': 'Avances/acomptes/prêts récupérés sur salaire', 'credit': autres})
+            lignes.append({'numero_compte': COMPTE_PERSONNEL_AVANCES, 'libelle': 'Avances/acomptes/prêts récupérés sur salaire', 'credit': autres})
 
         return creer_ecriture(
             structure_id=paie.structure_id,
