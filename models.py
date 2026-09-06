@@ -1,6 +1,6 @@
 # models.py - GHP
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, time, timedelta
 from utils.db_failover import FailoverSession
 # ⭐ Créer db pour les modèles
 # session_options : voir utils/db_failover.py — route chaque requête vers
@@ -2250,3 +2250,91 @@ class SheetsMirror(db.Model):
     __table_args__ = (
         db.UniqueConstraint('structure_id', 'sheet_type', 'row_key', name='uq_sheets_mirror_row'),
     )
+
+
+# ============================================================================
+# POINTAGE — badgeage par empreinte digitale (WebAuthn / Windows Hello)
+# ============================================================================
+
+class EmpreinteEmploye(db.Model):
+    """Une empreinte (credential WebAuthn) enregistrée pour un employé.
+    Un employé peut en avoir plusieurs (ex: enregistrée sur deux postes)."""
+    __tablename__ = 'empreintes_employes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    employe_id = db.Column(db.Integer, db.ForeignKey('employes.id'), nullable=False)
+
+    credential_id = db.Column(db.Text, nullable=False, unique=True)  # base64, identifiant WebAuthn
+    public_key = db.Column(db.Text, nullable=False)                  # base64, clé publique COSE
+    sign_count = db.Column(db.Integer, default=0)                    # anti-clonage (doit toujours augmenter)
+
+    libelle_appareil = db.Column(db.String(100))   # ex: "PC accueil"
+    actif = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    derniere_utilisation = db.Column(db.DateTime)
+
+    employe = db.relationship('Employe', backref='empreintes')
+
+
+class ParametragePointage(db.Model):
+    """Règles de pointage par structure (horaires, tolérance, jours travaillés)."""
+    __tablename__ = 'parametrage_pointage'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False, unique=True)
+
+    heure_debut = db.Column(db.Time, default=lambda: time(8, 0))
+    heure_fin = db.Column(db.Time, default=lambda: time(17, 0))
+    tolerance_retard_minutes = db.Column(db.Integer, default=10)
+    # Jours travaillés : 0=lundi ... 6=dimanche (convention Python date.weekday())
+    jours_travailles = db.Column(db.JSON, default=lambda: [0, 1, 2, 3, 4, 5])
+
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @classmethod
+    def get_ou_creer(cls, structure_id):
+        param = cls.query.filter_by(structure_id=structure_id).first()
+        if not param:
+            param = cls(structure_id=structure_id)
+            db.session.add(param)
+            db.session.commit()
+        return param
+
+
+class Pointage(db.Model):
+    """Un pointage = une ligne par employé et par jour (arrivée + départ)."""
+    __tablename__ = 'pointages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    employe_id = db.Column(db.Integer, db.ForeignKey('employes.id'), nullable=False)
+    date_jour = db.Column(db.Date, nullable=False)
+
+    heure_arrivee = db.Column(db.Time)
+    methode_arrivee = db.Column(db.String(20))    # 'empreinte' | 'manuel'
+    statut_arrivee = db.Column(db.String(20))     # 'a_l_heure' | 'retard'
+    retard_minutes = db.Column(db.Integer, default=0)
+
+    heure_depart = db.Column(db.Time)
+    methode_depart = db.Column(db.String(20))
+    depart_anticipe = db.Column(db.Boolean, default=False)
+
+    duree_travaillee_minutes = db.Column(db.Integer)
+    commentaire = db.Column(db.Text)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    employe = db.relationship('Employe', backref='pointages')
+
+    __table_args__ = (
+        db.UniqueConstraint('employe_id', 'date_jour', name='uq_pointage_employe_jour'),
+    )
+
+    def get_statut_label(self):
+        if not self.heure_arrivee:
+            return 'Absent'
+        if self.statut_arrivee == 'retard':
+            return f"Retard ({self.retard_minutes} min)"
+        return 'À l\'heure'

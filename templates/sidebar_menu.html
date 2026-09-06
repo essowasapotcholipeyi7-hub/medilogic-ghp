@@ -116,11 +116,8 @@
                     <span class="menu-text">Journal des mouvements</span>
                 </a>
                 
-                <a class="nav-link {% if request.path.startswith('/rh') and not request.path.startswith('/rh/paie') and not request.path.startswith('/rh/parametres-paie') %}active{% endif %}" href="{{ url_for('rh.gestion_rh') }}">
-                    <span class="menu-text">Gestion Ressources humaines</span>
-                </a>
-                <a class="nav-link {% if request.path.startswith('/rh/paie') or request.path.startswith('/rh/parametres-paie') %}active{% endif %}" href="{{ url_for('rh.page_paie') }}">
-                    <span class="menu-text">Paie (salaires)</span>
+                <a class="nav-link {% if request.path.startswith('/rh') %}active{% endif %}" href="{{ url_for('rh.gestion_rh') }}">
+                    <span class="menu-text">Ressources humaines</span>
                 </a>
                 <a class="nav-link {% if request.endpoint == 'admin_finances' %}active{% endif %}" href="{{ url_for('admin_finances') }}">
                     <span class="menu-text">Finances/Caisse&Charge</span>

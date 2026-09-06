@@ -360,3 +360,50 @@ SET actif = FALSE
 WHERE cc.numero IN ('431', '432', '433', '434', '664', '6641')
 AND NOT EXISTS (SELECT 1 FROM lignes_ecritures le WHERE le.compte_id = cc.id);
 -- ----------------------------------------------------------
+
+
+-- ----------------------------------------------------------
+-- 11) Pointage par empreinte (WebAuthn) — tables additives
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS empreintes_employes (
+    id SERIAL PRIMARY KEY,
+    structure_id INTEGER NOT NULL,
+    employe_id INTEGER NOT NULL REFERENCES employes(id),
+    credential_id TEXT NOT NULL UNIQUE,
+    public_key TEXT NOT NULL,
+    sign_count INTEGER DEFAULT 0,
+    libelle_appareil VARCHAR(100),
+    actif BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    derniere_utilisation TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS parametrage_pointage (
+    id SERIAL PRIMARY KEY,
+    structure_id INTEGER NOT NULL UNIQUE,
+    heure_debut TIME DEFAULT '08:00',
+    heure_fin TIME DEFAULT '17:00',
+    tolerance_retard_minutes INTEGER DEFAULT 10,
+    jours_travailles JSON DEFAULT '[0,1,2,3,4,5]',
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS pointages (
+    id SERIAL PRIMARY KEY,
+    structure_id INTEGER NOT NULL,
+    employe_id INTEGER NOT NULL REFERENCES employes(id),
+    date_jour DATE NOT NULL,
+    heure_arrivee TIME,
+    methode_arrivee VARCHAR(20),
+    statut_arrivee VARCHAR(20),
+    retard_minutes INTEGER DEFAULT 0,
+    heure_depart TIME,
+    methode_depart VARCHAR(20),
+    depart_anticipe BOOLEAN DEFAULT FALSE,
+    duree_travaillee_minutes INTEGER,
+    commentaire TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT uq_pointage_employe_jour UNIQUE (employe_id, date_jour)
+);
+-- ----------------------------------------------------------

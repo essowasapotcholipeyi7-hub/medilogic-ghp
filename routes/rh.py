@@ -1,11 +1,12 @@
 # routes/rh.py - VERSION CORRIGÉE ET OPTIMISÉE
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, time, timedelta
 from sqlalchemy import or_, and_, extract, func
 import json
 import traceback
 
-from models import db, Employe, Service, Conge, Permission, DocumentRH, SignatureRH, Paie, ParametragePaie
+from models import (db, Employe, Service, Conge, Permission, DocumentRH, SignatureRH,
+                     Paie, ParametragePaie, EmpreinteEmploye, ParametragePointage, Pointage)
 
 rh_bp = Blueprint('rh', __name__, url_prefix='/rh')
 
@@ -1706,3 +1707,229 @@ def declaration_print(structure_id, type_declaration):
         structure=get_structure_info(structure_id),
         now=datetime.now(),
     )
+
+
+# ============================================================
+# POINTAGE PAR EMPREINTE (WebAuthn / Windows Hello)
+# ============================================================
+# N'est utilisable par le navigateur que sur http://localhost:<port> ou en
+# HTTPS (règle du standard WebAuthn, pas de notre fait) — pas sur une IP
+# locale en http:// simple.
+
+@rh_bp.route('/pointage')
+@require_structure
+def page_pointage(structure_id):
+    """⭐ Voir note sur employes() : le pointage vit dans l'onglet dédié du hub."""
+    return redirect(url_for('rh.gestion_rh') + '#pointage')
+
+
+@rh_bp.route('/api/pointage/parametrage', methods=['GET'])
+@require_structure
+def api_get_parametrage_pointage(structure_id):
+    p = ParametragePointage.get_ou_creer(structure_id)
+    return jsonify({
+        'heure_debut': p.heure_debut.strftime('%H:%M'),
+        'heure_fin': p.heure_fin.strftime('%H:%M'),
+        'tolerance_retard_minutes': p.tolerance_retard_minutes,
+        'jours_travailles': p.jours_travailles or [],
+    })
+
+
+@rh_bp.route('/api/pointage/parametrage', methods=['PUT'])
+@require_structure
+def api_maj_parametrage_pointage(structure_id):
+    data = request.get_json(force=True) or {}
+    p = ParametragePointage.get_ou_creer(structure_id)
+    try:
+        if data.get('heure_debut'):
+            h, m = data['heure_debut'].split(':')
+            p.heure_debut = time(int(h), int(m))
+        if data.get('heure_fin'):
+            h, m = data['heure_fin'].split(':')
+            p.heure_fin = time(int(h), int(m))
+        if 'tolerance_retard_minutes' in data:
+            p.tolerance_retard_minutes = max(0, int(data['tolerance_retard_minutes']))
+        if 'jours_travailles' in data:
+            p.jours_travailles = [int(j) for j in data['jours_travailles'] if 0 <= int(j) <= 6]
+    except (ValueError, TypeError, KeyError) as e:
+        return jsonify({'success': False, 'message': f'Valeur invalide : {e}'}), 400
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@rh_bp.route('/api/pointage/liste', methods=['GET'])
+@require_structure
+def api_liste_pointages(structure_id):
+    date_str = request.args.get('date')
+    jour = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else date.today()
+
+    pointages = Pointage.query.filter_by(structure_id=structure_id, date_jour=jour) \
+        .join(Employe).order_by(Employe.nom).all()
+
+    # Employés sans pointage ce jour-là (utile pour repérer les absences au fil de l'eau)
+    ids_pointes = {p.employe_id for p in pointages}
+    tous = Employe.query.filter_by(structure_id=structure_id, statut='Actif').all()
+    sans_pointage = [e for e in tous if e.id not in ids_pointes]
+
+    return jsonify({
+        'success': True,
+        'date': jour.isoformat(),
+        'pointages': [{
+            'id': p.id,
+            'employe_id': p.employe_id,
+            'employe_nom': f"{p.employe.prenom or ''} {p.employe.nom}".strip(),
+            'heure_arrivee': p.heure_arrivee.strftime('%H:%M') if p.heure_arrivee else None,
+            'methode_arrivee': p.methode_arrivee,
+            'statut_arrivee': p.statut_arrivee,
+            'retard_minutes': p.retard_minutes,
+            'heure_depart': p.heure_depart.strftime('%H:%M') if p.heure_depart else None,
+            'methode_depart': p.methode_depart,
+            'duree_travaillee_minutes': p.duree_travaillee_minutes,
+        } for p in pointages],
+        'absents': [{'employe_id': e.id, 'employe_nom': f"{e.prenom or ''} {e.nom}".strip()} for e in sans_pointage],
+    })
+
+
+@rh_bp.route('/api/pointage/resume', methods=['GET'])
+@require_structure
+def api_resume_pointage(structure_id):
+    from services.pointage_service import resume_periode
+    try:
+        date_debut = datetime.strptime(request.args.get('date_debut'), '%Y-%m-%d').date()
+        date_fin = datetime.strptime(request.args.get('date_fin'), '%Y-%m-%d').date()
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'Période invalide'}), 400
+
+    resultats = resume_periode(structure_id, date_debut, date_fin)
+    return jsonify({'success': True, 'data': resultats})
+
+
+@rh_bp.route('/api/pointage/manuel', methods=['POST'])
+@require_structure
+def api_pointage_manuel(structure_id):
+    """Saisie manuelle (admin) — pour un employé qui n'a pas encore
+    d'empreinte enregistrée, ou en cas d'oubli/panne du capteur."""
+    from services.pointage_service import enregistrer_pointage
+
+    data = request.get_json(force=True) or {}
+    employe = Employe.query.filter_by(id=data.get('employe_id'), structure_id=structure_id).first()
+    if not employe:
+        return jsonify({'success': False, 'message': 'Employé introuvable'}), 404
+
+    try:
+        resultat = enregistrer_pointage(employe, methode='manuel')
+        db.session.commit()
+        return jsonify({'success': True, 'data': resultat})
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 400
+
+
+# ---- Empreintes (enrôlement) ----
+
+@rh_bp.route('/api/empreintes', methods=['GET'])
+@require_structure
+def api_liste_empreintes(structure_id):
+    employes = Employe.query.filter_by(structure_id=structure_id, statut='Actif').order_by(Employe.nom).all()
+    return jsonify({
+        'success': True,
+        'data': [{
+            'employe_id': e.id,
+            'employe_nom': f"{e.prenom or ''} {e.nom}".strip(),
+            'empreintes': [{
+                'id': emp.id,
+                'libelle_appareil': emp.libelle_appareil,
+                'created_at': emp.created_at.strftime('%d/%m/%Y'),
+                'derniere_utilisation': emp.derniere_utilisation.strftime('%d/%m/%Y %H:%M') if emp.derniere_utilisation else None,
+            } for emp in e.empreintes if emp.actif],
+        } for e in employes],
+    })
+
+
+@rh_bp.route('/api/empreintes/<int:empreinte_id>', methods=['DELETE'])
+@require_structure
+def api_supprimer_empreinte(structure_id, empreinte_id):
+    empreinte = EmpreinteEmploye.query.filter_by(id=empreinte_id, structure_id=structure_id).first()
+    if not empreinte:
+        return jsonify({'success': False, 'message': 'Empreinte introuvable'}), 404
+    empreinte.actif = False
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@rh_bp.route('/api/empreintes/enregistrer/options', methods=['POST'])
+@require_structure
+def api_options_enregistrement_empreinte(structure_id):
+    from services.pointage_service import options_enregistrement
+
+    data = request.get_json(force=True) or {}
+    employe = Employe.query.filter_by(id=data.get('employe_id'), structure_id=structure_id).first()
+    if not employe:
+        return jsonify({'success': False, 'message': 'Employé introuvable'}), 404
+
+    options_json, challenge = options_enregistrement(request, employe)
+    session['pointage_challenge'] = challenge
+    session['pointage_employe_id'] = employe.id
+    return jsonify({'success': True, 'options': json.loads(options_json)})
+
+
+@rh_bp.route('/api/empreintes/enregistrer/verifier', methods=['POST'])
+@require_structure
+def api_verifier_enregistrement_empreinte(structure_id):
+    from services.pointage_service import verifier_enregistrement
+
+    data = request.get_json(force=True) or {}
+    challenge = session.pop('pointage_challenge', None)
+    employe_id = session.pop('pointage_employe_id', None)
+    if not challenge or not employe_id:
+        return jsonify({'success': False, 'message': 'Session expirée, recommencez.'}), 400
+
+    employe = Employe.query.filter_by(id=employe_id, structure_id=structure_id).first()
+    if not employe:
+        return jsonify({'success': False, 'message': 'Employé introuvable'}), 404
+
+    try:
+        verifier_enregistrement(request, employe, data.get('credential'), challenge,
+                                 libelle_appareil=data.get('libelle_appareil'))
+        return jsonify({'success': True, 'message': 'Empreinte enregistrée avec succès.'})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f"Echec de l'enregistrement : {e}"}), 400
+
+
+# ---- Pointage kiosque (identification par empreinte) ----
+
+@rh_bp.route('/api/pointage/webauthn/options', methods=['POST'])
+@require_structure
+def api_options_pointage(structure_id):
+    from services.pointage_service import options_pointage
+
+    options_json, challenge = options_pointage(request, structure_id)
+    if options_json is None:
+        return jsonify({'success': False, 'message': "Aucune empreinte enregistrée pour cette structure."}), 400
+
+    session['pointage_challenge'] = challenge
+    return jsonify({'success': True, 'options': json.loads(options_json)})
+
+
+@rh_bp.route('/api/pointage/webauthn/verifier', methods=['POST'])
+@require_structure
+def api_verifier_pointage(structure_id):
+    from services.pointage_service import verifier_pointage
+
+    data = request.get_json(force=True) or {}
+    challenge = session.pop('pointage_challenge', None)
+    if not challenge:
+        return jsonify({'success': False, 'message': 'Session expirée, recommencez.'}), 400
+
+    try:
+        resultat = verifier_pointage(request, structure_id, data.get('credential'), challenge)
+        return jsonify({'success': True, 'data': resultat})
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f"Echec de la vérification : {e}"}), 400
