@@ -101,7 +101,12 @@ def register_events(db):
     if not FAILOVER_ENABLED:
         return
 
-    from models import SyncChangelog, SyncState  # import tardif pour éviter les imports circulaires
+    def _est_table_locale_uniquement(obj):
+        # Tout modèle avec __bind_key__ (SyncState, SyncChangelog, SheetsMirror,
+        # et tout futur modèle du même genre) ne vit que sur le Postgres local
+        # (jamais sur Neon) — inutile, et même incorrect, de le mettre dans la
+        # file de rejeu vers Neon (la table n'y existe pas).
+        return getattr(type(obj), '__bind_key__', None) is not None
 
     @event.listens_for(FailoverSession, 'before_flush')
     def _before_flush(session, flush_context, instances):
@@ -109,16 +114,16 @@ def register_events(db):
             return
         pending = session.info.setdefault(_pending_key(session), [])
         for obj in list(session.new):
-            if isinstance(obj, (SyncChangelog, SyncState)):
+            if _est_table_locale_uniquement(obj):
                 continue
             pending.append({'obj': obj, 'op': 'insert'})
         for obj in list(session.dirty):
-            if isinstance(obj, (SyncChangelog, SyncState)):
+            if _est_table_locale_uniquement(obj):
                 continue
             if session.is_modified(obj, include_collections=False):
                 pending.append({'obj': obj, 'op': 'update'})
         for obj in list(session.deleted):
-            if isinstance(obj, (SyncChangelog, SyncState)):
+            if _est_table_locale_uniquement(obj):
                 continue
             pending.append({'obj': obj, 'op': 'delete'})
 
@@ -265,10 +270,17 @@ def push_sync_to_neon():
     synchronisé et on réessaiera au prochain cycle."""
     from models import db, SyncChangelog
     import psycopg2
+    from psycopg2.extras import Json as PgJson
 
     entries = SyncChangelog.query.filter_by(synced=False).order_by(SyncChangelog.id.asc()).all()
     if not entries:
         return True
+
+    def _adapt(v):
+        # Une colonne JSON (ex: Paie.autres_retenues) revient du changelog
+        # comme un dict/list Python natif — psycopg2 ne sait l'adapter que
+        # via Json(), sinon "can't adapt type 'dict'".
+        return PgJson(v) if isinstance(v, (dict, list)) else v
 
     touched_tables = set()
     conn = None
@@ -287,7 +299,7 @@ def push_sync_to_neon():
                 update_list = ', '.join(f'"{c}" = EXCLUDED."{c}"' for c in cols if c != PK_COLUMN)
                 sql = (f'INSERT INTO "{e.table_name}" ({col_list}) VALUES ({placeholders}) '
                        f'ON CONFLICT ("{PK_COLUMN}") DO UPDATE SET {update_list}')
-                cur.execute(sql, [payload[c] for c in cols])
+                cur.execute(sql, [_adapt(payload[c]) for c in cols])
             elif e.operation == 'delete':
                 cur.execute(f'DELETE FROM "{e.table_name}" WHERE "{PK_COLUMN}" = %s', [e.pk_value])
 
