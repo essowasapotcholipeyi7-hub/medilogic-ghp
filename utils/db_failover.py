@@ -226,8 +226,17 @@ def pull_refresh_from_neon():
             return False
 
         r = subprocess.run(
+            # --single-transaction : tout le restore (DROP + CREATE + COPY de
+            # chaque table) passe dans UNE seule transaction. Sans ça, une
+            # autre connexion (une requête web, un autre process app.py sur
+            # ce poste) peut lire la base pile entre le DROP et le CREATE
+            # d'une table et voir "relation does not exist" — vécu en test.
+            # --no-privileges : Neon référence des rôles qui n'existent pas
+            # en local (neon_superuser, cloud_admin) — avec --single-transaction
+            # cette seule erreur ferait échouer TOUT le restore, alors qu'on
+            # n'a de toute façon pas besoin de ces droits en local.
             [_pgtool('pg_restore.exe'), '--clean', '--if-exists', '--no-owner',
-             '-d', LOCAL_URL, dump_path],
+             '--no-privileges', '--single-transaction', '-d', LOCAL_URL, dump_path],
             capture_output=True, text=True, timeout=180
         )
         # pg_restore --clean renvoie souvent un code non-nul pour de simples
