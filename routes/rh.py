@@ -14,6 +14,15 @@ rh_bp = Blueprint('rh', __name__, url_prefix='/rh')
 # ============================================================
 CONGES_ANNUELS = 30  # ⭐ Nombre de jours de congés par année
 
+
+def _clamp_personnes_a_charge(valeur, maximum=6):
+    """Nombre de personnes à charge (déduction IRPP) : 0 à `maximum`."""
+    try:
+        n = int(valeur or 0)
+    except (TypeError, ValueError):
+        n = 0
+    return max(0, min(n, maximum))
+
 # ============================================================
 # DÉCORATEURS
 # ============================================================
@@ -249,7 +258,14 @@ def api_employe_detail(structure_id, id):
         'conges_pris': solde_info['conges_pris'],
         'permissions_pris': solde_info['permissions_pris'],
         'total_annuel': CONGES_ANNUELS,
-        'photo_url': employe.photo_url
+        'photo_url': employe.photo_url,
+        # ⭐ Paramètres de paie individuels
+        'secteur_paie': employe.secteur_paie or 'prive',
+        'personnes_a_charge': employe.personnes_a_charge or 0,
+        'taux_retraite_salarial_override': float(employe.taux_retraite_salarial_override) if employe.taux_retraite_salarial_override is not None else None,
+        'taux_retraite_patronal_override': float(employe.taux_retraite_patronal_override) if employe.taux_retraite_patronal_override is not None else None,
+        'taux_amu_salarial_override': float(employe.taux_amu_salarial_override) if employe.taux_amu_salarial_override is not None else None,
+        'taux_amu_patronal_override': float(employe.taux_amu_patronal_override) if employe.taux_amu_patronal_override is not None else None,
     })
 
 @rh_bp.route('/employe/ajouter', methods=['POST'])
@@ -291,7 +307,9 @@ def employe_ajouter(structure_id):
             telephone_prevenir=data.get('telephone_prevenir', '').strip(),
             lien_parente=data.get('lien_parente', '').strip(),
             statut='Actif',
-            conges_annuels=CONGES_ANNUELS  # ⭐ 30 jours
+            conges_annuels=CONGES_ANNUELS,  # ⭐ 30 jours
+            secteur_paie=data.get('secteur_paie', 'prive') if data.get('secteur_paie') in ('prive', 'public') else 'prive',
+            personnes_a_charge=_clamp_personnes_a_charge(data.get('personnes_a_charge', 0)),
         )
         
         db.session.add(employe)
@@ -370,7 +388,39 @@ def api_modifier_employe(structure_id, id):
             employe.lien_parente = data['lien_parente'].strip()
         if 'statut' in data:
             employe.statut = data['statut']
-        
+
+        # ⭐ Paramètres de paie individuels
+        if 'secteur_paie' in data and data['secteur_paie'] in ('prive', 'public'):
+            employe.secteur_paie = data['secteur_paie']
+        if 'personnes_a_charge' in data:
+            parametrage = ParametragePaie.get_ou_creer(structure_id)
+            employe.personnes_a_charge = _clamp_personnes_a_charge(
+                data['personnes_a_charge'], int(parametrage.max_personnes_charge or 6))
+        if 'taux_retraite_salarial_override' in data:
+            v = data['taux_retraite_salarial_override']
+            employe.taux_retraite_salarial_override = float(v) if v not in (None, '') else None
+        if 'taux_retraite_patronal_override' in data:
+            v = data['taux_retraite_patronal_override']
+            employe.taux_retraite_patronal_override = float(v) if v not in (None, '') else None
+        if 'taux_amu_salarial_override' in data:
+            v = data['taux_amu_salarial_override']
+            if v not in (None, ''):
+                parametrage = ParametragePaie.get_ou_creer(structure_id)
+                demi_amu = float(parametrage.amu_taux_global or 10) / 2.0
+                v = min(float(v), demi_amu)  # ⭐ verrou AMU : jamais > moitié du taux global
+                employe.taux_amu_salarial_override = v
+            else:
+                employe.taux_amu_salarial_override = None
+        if 'taux_amu_patronal_override' in data:
+            v = data['taux_amu_patronal_override']
+            if v not in (None, ''):
+                parametrage = ParametragePaie.get_ou_creer(structure_id)
+                demi_amu = float(parametrage.amu_taux_global or 10) / 2.0
+                v = max(float(v), demi_amu)  # ⭐ verrou AMU : jamais < moitié du taux global
+                employe.taux_amu_patronal_override = v
+            else:
+                employe.taux_amu_patronal_override = None
+
         employe.updated_at = datetime.utcnow()
         db.session.commit()
         
@@ -1366,13 +1416,25 @@ def page_parametres_paie(structure_id):
 @require_structure
 def api_get_parametres_paie(structure_id):
     p = ParametragePaie.get_ou_creer(structure_id)
+    demi_amu = float(p.amu_taux_global or 10) / 2.0
     return jsonify({
         'taux_cnss_salarial': float(p.taux_cnss_salarial or 0),
         'taux_cnss_patronal': float(p.taux_cnss_patronal or 0),
         'plafond_cnss': float(p.plafond_cnss or 0),
-        'taux_inam_salarial': float(p.taux_inam_salarial or 0),
-        'taux_inam_patronal': float(p.taux_inam_patronal or 0),
+        'taux_crt_salarial': float(p.taux_crt_salarial or 0),
+        'taux_crt_patronal': float(p.taux_crt_patronal or 0),
+        'plafond_crt': float(p.plafond_crt or 0),
+        'amu_taux_global': float(p.amu_taux_global or 0),
+        'amu_salarial_max': demi_amu,      # verrou (dérivé, non modifiable directement)
+        'amu_patronal_min': demi_amu,      # verrou (dérivé, non modifiable directement)
+        'taux_amu_salarial_defaut': float(p.taux_amu_salarial_defaut or 0),
+        'taux_amu_patronal_defaut': float(p.taux_amu_patronal_defaut or 0),
+        'taux_formation_pro': float(p.taux_formation_pro or 0),
         'tranches_irpp': p.tranches_irpp or [],
+        'abattement_taux': float(p.abattement_taux or 0),
+        'abattement_plafond_annuel': float(p.abattement_plafond_annuel or 0),
+        'deduction_personne_charge': float(p.deduction_personne_charge or 0),
+        'max_personnes_charge': int(p.max_personnes_charge or 6),
         'updated_at': p.updated_at.strftime('%Y-%m-%d %H:%M') if p.updated_at else None,
     })
 
@@ -1385,10 +1447,27 @@ def api_maj_parametres_paie(structure_id):
     try:
         data = request.json
         p = ParametragePaie.get_ou_creer(structure_id)
+
         for champ in ['taux_cnss_salarial', 'taux_cnss_patronal', 'plafond_cnss',
-                      'taux_inam_salarial', 'taux_inam_patronal']:
+                      'taux_crt_salarial', 'taux_crt_patronal', 'plafond_crt',
+                      'amu_taux_global', 'taux_formation_pro',
+                      'abattement_taux', 'abattement_plafond_annuel',
+                      'deduction_personne_charge']:
             if champ in data:
                 setattr(p, champ, data[champ])
+        if 'max_personnes_charge' in data:
+            p.max_personnes_charge = int(data['max_personnes_charge'])
+
+        # ⭐ Verrouillage AMU (décret n°2023-096/PR) : la part salarié ne
+        # peut jamais dépasser la moitié du taux global, la part employeur
+        # ne peut jamais être inférieure à cette moitié — appliqué ici
+        # avant sauvegarde, quelle que soit la valeur envoyée par le client.
+        demi_amu = float(p.amu_taux_global or 10) / 2.0
+        if 'taux_amu_salarial_defaut' in data:
+            p.taux_amu_salarial_defaut = min(float(data['taux_amu_salarial_defaut']), demi_amu)
+        if 'taux_amu_patronal_defaut' in data:
+            p.taux_amu_patronal_defaut = max(float(data['taux_amu_patronal_defaut']), demi_amu)
+
         if 'tranches_irpp' in data:
             p.tranches_irpp = data['tranches_irpp']
         p.updated_by = session.get('user_name', 'Admin')
@@ -1419,6 +1498,8 @@ def api_liste_paies(structure_id):
             'matricule': e.matricule,
             'nom': e.nom, 'prenom': e.prenom,
             'poste': e.poste, 'salaire_base': float(e.salaire_base or 0),
+            'secteur_paie': e.secteur_paie or 'prive',
+            'personnes_a_charge': e.personnes_a_charge or 0,
             'paie_id': paie.id if paie else None,
             'salaire_brut': float(paie.salaire_brut) if paie else None,
             'net_a_payer': float(paie.net_a_payer) if paie else None,
@@ -1436,19 +1517,52 @@ def api_generer_paie(structure_id):
     try:
         from services.paie_service import generer_ou_maj_paie
         data = request.json
+        employe_id = data.get('employe_id')
+
+        # ⭐ Les réglages individuels (secteur, personnes à charge, taux
+        # dérogatoires) saisis depuis l'écran de génération sont persistés
+        # sur l'employé — "modifiable individuellement par salarié".
+        employe = Employe.query.filter_by(id=employe_id, structure_id=structure_id).first()
+        if not employe:
+            return jsonify({'success': False, 'error': 'Employé introuvable'}), 404
+
+        parametrage = ParametragePaie.get_ou_creer(structure_id)
+        demi_amu = float(parametrage.amu_taux_global or 10) / 2.0
+
+        if data.get('secteur_paie') in ('prive', 'public'):
+            employe.secteur_paie = data['secteur_paie']
+        if 'personnes_a_charge' in data:
+            employe.personnes_a_charge = _clamp_personnes_a_charge(
+                data['personnes_a_charge'], int(parametrage.max_personnes_charge or 6))
+        if 'taux_retraite_salarial_override' in data and data['taux_retraite_salarial_override'] not in (None, ''):
+            employe.taux_retraite_salarial_override = float(data['taux_retraite_salarial_override'])
+        if 'taux_retraite_patronal_override' in data and data['taux_retraite_patronal_override'] not in (None, ''):
+            employe.taux_retraite_patronal_override = float(data['taux_retraite_patronal_override'])
+        if 'taux_amu_salarial_override' in data and data['taux_amu_salarial_override'] not in (None, ''):
+            employe.taux_amu_salarial_override = min(float(data['taux_amu_salarial_override']), demi_amu)
+        if 'taux_amu_patronal_override' in data and data['taux_amu_patronal_override'] not in (None, ''):
+            employe.taux_amu_patronal_override = max(float(data['taux_amu_patronal_override']), demi_amu)
+        db.session.commit()
+
         paie, erreur = generer_ou_maj_paie(
             structure_id=structure_id,
-            employe_id=data.get('employe_id'),
+            employe_id=employe_id,
             annee=data.get('annee', datetime.now().year),
             mois=data.get('mois', datetime.now().month),
+            salaire_base=data.get('salaire_base'),
             primes=data.get('primes', 0),
             indemnites=data.get('indemnites', 0),
+            prets=data.get('prets', 0),
+            acomptes=data.get('acomptes', 0),
+            autres_retenues=data.get('autres_retenues', []),
+            personnes_a_charge=employe.personnes_a_charge,
             user_nom=session.get('user_name', 'Admin'),
         )
         if erreur:
             return jsonify({'success': False, 'error': erreur}), 400
         return jsonify({'success': True, 'paie_id': paie.id, 'net_a_payer': float(paie.net_a_payer)})
     except Exception as e:
+        db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -1462,11 +1576,28 @@ def api_detail_paie(structure_id, paie_id):
     return jsonify({
         'id': paie.id, 'periode': paie.get_periode_label(),
         'employe': f"{e.nom} {e.prenom}", 'matricule': e.matricule, 'poste': e.poste,
+        'secteur': paie.secteur, 'organisme_retraite': paie.organisme_retraite,
+        'organisme_amu': paie.organisme_amu,
         'salaire_base': float(paie.salaire_base), 'primes': float(paie.primes),
         'indemnites': float(paie.indemnites), 'salaire_brut': float(paie.salaire_brut),
-        'cnss_salarial': float(paie.cnss_salarial), 'cnss_patronal': float(paie.cnss_patronal),
-        'inam_salarial': float(paie.inam_salarial), 'inam_patronal': float(paie.inam_patronal),
-        'irpp': float(paie.irpp), 'total_retenues': float(paie.total_retenues),
+        'taux_retraite_salarial': float(paie.taux_retraite_salarial or 0),
+        'taux_retraite_patronal': float(paie.taux_retraite_patronal or 0),
+        'retraite_salarial': float(paie.retraite_salarial), 'retraite_patronal': float(paie.retraite_patronal),
+        'taux_amu_salarial': float(paie.taux_amu_salarial or 0),
+        'taux_amu_patronal': float(paie.taux_amu_patronal or 0),
+        'amu_salarial': float(paie.amu_salarial), 'amu_patronal': float(paie.amu_patronal),
+        'formation_pro': float(paie.formation_pro or 0),
+        'salaire_brut_imposable': float(paie.salaire_brut_imposable or 0),
+        'personnes_a_charge': paie.personnes_a_charge or 0,
+        'abattement': float(paie.abattement or 0),
+        'deduction_charges_familiales': float(paie.deduction_charges_familiales or 0),
+        'revenu_net_imposable': float(paie.revenu_net_imposable or 0),
+        'irpp': float(paie.irpp),
+        'prets_deduction': float(paie.prets_deduction or 0),
+        'acomptes_deduction': float(paie.acomptes_deduction or 0),
+        'autres_retenues': paie.autres_retenues or [],
+        'autres_retenues_total': float(paie.autres_retenues_total or 0),
+        'total_retenues': float(paie.total_retenues),
         'total_charges_patronales': float(paie.total_charges_patronales),
         'net_a_payer': float(paie.net_a_payer), 'statut': paie.statut,
         'statut_label': paie.get_statut_label(),

@@ -74,6 +74,8 @@
             <div><span class="label">Matricule : </span>{{ employe.matricule }}</div>
             <div><span class="label">Poste : </span>{{ employe.poste or '-' }}</div>
             <div><span class="label">Date d'embauche : </span>{{ employe.date_embauche.strftime('%d/%m/%Y') if employe.date_embauche else '-' }}</div>
+            <div><span class="label">Statut : </span>{{ 'Public' if paie.secteur == 'public' else 'Privé' }}</div>
+            <div><span class="label">Personnes à charge : </span>{{ paie.personnes_a_charge or 0 }}</div>
         </div>
 
         <table class="bulletin">
@@ -81,20 +83,40 @@
                 <tr><th>Élément</th><th style="text-align:right">Montant (FCFA)</th></tr>
             </thead>
             <tbody>
-                <tr><td>Salaire de base</td><td class="montant">{{ '{:,.0f}'.format(paie.salaire_base) }}</td></tr>
+                <tr><td>Salaire de base{{ ' (traitement indiciaire)' if paie.secteur == 'public' else '' }}</td><td class="montant">{{ '{:,.0f}'.format(paie.salaire_base) }}</td></tr>
                 <tr><td>Primes</td><td class="montant">{{ '{:,.0f}'.format(paie.primes) }}</td></tr>
                 <tr><td>Indemnités</td><td class="montant">{{ '{:,.0f}'.format(paie.indemnites) }}</td></tr>
                 <tr class="section"><td>Salaire brut</td><td class="montant">{{ '{:,.0f}'.format(paie.salaire_brut) }}</td></tr>
 
-                <tr><td>CNSS (retenue salariale)</td><td class="montant">- {{ '{:,.0f}'.format(paie.cnss_salarial) }}</td></tr>
-                <tr><td>INAM (retenue salariale)</td><td class="montant">- {{ '{:,.0f}'.format(paie.inam_salarial) }}</td></tr>
+                <tr><td>{{ paie.organisme_retraite }} (retenue salariale — {{ paie.taux_retraite_salarial|round(2) }}%)</td><td class="montant">- {{ '{:,.0f}'.format(paie.retraite_salarial) }}</td></tr>
+                <tr><td>{{ paie.organisme_amu }} (retenue salariale — {{ paie.taux_amu_salarial|round(2) }}%)</td><td class="montant">- {{ '{:,.0f}'.format(paie.amu_salarial) }}</td></tr>
+                <tr class="section"><td>Salaire brut imposable</td><td class="montant">{{ '{:,.0f}'.format(paie.salaire_brut_imposable) }}</td></tr>
+
+                <tr><td>Abattement forfaitaire (28%, plafonné/an)</td><td class="montant">- {{ '{:,.0f}'.format(paie.abattement) }}</td></tr>
+                <tr><td>Déduction personnes à charge ({{ paie.personnes_a_charge or 0 }})</td><td class="montant">- {{ '{:,.0f}'.format(paie.deduction_charges_familiales) }}</td></tr>
+                <tr class="section"><td>Revenu net imposable</td><td class="montant">{{ '{:,.0f}'.format(paie.revenu_net_imposable) }}</td></tr>
+
                 <tr><td>IRPP</td><td class="montant">- {{ '{:,.0f}'.format(paie.irpp) }}</td></tr>
+
+                {% if paie.prets_deduction and paie.prets_deduction > 0 %}
+                <tr><td>Retenue prêt</td><td class="montant">- {{ '{:,.0f}'.format(paie.prets_deduction) }}</td></tr>
+                {% endif %}
+                {% if paie.acomptes_deduction and paie.acomptes_deduction > 0 %}
+                <tr><td>Acompte sur salaire</td><td class="montant">- {{ '{:,.0f}'.format(paie.acomptes_deduction) }}</td></tr>
+                {% endif %}
+                {% for r in (paie.autres_retenues or []) %}
+                <tr><td>{{ r.libelle }}</td><td class="montant">- {{ '{:,.0f}'.format(r.montant or 0) }}</td></tr>
+                {% endfor %}
+
                 <tr class="section"><td>Total retenues</td><td class="montant">- {{ '{:,.0f}'.format(paie.total_retenues) }}</td></tr>
 
                 <tr class="net"><td>NET À PAYER</td><td class="montant">{{ '{:,.0f}'.format(paie.net_a_payer) }}</td></tr>
 
-                <tr><td>Charges patronales CNSS</td><td class="montant">{{ '{:,.0f}'.format(paie.cnss_patronal) }}</td></tr>
-                <tr><td>Charges patronales INAM</td><td class="montant">{{ '{:,.0f}'.format(paie.inam_patronal) }}</td></tr>
+                <tr><td>Charges patronales {{ paie.organisme_retraite }} ({{ paie.taux_retraite_patronal|round(2) }}%)</td><td class="montant">{{ '{:,.0f}'.format(paie.retraite_patronal) }}</td></tr>
+                <tr><td>Charges patronales {{ paie.organisme_amu }} ({{ paie.taux_amu_patronal|round(2) }}%)</td><td class="montant">{{ '{:,.0f}'.format(paie.amu_patronal) }}</td></tr>
+                {% if paie.formation_pro and paie.formation_pro > 0 %}
+                <tr><td>Taxe formation professionnelle</td><td class="montant">{{ '{:,.0f}'.format(paie.formation_pro) }}</td></tr>
+                {% endif %}
                 <tr class="section"><td>Total charges patronales</td><td class="montant">{{ '{:,.0f}'.format(paie.total_charges_patronales) }}</td></tr>
             </tbody>
         </table>
@@ -105,8 +127,9 @@
         {% endif %}
 
         <div class="footer-note">
-            Document généré le {{ date_actuelle }} — Taux CNSS/INAM/IRPP appliqués selon les
-            paramètres de paie de la structure en vigueur à la date de génération.
+            Document généré le {{ date_actuelle }} — Taux {{ paie.organisme_retraite }}/{{ paie.organisme_amu }}/IRPP
+            appliqués selon les paramètres de paie (et les éventuelles dérogations individuelles) en
+            vigueur à la date de génération.
         </div>
 
         <button class="btn-print" onclick="window.print()">🖨️ Imprimer</button>

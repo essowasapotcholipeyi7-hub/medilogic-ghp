@@ -1,13 +1,22 @@
 # services/paie_service.py
 # ============================================================
-# MOTEUR DE CALCUL DE LA PAIE (CNSS / INAM / IRPP — Togo)
+# MOTEUR DE CALCUL DE LA PAIE — TOGO (agents publics et privés)
 # ============================================================
 # ⚠️ Les taux utilisés viennent de ParametragePaie (modifiable dans l'écran
-# "Paramètres de paie"). Les valeurs par défaut sont indicatives — à faire
-# valider par votre comptable / la DGI avant la première paie réelle.
+# "Paramètres de paie") et, par salarié, des dérogations individuelles sur
+# Employe. Les valeurs par défaut sont indicatives — à faire valider par
+# votre comptable / la DGI avant la première paie réelle.
+#
+# Deux profils :
+#   - Privé  : retraite CNSS, assurance maladie AMU-CNSS
+#   - Public : retraite CRT (assiette = salaire de base), AMU-INAM
+# L'AMU (décret n°2023-096/PR du 4 octobre 2023) a un taux global fixe
+# (10% par défaut) réparti entre salarié et employeur : la part salarié ne
+# peut jamais dépasser la moitié du taux global, la part employeur ne peut
+# jamais être inférieure à cette moitié — ce verrou s'applique même si un
+# taux personnalisé est saisi pour un salarié donné (voir resoudre_taux_paie).
 
 from datetime import date
-from decimal import Decimal
 from models import db, Paie, ParametragePaie, Employe, Depense
 
 
@@ -21,9 +30,10 @@ def _d(v):
         return 0.0
 
 
-def calculer_irpp(base_imposable, tranches):
-    """Calcule l'IRPP par application successive du barème progressif."""
-    if base_imposable <= 0 or not tranches:
+def calculer_irpp(base_imposable_annuelle, tranches):
+    """Calcule l'IRPP ANNUEL par application successive du barème
+    progressif (les tranches sont exprimées en revenu annuel)."""
+    if base_imposable_annuelle <= 0 or not tranches:
         return 0.0
 
     impot = 0.0
@@ -33,66 +43,190 @@ def calculer_irpp(base_imposable, tranches):
         seuil_max = _d(seuil_max) if seuil_max is not None else None
         taux = _d(tranche.get('taux')) / 100.0
 
-        if base_imposable <= seuil_min:
+        if base_imposable_annuelle <= seuil_min:
             continue
 
-        haut_tranche = min(base_imposable, seuil_max) if seuil_max is not None else base_imposable
+        haut_tranche = min(base_imposable_annuelle, seuil_max) if seuil_max is not None else base_imposable_annuelle
         montant_tranche = max(0.0, haut_tranche - seuil_min)
         impot += montant_tranche * taux
 
     return round(impot, 2)
 
 
-def calculer_paie(salaire_base, primes, indemnites, parametrage):
-    """Calcule un bulletin de paie complet à partir du brut et du
-    paramétrage. Ne persiste rien — fonction pure, testable isolément."""
+def resoudre_taux_paie(employe, parametrage):
+    """Résout le profil et les taux effectifs d'un employé : dérogation
+    individuelle si renseignée, sinon valeur par défaut de la structure
+    selon son secteur. Le verrou AMU (salarié <= moitié du taux global,
+    employeur >= moitié) est toujours appliqué en dernier, qu'il s'agisse
+    d'un taux par défaut ou d'une dérogation."""
+    secteur = (getattr(employe, 'secteur_paie', None) or 'prive').lower()
+    if secteur not in ('prive', 'public'):
+        secteur = 'prive'
+
+    if secteur == 'public':
+        organisme_retraite = 'CRT'
+        organisme_amu = 'AMU-INAM'
+        taux_retraite_sal_defaut = _d(parametrage.taux_crt_salarial)
+        taux_retraite_pat_defaut = _d(parametrage.taux_crt_patronal)
+        plafond_retraite = _d(parametrage.plafond_crt)
+    else:
+        organisme_retraite = 'CNSS'
+        organisme_amu = 'AMU-CNSS'
+        taux_retraite_sal_defaut = _d(parametrage.taux_cnss_salarial)
+        taux_retraite_pat_defaut = _d(parametrage.taux_cnss_patronal)
+        plafond_retraite = _d(parametrage.plafond_cnss)
+
+    override_retraite_sal = getattr(employe, 'taux_retraite_salarial_override', None)
+    taux_retraite_sal = _d(override_retraite_sal) if override_retraite_sal is not None else taux_retraite_sal_defaut
+
+    override_retraite_pat = getattr(employe, 'taux_retraite_patronal_override', None)
+    taux_retraite_pat = _d(override_retraite_pat) if override_retraite_pat is not None else taux_retraite_pat_defaut
+
+    # --- Verrou AMU : part salarié <= moitié du taux global, part
+    # employeur >= moitié — décret n°2023-096/PR, non contournable.
+    demi_amu = _d(parametrage.amu_taux_global) / 2.0
+
+    override_amu_sal = getattr(employe, 'taux_amu_salarial_override', None)
+    taux_amu_sal = _d(override_amu_sal) if override_amu_sal is not None else _d(parametrage.taux_amu_salarial_defaut)
+    taux_amu_sal = min(taux_amu_sal, demi_amu)
+
+    override_amu_pat = getattr(employe, 'taux_amu_patronal_override', None)
+    taux_amu_pat = _d(override_amu_pat) if override_amu_pat is not None else _d(parametrage.taux_amu_patronal_defaut)
+    taux_amu_pat = max(taux_amu_pat, demi_amu)
+
+    return {
+        'secteur': secteur,
+        'organisme_retraite': organisme_retraite,
+        'organisme_amu': organisme_amu,
+        'taux_retraite_salarial': taux_retraite_sal,
+        'taux_retraite_patronal': taux_retraite_pat,
+        'plafond_retraite': plafond_retraite,
+        'taux_amu_salarial': taux_amu_sal,
+        'taux_amu_patronal': taux_amu_pat,
+        'demi_amu': demi_amu,
+    }
+
+
+def calculer_paie(employe, salaire_base, primes, indemnites, parametrage,
+                   prets=0, acomptes=0, autres_retenues=None, personnes_a_charge=None):
+    """Calcule un bulletin de paie complet en suivant l'ordre du cahier des
+    charges :
+      1) Salaire de base (+ primes/indemnités) = Salaire brut
+      2) - Cotisations sociales salariales (retraite + AMU) = Brut imposable
+      3) - Abattement forfaitaire 28% (plafonné/an) - Déduction personnes à
+         charge (10 000 F/mois/personne, max 6) = Revenu net imposable
+      4) Barème IRPP (annuel, annualisé x12 puis impôt /12)
+      5) - Autres retenues (prêts, acomptes, autres) = Net à payer
+    Ne persiste rien — fonction pure, testable isolément."""
     salaire_base = _d(salaire_base)
     primes = _d(primes)
     indemnites = _d(indemnites)
     brut = salaire_base + primes + indemnites
 
-    plafond_cnss = _d(parametrage.plafond_cnss) or brut
-    base_cnss = min(brut, plafond_cnss)
+    taux = resoudre_taux_paie(employe, parametrage)
 
-    cnss_salarial = round(base_cnss * _d(parametrage.taux_cnss_salarial) / 100.0, 2)
-    cnss_patronal = round(base_cnss * _d(parametrage.taux_cnss_patronal) / 100.0, 2)
+    # Assiette retraite : salaire brut (privé/CNSS) ou salaire de base /
+    # traitement indiciaire (public/CRT) — cf. cahier des charges §7.
+    assiette_retraite = brut if taux['secteur'] == 'prive' else salaire_base
+    plafond_retraite = taux['plafond_retraite']
+    if plafond_retraite and plafond_retraite > 0:
+        assiette_retraite = min(assiette_retraite, plafond_retraite)
 
-    inam_salarial = round(brut * _d(parametrage.taux_inam_salarial) / 100.0, 2)
-    inam_patronal = round(brut * _d(parametrage.taux_inam_patronal) / 100.0, 2)
+    retraite_salarial = round(assiette_retraite * taux['taux_retraite_salarial'] / 100.0, 2)
+    retraite_patronal = round(assiette_retraite * taux['taux_retraite_patronal'] / 100.0, 2)
 
-    # Base imposable IRPP = brut moins les cotisations sociales salariales
-    base_imposable = max(0.0, brut - cnss_salarial - inam_salarial)
-    irpp = calculer_irpp(base_imposable, parametrage.tranches_irpp or [])
+    # Assiette AMU : salaire brut, pour les deux secteurs.
+    amu_salarial = round(brut * taux['taux_amu_salarial'] / 100.0, 2)
+    amu_patronal = round(brut * taux['taux_amu_patronal'] / 100.0, 2)
 
-    total_retenues = round(cnss_salarial + inam_salarial + irpp, 2)
-    total_charges_patronales = round(cnss_patronal + inam_patronal, 2)
+    formation_pro = 0.0
+    if taux['secteur'] == 'prive':
+        formation_pro = round(brut * _d(parametrage.taux_formation_pro) / 100.0, 2)
+
+    brut_imposable = max(0.0, brut - retraite_salarial - amu_salarial)
+
+    # --- IRPP : barème ANNUEL -> on annualise la base mensuelle (x12),
+    # applique l'abattement et les déductions (également annualisées),
+    # calcule l'impôt annuel puis le ramène au mois (/12).
+    brut_imposable_annuel = brut_imposable * 12.0
+    abattement_annuel = min(
+        brut_imposable_annuel * _d(parametrage.abattement_taux) / 100.0,
+        _d(parametrage.abattement_plafond_annuel)
+    )
+
+    nb_charges = personnes_a_charge if personnes_a_charge is not None else getattr(employe, 'personnes_a_charge', 0)
+    try:
+        nb_charges = int(nb_charges or 0)
+    except (TypeError, ValueError):
+        nb_charges = 0
+    max_charges = int(parametrage.max_personnes_charge or 6)
+    nb_charges = max(0, min(nb_charges, max_charges))
+    deduction_charges_annuelle = nb_charges * _d(parametrage.deduction_personne_charge) * 12.0
+
+    revenu_net_imposable_annuel = max(0.0, brut_imposable_annuel - abattement_annuel - deduction_charges_annuelle)
+    irpp_annuel = calculer_irpp(revenu_net_imposable_annuel, parametrage.tranches_irpp or [])
+    irpp = round(irpp_annuel / 12.0, 2)
+
+    abattement = round(abattement_annuel / 12.0, 2)
+    deduction_charges_familiales = round(deduction_charges_annuelle / 12.0, 2)
+    revenu_net_imposable = round(revenu_net_imposable_annuel / 12.0, 2)
+
+    autres_retenues = [r for r in (autres_retenues or []) if isinstance(r, dict) and r.get('libelle')]
+    autres_retenues_total = round(sum(_d(r.get('montant')) for r in autres_retenues), 2)
+    prets = round(_d(prets), 2)
+    acomptes = round(_d(acomptes), 2)
+
+    total_retenues = round(retraite_salarial + amu_salarial + irpp + prets + acomptes + autres_retenues_total, 2)
+    total_charges_patronales = round(retraite_patronal + amu_patronal + formation_pro, 2)
     net_a_payer = round(brut - total_retenues, 2)
 
     return {
+        'secteur': taux['secteur'],
+        'organisme_retraite': taux['organisme_retraite'],
+        'organisme_amu': taux['organisme_amu'],
         'salaire_base': salaire_base,
         'primes': primes,
         'indemnites': indemnites,
         'salaire_brut': round(brut, 2),
-        'cnss_salarial': cnss_salarial,
-        'cnss_patronal': cnss_patronal,
-        'inam_salarial': inam_salarial,
-        'inam_patronal': inam_patronal,
+        'taux_retraite_salarial': taux['taux_retraite_salarial'],
+        'taux_retraite_patronal': taux['taux_retraite_patronal'],
+        'retraite_salarial': retraite_salarial,
+        'retraite_patronal': retraite_patronal,
+        'taux_amu_salarial': taux['taux_amu_salarial'],
+        'taux_amu_patronal': taux['taux_amu_patronal'],
+        'amu_salarial': amu_salarial,
+        'amu_patronal': amu_patronal,
+        'formation_pro': formation_pro,
+        'salaire_brut_imposable': round(brut_imposable, 2),
+        'personnes_a_charge': nb_charges,
+        'abattement': abattement,
+        'deduction_charges_familiales': deduction_charges_familiales,
+        'revenu_net_imposable': revenu_net_imposable,
         'irpp': irpp,
+        'prets_deduction': prets,
+        'acomptes_deduction': acomptes,
+        'autres_retenues': autres_retenues,
+        'autres_retenues_total': autres_retenues_total,
         'total_retenues': total_retenues,
         'total_charges_patronales': total_charges_patronales,
         'net_a_payer': net_a_payer,
     }
 
 
-def generer_ou_maj_paie(structure_id, employe_id, annee, mois, primes=0, indemnites=0, user_nom='System'):
-    """Crée (ou recalcule si encore en brouillon) le bulletin de paie d'un
-    employé pour une période donnée."""
+def generer_ou_maj_paie(structure_id, employe_id, annee, mois, salaire_base=None,
+                         primes=0, indemnites=0, prets=0, acomptes=0,
+                         autres_retenues=None, personnes_a_charge=None, user_nom='System'):
+    """Crée (ou recalcule si encore en brouillon/validée, pas encore payée)
+    le bulletin de paie d'un employé pour une période donnée."""
     employe = Employe.query.get(employe_id)
     if not employe:
         return None, "Employé introuvable"
 
     parametrage = ParametragePaie.get_ou_creer(structure_id)
-    calc = calculer_paie(employe.salaire_base, primes, indemnites, parametrage)
+    base = salaire_base if salaire_base is not None else employe.salaire_base
+    calc = calculer_paie(employe, base, primes, indemnites, parametrage,
+                          prets=prets, acomptes=acomptes, autres_retenues=autres_retenues,
+                          personnes_a_charge=personnes_a_charge)
 
     paie = Paie.query.filter_by(employe_id=employe_id, annee=annee, mois=mois).first()
     if paie and paie.statut == 'payee':
@@ -113,7 +247,8 @@ def generer_ou_maj_paie(structure_id, employe_id, annee, mois, primes=0, indemni
 
 def marquer_paie_payee(paie, mode_paiement='especes', user_nom='System'):
     """Marque une paie comme payée : crée la Dépense correspondante puis
-    l'écriture comptable auto-validée (Débit 661/664, Crédit trésorerie/43)."""
+    l'écriture comptable auto-validée (débit charges de personnel, crédit
+    trésorerie + organismes sociaux/fiscaux à reverser)."""
     if paie.statut == 'payee':
         return paie, None
 

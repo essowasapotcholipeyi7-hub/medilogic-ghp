@@ -269,3 +269,65 @@ ALTER TABLE factures_assurance ADD COLUMN IF NOT EXISTS societe VARCHAR(150);
 -- sur Neon (default déjà présent).
 ALTER TABLE patients ALTER COLUMN created_at SET DEFAULT NOW();
 -- ----------------------------------------------------------
+
+
+-- ----------------------------------------------------------
+-- 9) Paie complète Togo : profils Public/Privé, AMU verrouillée, IRPP
+-- ----------------------------------------------------------
+-- Remplace le paramétrage générique CNSS/INAM par les deux profils réels
+-- (privé -> CNSS + AMU-CNSS ; public -> CRT + AMU-INAM), le verrouillage de
+-- l'AMU (décret n°2023-096/PR : part salarié <= moitié du taux global, part
+-- employeur >= moitié), le nouveau barème IRPP annuel, l'abattement
+-- forfaitaire plafonné, la déduction pour personnes à charge, et les
+-- dérogations individuelles par salarié (prêts/acomptes/autres retenues,
+-- taux personnalisés). paies et parametrage_paie sont vides à ce stade
+-- (fonctionnalité non encore utilisée en production) : uniquement des
+-- colonnes ADDITIONNELLES ci-dessous, les anciennes colonnes générique
+-- (cnss_salarial, inam_salarial, taux_inam_salarial...) restent en place,
+-- inutilisées, par sécurité (aucun DROP).
+
+-- Employés : profil de paie individuel
+ALTER TABLE employes ADD COLUMN IF NOT EXISTS secteur_paie VARCHAR(10) DEFAULT 'prive';
+ALTER TABLE employes ADD COLUMN IF NOT EXISTS personnes_a_charge INTEGER DEFAULT 0;
+ALTER TABLE employes ADD COLUMN IF NOT EXISTS taux_retraite_salarial_override NUMERIC;
+ALTER TABLE employes ADD COLUMN IF NOT EXISTS taux_retraite_patronal_override NUMERIC;
+ALTER TABLE employes ADD COLUMN IF NOT EXISTS taux_amu_salarial_override NUMERIC;
+ALTER TABLE employes ADD COLUMN IF NOT EXISTS taux_amu_patronal_override NUMERIC;
+
+-- Paramétrage structure : profils CNSS (privé) / CRT (public) + AMU commune
+ALTER TABLE parametrage_paie ADD COLUMN IF NOT EXISTS taux_crt_salarial NUMERIC DEFAULT 7.0;
+ALTER TABLE parametrage_paie ADD COLUMN IF NOT EXISTS taux_crt_patronal NUMERIC DEFAULT 20.0;
+ALTER TABLE parametrage_paie ADD COLUMN IF NOT EXISTS plafond_crt NUMERIC DEFAULT 0;
+ALTER TABLE parametrage_paie ADD COLUMN IF NOT EXISTS amu_taux_global NUMERIC DEFAULT 10.0;
+ALTER TABLE parametrage_paie ADD COLUMN IF NOT EXISTS taux_amu_salarial_defaut NUMERIC DEFAULT 5.0;
+ALTER TABLE parametrage_paie ADD COLUMN IF NOT EXISTS taux_amu_patronal_defaut NUMERIC DEFAULT 5.0;
+ALTER TABLE parametrage_paie ADD COLUMN IF NOT EXISTS taux_formation_pro NUMERIC DEFAULT 0;
+ALTER TABLE parametrage_paie ADD COLUMN IF NOT EXISTS abattement_taux NUMERIC DEFAULT 28.0;
+ALTER TABLE parametrage_paie ADD COLUMN IF NOT EXISTS abattement_plafond_annuel NUMERIC DEFAULT 10000000;
+ALTER TABLE parametrage_paie ADD COLUMN IF NOT EXISTS deduction_personne_charge NUMERIC DEFAULT 10000;
+ALTER TABLE parametrage_paie ADD COLUMN IF NOT EXISTS max_personnes_charge INTEGER DEFAULT 6;
+ALTER TABLE parametrage_paie ALTER COLUMN plafond_cnss SET DEFAULT 0;
+
+-- Bulletins de paie : détail complet par ligne + instantané du profil
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS secteur VARCHAR(10);
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS organisme_retraite VARCHAR(10);
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS organisme_amu VARCHAR(20);
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS taux_retraite_salarial NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS taux_retraite_patronal NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS retraite_salarial NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS retraite_patronal NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS taux_amu_salarial NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS taux_amu_patronal NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS amu_salarial NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS amu_patronal NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS formation_pro NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS salaire_brut_imposable NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS personnes_a_charge INTEGER DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS abattement NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS deduction_charges_familiales NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS revenu_net_imposable NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS prets_deduction NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS acomptes_deduction NUMERIC DEFAULT 0;
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS autres_retenues JSON DEFAULT '[]';
+ALTER TABLE paies ADD COLUMN IF NOT EXISTS autres_retenues_total NUMERIC DEFAULT 0;
+-- ----------------------------------------------------------

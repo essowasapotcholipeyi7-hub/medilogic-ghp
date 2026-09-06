@@ -190,7 +190,22 @@ class Employe(db.Model):
     date_embauche = db.Column(db.Date, nullable=False)
     type_contrat = db.Column(db.String(50))
     salaire_base = db.Column(db.Numeric, default=0)
-    
+
+    # ⭐ Paramètres de paie individuels (modifiables par salarié — chaque
+    # agent peut déroger aux valeurs par défaut de ParametragePaie).
+    # secteur_paie détermine l'organisme de retraite (CNSS/privé ou
+    # CRT/public) et l'organisme AMU (AMU-CNSS ou AMU-INAM) appliqués.
+    secteur_paie = db.Column(db.String(10), default='prive')  # 'prive' | 'public'
+    personnes_a_charge = db.Column(db.Integer, default=0)     # 0 à 6 (déduction IRPP)
+    # Dérogations individuelles aux taux — NULL = utiliser le défaut de la
+    # structure (ParametragePaie) selon secteur_paie. Les taux AMU restent
+    # verrouillés (salarial <= moitié du taux global, patronal >= moitié)
+    # même en cas de dérogation individuelle — voir services/paie_service.py.
+    taux_retraite_salarial_override = db.Column(db.Numeric)
+    taux_retraite_patronal_override = db.Column(db.Numeric)
+    taux_amu_salarial_override = db.Column(db.Numeric)
+    taux_amu_patronal_override = db.Column(db.Numeric)
+
     # Urgence
     personne_a_prevenir = db.Column(db.String(200))
     telephone_prevenir = db.Column(db.String(20))
@@ -2022,12 +2037,21 @@ class JournalMouvement(db.Model):
 
 
 # ============================================================
-# PAIE (bulletin de paie — CNSS / INAM / IRPP Togo)
+# PAIE (bulletin de paie — Togo, agents publics et privés)
 # ============================================================
 # ⚠️ Les taux par défaut ci-dessous (ParametragePaie) sont des valeurs
 # indicatives, éditables dans l'écran "Paramètres de paie". À faire
 # valider par votre comptable / la DGI avant la première paie réelle —
 # la législation sociale et fiscale togolaise évolue.
+#
+# Deux profils sont gérés (secteur_paie sur Employe) :
+#   - Privé : retraite CNSS, assurance maladie AMU-CNSS
+#   - Public : retraite CRT, assurance maladie AMU-INAM
+# L'AMU est réglementée par le décret n°2023-096/PR du 4 octobre 2023 :
+# taux global de 10% de la rémunération, réparti au plus à moitié pour le
+# salarié et au moins à moitié pour l'employeur — ce verrou (amu_taux_global/2)
+# s'applique quel que soit le profil, et même en cas de dérogation
+# individuelle par salarié (voir services/paie_service.py).
 
 class ParametragePaie(db.Model):
     __tablename__ = 'parametrage_paie'
@@ -2035,22 +2059,39 @@ class ParametragePaie(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     structure_id = db.Column(db.Integer, nullable=False, unique=True)
 
-    taux_cnss_salarial = db.Column(db.Numeric, default=4.0)     # % du brut plafonné
-    taux_cnss_patronal = db.Column(db.Numeric, default=17.5)    # % du brut plafonné
-    plafond_cnss = db.Column(db.Numeric, default=600000)        # FCFA / mois
+    # --- Secteur privé : retraite CNSS ---
+    taux_cnss_salarial = db.Column(db.Numeric, default=4.0)      # % de l'assiette (salaire brut)
+    taux_cnss_patronal = db.Column(db.Numeric, default=17.5)
+    plafond_cnss = db.Column(db.Numeric, default=0)              # FCFA/mois, 0 = pas de plafond
 
-    taux_inam_salarial = db.Column(db.Numeric, default=3.5)     # % du brut
-    taux_inam_patronal = db.Column(db.Numeric, default=3.5)     # % du brut
+    # --- Secteur public : retraite CRT (assiette = salaire de base / traitement indiciaire) ---
+    taux_crt_salarial = db.Column(db.Numeric, default=7.0)
+    taux_crt_patronal = db.Column(db.Numeric, default=20.0)
+    plafond_crt = db.Column(db.Numeric, default=0)
 
-    # Barème IRPP progressif : liste de {min, max, taux} en JSON, éditable.
+    # --- AMU (commun aux deux secteurs, assiette = salaire brut) ---
+    amu_taux_global = db.Column(db.Numeric, default=10.0)         # décret n°2023-096/PR
+    taux_amu_salarial_defaut = db.Column(db.Numeric, default=5.0)   # verrouillé <= amu_taux_global/2
+    taux_amu_patronal_defaut = db.Column(db.Numeric, default=5.0)   # verrouillé >= amu_taux_global/2
+
+    # --- Formation professionnelle (privé — taux à confirmer, désactivé par défaut) ---
+    taux_formation_pro = db.Column(db.Numeric, default=0)
+
+    # Barème IRPP progressif ANNUEL : liste de {min, max, taux} en JSON,
+    # éditable. Le calcul mensuel annualise la base imposable (x12), applique
+    # le barème, puis divise l'impôt obtenu par 12.
     tranches_irpp = db.Column(db.JSON, default=lambda: [
-        {'min': 0, 'max': 60000, 'taux': 0},
-        {'min': 60000, 'max': 150000, 'taux': 7},
-        {'min': 150000, 'max': 300000, 'taux': 15},
-        {'min': 300000, 'max': 500000, 'taux': 22},
-        {'min': 500000, 'max': 800000, 'taux': 28},
-        {'min': 800000, 'max': None, 'taux': 35},
+        {'min': 0, 'max': 900000, 'taux': 0},
+        {'min': 900000, 'max': 3000000, 'taux': 3},
+        {'min': 3000000, 'max': 4000000, 'taux': 10},
+        {'min': 4000000, 'max': 6000000, 'taux': 15},
+        {'min': 6000000, 'max': 10000000, 'taux': 25},
+        {'min': 10000000, 'max': None, 'taux': 35},
     ])
+    abattement_taux = db.Column(db.Numeric, default=28.0)                 # % sur le brut imposable
+    abattement_plafond_annuel = db.Column(db.Numeric, default=10000000)   # FCFA/an
+    deduction_personne_charge = db.Column(db.Numeric, default=10000)      # FCFA/mois/personne
+    max_personnes_charge = db.Column(db.Integer, default=6)
 
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     updated_by = db.Column(db.String(100))
@@ -2077,19 +2118,43 @@ class Paie(db.Model):
     annee = db.Column(db.Integer, nullable=False)
     mois = db.Column(db.Integer, nullable=False)  # 1-12
 
+    # Instantané du profil appliqué (utile même si les paramètres/l'employé
+    # changent ensuite — le bulletin déjà généré reste cohérent avec lui-même)
+    secteur = db.Column(db.String(10))              # 'prive' | 'public'
+    organisme_retraite = db.Column(db.String(10))   # 'CNSS' | 'CRT'
+    organisme_amu = db.Column(db.String(20))         # 'AMU-CNSS' | 'AMU-INAM'
+
     salaire_base = db.Column(db.Numeric, default=0)
     primes = db.Column(db.Numeric, default=0)
     indemnites = db.Column(db.Numeric, default=0)
     salaire_brut = db.Column(db.Numeric, default=0)
 
-    cnss_salarial = db.Column(db.Numeric, default=0)
-    cnss_patronal = db.Column(db.Numeric, default=0)
-    inam_salarial = db.Column(db.Numeric, default=0)
-    inam_patronal = db.Column(db.Numeric, default=0)
+    taux_retraite_salarial = db.Column(db.Numeric, default=0)
+    taux_retraite_patronal = db.Column(db.Numeric, default=0)
+    retraite_salarial = db.Column(db.Numeric, default=0)
+    retraite_patronal = db.Column(db.Numeric, default=0)
+
+    taux_amu_salarial = db.Column(db.Numeric, default=0)
+    taux_amu_patronal = db.Column(db.Numeric, default=0)
+    amu_salarial = db.Column(db.Numeric, default=0)
+    amu_patronal = db.Column(db.Numeric, default=0)
+
+    formation_pro = db.Column(db.Numeric, default=0)   # charge patronale uniquement
+
+    salaire_brut_imposable = db.Column(db.Numeric, default=0)   # brut - cotisations sociales salariales
+    personnes_a_charge = db.Column(db.Integer, default=0)
+    abattement = db.Column(db.Numeric, default=0)
+    deduction_charges_familiales = db.Column(db.Numeric, default=0)
+    revenu_net_imposable = db.Column(db.Numeric, default=0)     # base mensuelle après abattement + charges
     irpp = db.Column(db.Numeric, default=0)
 
-    total_retenues = db.Column(db.Numeric, default=0)              # CNSS+INAM sal. + IRPP
-    total_charges_patronales = db.Column(db.Numeric, default=0)    # CNSS+INAM patronal
+    prets_deduction = db.Column(db.Numeric, default=0)
+    acomptes_deduction = db.Column(db.Numeric, default=0)
+    autres_retenues = db.Column(db.JSON, default=list)           # [{libelle, montant}]
+    autres_retenues_total = db.Column(db.Numeric, default=0)
+
+    total_retenues = db.Column(db.Numeric, default=0)              # retraite+AMU sal. + IRPP + prêts/acomptes/autres
+    total_charges_patronales = db.Column(db.Numeric, default=0)    # retraite+AMU patronal + formation pro
     net_a_payer = db.Column(db.Numeric, default=0)
 
     statut = db.Column(db.String(20), default='brouillon')  # brouillon, valide, payee
