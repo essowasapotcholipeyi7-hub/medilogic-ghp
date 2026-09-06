@@ -36,7 +36,7 @@ def require_structure(f):
         if not structure_id:
             if request.method == 'GET':
                 flash('Structure non trouvée. Veuillez vous reconnecter.', 'danger')
-                return redirect(url_for('auth.login'))
+                return redirect(url_for('index'))
             return jsonify({'error': 'Structure non trouvée'}), 400
         return f(*args, structure_id=structure_id, **kwargs)
     return decorated
