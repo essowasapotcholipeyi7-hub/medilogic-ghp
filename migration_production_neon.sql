@@ -253,3 +253,19 @@ CREATE INDEX IF NOT EXISTS idx_societes_assurance_lookup ON societes_assurance (
 -- compagnie (ex: GTA/SOTOCO et GTA/TOGOCEL séparément).
 ALTER TABLE factures_assurance ADD COLUMN IF NOT EXISTS societe VARCHAR(150);
 -- ----------------------------------------------------------
+
+
+-- ----------------------------------------------------------
+-- 8) Garde-fou : DEFAULT NOW() sur patients.created_at
+-- ----------------------------------------------------------
+-- Sur la base locale de dev, cette colonne n'avait AUCUN default au niveau
+-- de la table (contrairement à Neon, qui l'a déjà) : les patients créés
+-- via l'INSERT applicatif (qui ne listait pas created_at) restaient donc
+-- avec created_at = NULL, et les statistiques "aujourd'hui / cette semaine
+-- / ce mois / cette année" de la page Patients affichaient zéro malgré des
+-- patients bien enregistrés. Corrigé aussi côté application (l'INSERT
+-- fixe désormais explicitement created_at = NOW()) ; cette ligne est un
+-- filet de sécurité si la table est recréée sans le default. Sans effet
+-- sur Neon (default déjà présent).
+ALTER TABLE patients ALTER COLUMN created_at SET DEFAULT NOW();
+-- ----------------------------------------------------------

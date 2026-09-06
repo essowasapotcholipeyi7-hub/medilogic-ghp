@@ -1153,14 +1153,20 @@ def api_add_patient():
         structure_id = session.get('structure_id')
 
         # 🔥 Ajouter les colonnes de la personne à prévenir
+        # ⭐ created_at fixé explicitement à NOW() — ne pas compter sur un
+        # DEFAULT au niveau de la table (absent sur certaines bases, ce qui
+        # laissait created_at NULL et cassait les statistiques
+        # aujourd'hui/semaine/mois/année de la page Patients, qui restaient
+        # bloquées à zéro malgré des patients bien enregistrés).
         result = db.execute_query("""
             INSERT INTO patients (
                 structure_id, nom, prenom, telephone, adresse,
                 date_naissance, type_assurance, taux_prise_charge, numero_assure,
                 assurance2_nom, taux_assurance2, numero_assure2, societe_assurance2,
-                personne_a_prevenir_nom, personne_a_prevenir_telephone, personne_a_prevenir_relation
+                personne_a_prevenir_nom, personne_a_prevenir_telephone, personne_a_prevenir_relation,
+                created_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
             RETURNING id
         """, (
             structure_id,
