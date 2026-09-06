@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bordereau {{ nom_compagnie }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -71,8 +72,8 @@
     </style>
 </head>
 <body>
-    <button class="btn-fermer" onclick="fermerBordereau()">✖ Fermer</button>
-    <button class="btn-print" onclick="window.print()">🖨️ Imprimer</button>
+    <button class="btn-fermer" onclick="fermerBordereau()"><i class="fas fa-times"></i> Fermer</button>
+    <button class="btn-print" onclick="window.print()"><i class="fas fa-print"></i> Imprimer</button>
 
     <div class="conteneur">
         <div class="entete">

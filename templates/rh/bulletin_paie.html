@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bulletin de paie — {{ employe.nom }} {{ employe.prenom }} — {{ paie.get_periode_label() }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -48,14 +49,17 @@
         table.bulletin tr.section td { background: #eef1f8; font-weight: 700; }
         table.bulletin tr.net td { background: #d1e7dd; font-weight: 700; font-size: 15px; }
         .footer-note { font-size: 11px; color: #888; margin-top: 20px; text-align: center; }
-        .btn-print {
-            display: block; margin: 20px auto 0; padding: 10px 24px; border: none; border-radius: 6px;
-            background: #1a2a6c; color: white; font-size: 14px; cursor: pointer;
+        .btn-row { text-align: center; margin-top: 20px; }
+        .btn-print, .btn-fermer {
+            display: inline-block; margin: 0 6px; padding: 10px 24px; border: none; border-radius: 6px;
+            color: white; font-size: 14px; cursor: pointer;
         }
+        .btn-print { background: #1a2a6c; }
+        .btn-fermer { background: #6c757d; }
         @media print {
             body { background: white; padding: 0; }
             .document-container { box-shadow: none; }
-            .btn-print { display: none; }
+            .btn-row { display: none; }
         }
     </style>
 </head>
@@ -132,7 +136,21 @@
             vigueur à la date de génération.
         </div>
 
-        <button class="btn-print" onclick="window.print()">🖨️ Imprimer</button>
+        <div class="btn-row">
+            <button class="btn-fermer" onclick="fermerBulletin()"><i class="fas fa-times"></i> Fermer</button>
+            <button class="btn-print" onclick="window.print()"><i class="fas fa-print"></i> Imprimer</button>
+        </div>
     </div>
+
+    <script>
+        function fermerBulletin() {
+            window.close();
+            setTimeout(function() {
+                if (!window.closed) {
+                    window.location.href = "{{ url_for('rh.page_paie') }}";
+                }
+            }, 500);
+        }
+    </script>
 </body>
 </html>

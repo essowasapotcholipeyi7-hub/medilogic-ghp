@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Facture #{{ facture.numero_facture }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- html2pdf pour l'export PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     
@@ -681,10 +682,10 @@
 
     <!-- Boutons (non imprimés) -->
     <div class="no-print">
-        <button class="btn-print" onclick="window.print()">🖨️ Imprimer</button>
+        <button class="btn-print" onclick="window.print()"><i class="fas fa-print"></i> Imprimer</button>
         <button class="btn-pdf" onclick="telechargerPDF()">PDF</button>
         <button class="btn-back" onclick="retour()">Retour</button>
-        <button class="btn-close" onclick="fermer()">✖ Fermer</button>
+        <button class="btn-close" onclick="fermer()"><i class="fas fa-times"></i> Fermer</button>
     </div>
 
     <script>
