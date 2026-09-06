@@ -6,10 +6,39 @@ from sqlalchemy import or_, func, and_
 import json
 from utils.categorisation import categoriser_acte
 from utils.nombres_lettres import montant_en_lettres_fcfa
+from sheets_helper import sheets_helper
 
 from models import db, Vente, Patient, Structure
 
 statistiques_bp = Blueprint('statistiques', __name__, url_prefix='/api/statistiques')
+
+
+def _get_structure_info(structure_id):
+    """Infos structure (nom, adresse, téléphone, logo) pour l'en-tête des
+    documents imprimables. ⭐ La table Postgres `structures` n'est qu'un
+    stub (utilisée pour les FK) — les vraies coordonnées de la structure
+    sont dans Google Sheets, comme pour les autres impressions
+    (reçus/factures). On y va en priorité, avec repli Postgres si Sheets
+    est indisponible."""
+    try:
+        structures = sheets_helper.get_all_records('structures', use_prefix=False)
+        info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), None)
+        if info:
+            return {
+                'nom': info.get('nom', ''),
+                'adresse': info.get('adresse', ''),
+                'telephone': info.get('telephone', ''),
+                'email': info.get('email', ''),
+                'logo_url': info.get('logo_url', ''),
+            }
+    except Exception as e:
+        print(f"⚠️ _get_structure_info (Sheets): {e}")
+
+    s = Structure.query.get(structure_id)
+    if s:
+        return {'nom': s.nom, 'adresse': s.adresse, 'telephone': s.telephone,
+                'email': s.email, 'logo_url': s.logo_url}
+    return {}
 
 
 # ============================================================
@@ -1002,7 +1031,7 @@ def liste_patients_print():
             patients_uniques.add(l.get('patient_id'))
             total_beneficiaire += float(l.get('montant_beneficiaire') or 0)
 
-    structure = Structure.query.get(structure_id)
+    structure = _get_structure_info(structure_id)
 
     return render_template(
         'statistiques_liste_patients_print.html',
@@ -1122,7 +1151,7 @@ def bordereau_assurance():
     else:
         nom_compagnie = ASSURANCE_LABELS.get(assurance_code.lower(), assurance_code.upper())
 
-    structure = Structure.query.get(structure_id)
+    structure = _get_structure_info(structure_id)
 
     # Numéro de bordereau (traçabilité du document) et montant arrêté en
     # toutes lettres, adressé à la compagnie/société.

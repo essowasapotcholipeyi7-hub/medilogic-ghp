@@ -64,10 +64,15 @@
             position: fixed; top: 16px; right: 16px; padding: 8px 16px;
             background: #1a2a6c; color: white; border: none; border-radius: 6px; cursor: pointer;
         }
-        @media print { .btn-print { display: none; } body { padding: 15px; } }
+        .btn-fermer {
+            position: fixed; top: 16px; right: 130px; padding: 8px 16px;
+            background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer;
+        }
+        @media print { .btn-print, .btn-fermer { display: none; } body { padding: 15px; } }
     </style>
 </head>
 <body>
+    <button class="btn-fermer" onclick="fermerImpression()">✖ Fermer</button>
     <button class="btn-print" onclick="window.print()">🖨️ Imprimer</button>
 
     <div class="conteneur">
@@ -158,5 +163,16 @@
             <span>{{ lignes|length }} ligne(s)</span>
         </div>
     </div>
+
+    <script>
+        function fermerImpression() {
+            window.close();
+            setTimeout(function() {
+                if (!window.closed) {
+                    window.location.href = "{{ url_for('statistiques.index') }}";
+                }
+            }, 500);
+        }
+    </script>
 </body>
 </html>
