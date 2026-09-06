@@ -51,6 +51,18 @@ app.secret_key = Config.SECRET_KEY
 # ⭐ Initialiser le db SQLAlchemy
 db.init_app(app)
 
+# ⭐ Bascule hors-ligne Neon <-> Postgres local (inactif si DATABASE_URL_LOCAL
+# n'est pas définie dans l'environnement — voir utils/db_failover.py)
+from utils import db_failover
+with app.app_context():
+    db_failover.register_events(db)
+    if db_failover.FAILOVER_ENABLED:
+        try:
+            db.create_all(bind_key='local')  # crée sync_state/sync_changelog si absentes
+        except Exception as _e:
+            print(f"⚠️ Bascule hors-ligne : impossible de préparer la base locale ({_e})")
+db_failover.start_watchdog(app)
+
 # ⭐ Importer le blueprint RH
 from routes.rh import rh_bp
 app.register_blueprint(rh_bp)
@@ -350,6 +362,41 @@ def admin_required(f):
             return redirect(url_for('dashboard'))
         return f(*args, **kwargs)
     return decorated_function
+
+
+@app.route('/api/sync/status')
+def api_sync_status():
+    """État de la bascule Neon/local — interrogé par la bannière de base.html."""
+    if 'user_id' not in session and 'structure_id' not in session:
+        return jsonify({'enabled': False}), 200
+    try:
+        return jsonify(db_failover.get_status())
+    except Exception as e:
+        return jsonify({'enabled': False, 'erreur': str(e)}), 200
+
+
+@app.route('/api/sync/forcer', methods=['POST'])
+@admin_required
+def api_sync_forcer():
+    """Force une synchronisation immédiate (admin) — utile pour vérifier
+    manuellement au lieu d'attendre le prochain passage du watchdog."""
+    if not db_failover.FAILOVER_ENABLED:
+        return jsonify({'success': False, 'message': "Bascule hors-ligne non configurée sur cette machine"}), 400
+    if db_failover.OFFLINE_STATE.is_offline:
+        if not db_failover.is_neon_reachable():
+            return jsonify({'success': False, 'message': 'Neon toujours injoignable'}), 200
+        ok = db_failover.push_sync_to_neon() and db_failover.pull_refresh_from_neon()
+        if ok:
+            db_failover.OFFLINE_STATE.is_offline = False
+            from models import SyncState
+            etat = SyncState.get_ou_creer()
+            etat.mode = 'online'
+            db.session.commit()
+        return jsonify({'success': ok, 'message': 'Synchronisé, retour en mode normal' if ok else 'Echec de la synchronisation, voir logs serveur'})
+    else:
+        ok = db_failover.pull_refresh_from_neon()
+        return jsonify({'success': ok, 'message': 'Mirroir local rafraîchi depuis Neon' if ok else 'Echec du rafraîchissement'})
+
 
 @app.route('/', methods=['GET', 'POST'])
 def index():

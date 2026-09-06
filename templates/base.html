@@ -1868,7 +1868,18 @@
     
     <!-- ===== CONTENU PRINCIPAL ===== -->
     <main class="main-content" id="mainContent">
-        
+
+        <!-- ===== BANNIÈRE MODE HORS-LIGNE (bascule Neon <-> local) ===== -->
+        <div id="offlineBanner" class="alert alert-warning d-flex align-items-center justify-content-between shadow-sm mb-2" role="alert" hidden>
+            <span><i class="fas fa-plug-circle-xmark me-2"></i><span id="offlineBannerText">Mode hors-ligne — travail en cours sur la base locale.</span></span>
+            <span class="d-flex align-items-center gap-2">
+                <span id="offlineBannerPending" class="badge bg-warning text-dark"></span>
+                {% if session.get('is_admin') %}
+                <button type="button" class="btn btn-sm btn-outline-dark" onclick="forcerSynchro()"><i class="fas fa-sync"></i> Forcer la synchro</button>
+                {% endif %}
+            </span>
+        </div>
+
         <!-- ===== FLASH MESSAGES ===== -->
         <div class="container-fluid px-0">
             {% with messages = get_flashed_messages(with_categories=true) %}
@@ -1954,7 +1965,39 @@ function updateHorloge() {
     
 setInterval(updateHorloge, 1000);
 updateHorloge();
-    
+
+// ============================================
+// BASCULE HORS-LIGNE — bannière Neon <-> local
+// ============================================
+function verifierEtatSynchro() {
+    fetch('/api/sync/status').then(r => r.ok ? r.json() : null).then(etat => {
+        if (!etat || !etat.enabled) return;
+        const banniere = document.getElementById('offlineBanner');
+        const texte = document.getElementById('offlineBannerText');
+        const badge = document.getElementById('offlineBannerPending');
+        if (etat.is_offline) {
+            banniere.hidden = false;
+            texte.textContent = "Mode hors-ligne — connexion au serveur principal indisponible, vous travaillez sur la copie locale. La synchronisation se fera automatiquement au retour de la connexion.";
+            badge.textContent = etat.changements_en_attente + ' en attente';
+        } else if (etat.changements_en_attente > 0) {
+            banniere.hidden = false;
+            texte.textContent = "Synchronisation en cours avec le serveur principal...";
+            badge.textContent = etat.changements_en_attente + ' en attente';
+        } else {
+            banniere.hidden = true;
+        }
+    }).catch(() => {});
+}
+verifierEtatSynchro();
+setInterval(verifierEtatSynchro, 15000);
+
+function forcerSynchro() {
+    fetch('/api/sync/forcer', {method: 'POST'})
+        .then(r => r.json())
+        .then(res => { alert(res.message || (res.success ? 'OK' : 'Echec')); verifierEtatSynchro(); })
+        .catch(() => alert('Erreur réseau lors de la synchronisation.'));
+}
+
 // Stocker les infos de la structure
 {% if session.structure_nom %}
 localStorage.setItem('structureNom', '{{ session.structure_nom }}');
