@@ -241,3 +241,15 @@ CREATE TABLE IF NOT EXISTS societes_assurance (
 );
 CREATE INDEX IF NOT EXISTS idx_societes_assurance_lookup ON societes_assurance (structure_id, assurance_nom);
 -- ----------------------------------------------------------
+
+
+-- ----------------------------------------------------------
+-- 7) Génération des factures assurance : ventilation par société
+-- ----------------------------------------------------------
+-- La génération mensuelle des factures assurance (onglet "Assurances")
+-- regroupait tout le monde sous le seul nom de la compagnie complémentaire
+-- (ex: "GTA"), sans distinguer les sociétés souscriptrices. On ajoute la
+-- colonne pour générer une facture distincte par société sous la même
+-- compagnie (ex: GTA/SOTOCO et GTA/TOGOCEL séparément).
+ALTER TABLE factures_assurance ADD COLUMN IF NOT EXISTS societe VARCHAR(150);
+-- ----------------------------------------------------------

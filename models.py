@@ -1582,6 +1582,10 @@ class FactureAssurance(db.Model):
     date_remboursement = db.Column(db.Date)
     details = db.Column(db.JSON)
     type_assurance = db.Column(db.String(50), default='principale')
+    # Société souscriptrice (assurance complémentaire uniquement) : permet de
+    # générer une facture distincte par société sous une même compagnie
+    # (ex: GTA/SOTOCO et GTA/TOGOCEL séparément).
+    societe = db.Column(db.String(150))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

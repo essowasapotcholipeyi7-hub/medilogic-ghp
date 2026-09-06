@@ -8215,7 +8215,7 @@ def generer_factures_assurance():
         
         # 🔥 RECUPERER LES VENTES AVEC LES DEUX ASSURANCES
         ventes = db.execute_query("""
-            SELECT 
+            SELECT
                 v.id,
                 v.patient_nom,
                 v.sous_total,
@@ -8227,12 +8227,14 @@ def generer_factures_assurance():
                 v.prise_en_charge,
                 v.prise_en_charge2,
                 v.assurances,
+                v.societe_assurance2,
                 p.type_assurance as assurance_principale,
-                p.assurance2_nom as assurance2_patient
+                p.assurance2_nom as assurance2_patient,
+                p.societe_assurance2 as patient_societe_assurance2
             FROM ventes v
             LEFT JOIN patients p ON v.patient_id = p.id
-            WHERE v.structure_id = %s 
-            AND v.date_vente >= %s 
+            WHERE v.structure_id = %s
+            AND v.date_vente >= %s
             AND v.date_vente <= %s
             AND (v.statut IS NULL OR v.statut != 'annulee')
             AND (
@@ -8248,31 +8250,38 @@ def generer_factures_assurance():
         if not ventes:
             return jsonify({'success': False, 'error': 'Aucune vente avec assurance pour cette periode'}), 400
         
-        factures_par_assurance = {}
-        
+        # 🔥 Regroupement par CLÉ = (assurance, société). La société n'est
+        # pertinente que pour l'assurance complémentaire (contrat groupe
+        # employeur) — la principale (AMU-CNSS/INAM) n'en a pas.
+        factures_par_cle = {}
+
         for v in ventes:
             if isinstance(v, dict):
                 # 🔥 Récupérer les infos des deux assurances
                 assurance_principale = v.get('assurance_principale') or v.get('assurance')
                 assurance2 = v.get('assurance2_nom') or v.get('assurance2_patient') or ''
-                
+                societe2 = v.get('societe_assurance2') or v.get('patient_societe_assurance2') or None
+
                 # 🔥 Convertir les Decimal en float
                 sous_total = float(v.get('sous_total') or 0)
                 prise_en_charge = float(v.get('prise_en_charge') or 0)
                 prise_en_charge2 = float(v.get('prise_en_charge2') or 0)
-                
+
                 # 🔥 SI L'ASSURANCE PRINCIPALE EST 'non_assure' OU NULL, ON L'IGNORE
                 if assurance_principale and assurance_principale != 'non_assure':
-                    if assurance_principale not in factures_par_assurance:
-                        factures_par_assurance[assurance_principale] = {
+                    cle = assurance_principale
+                    if cle not in factures_par_cle:
+                        factures_par_cle[cle] = {
+                            'assurance': assurance_principale,
+                            'societe': None,
                             'total': 0,
                             'ventes': [],
                             'type': 'principale'
                         }
-                    
+
                     if prise_en_charge > 0:
-                        factures_par_assurance[assurance_principale]['total'] += prise_en_charge
-                        factures_par_assurance[assurance_principale]['ventes'].append({
+                        factures_par_cle[cle]['total'] += prise_en_charge
+                        factures_par_cle[cle]['ventes'].append({
                             'id': v.get('id'),
                             'patient_nom': v.get('patient_nom'),
                             'montant_assurance': prise_en_charge,
@@ -8280,19 +8289,22 @@ def generer_factures_assurance():
                             'date_vente': str(v.get('date_vente')),
                             'type': 'principale'
                         })
-                
+
                 # 🔥 SI L'ASSURANCE COMPLÉMENTAIRE EXISTE
                 if assurance2 and assurance2 != '' and assurance2 != 'Aucune':
-                    if assurance2 not in factures_par_assurance:
-                        factures_par_assurance[assurance2] = {
+                    cle = f"{assurance2}||{societe2 or ''}"
+                    if cle not in factures_par_cle:
+                        factures_par_cle[cle] = {
+                            'assurance': assurance2,
+                            'societe': societe2,
                             'total': 0,
                             'ventes': [],
                             'type': 'complementaire'
                         }
-                    
+
                     if prise_en_charge2 > 0:
-                        factures_par_assurance[assurance2]['total'] += prise_en_charge2
-                        factures_par_assurance[assurance2]['ventes'].append({
+                        factures_par_cle[cle]['total'] += prise_en_charge2
+                        factures_par_cle[cle]['ventes'].append({
                             'id': v.get('id'),
                             'patient_nom': v.get('patient_nom'),
                             'montant_assurance': prise_en_charge2,
@@ -8300,48 +8312,55 @@ def generer_factures_assurance():
                             'date_vente': str(v.get('date_vente')),
                             'type': 'complementaire'
                         })
-        
-        print(f"Factures a generer: {len(factures_par_assurance)}")
-        
+
+        print(f"Factures a generer: {len(factures_par_cle)}")
+
         resultats = []
-        
-        for assurance, data_assurance in factures_par_assurance.items():
+
+        for cle, data_assurance in factures_par_cle.items():
             if data_assurance['total'] == 0:
                 continue
-            
-            # 🔥 VERIFIER SI UNE FACTURE EXISTE DEJA
+
+            assurance = data_assurance['assurance']
+            societe = data_assurance['societe']
+
+            # 🔥 VERIFIER SI UNE FACTURE EXISTE DEJA (assurance + société,
+            # NULL-safe : deux NULL sont considérés égaux ici)
             existing = db.execute_query("""
-                SELECT id, montant_rembourse 
-                FROM factures_assurance 
+                SELECT id, montant_rembourse
+                FROM factures_assurance
                 WHERE structure_id = %s AND mois_reference = %s AND assurance = %s
-            """, (structure_id, mois_reference, assurance))
-            
+                AND (societe = %s OR (societe IS NULL AND %s IS NULL))
+            """, (structure_id, mois_reference, assurance, societe, societe))
+
             if existing and len(existing) > 0:
                 facture_id = existing[0]['id']
                 deja_rembourse = float(existing[0]['montant_rembourse'] or 0)
                 nouveau_total = data_assurance['total']
                 type_assurance = data_assurance['type']
-                
+
                 if deja_rembourse >= nouveau_total:
                     nouveau_statut = 'payee'
                 elif deja_rembourse > 0:
                     nouveau_statut = 'partielle'
                 else:
                     nouveau_statut = 'en_attente'
-                
+
                 db.execute_query("""
-                    UPDATE factures_assurance 
-                    SET montant_total = %s, 
+                    UPDATE factures_assurance
+                    SET montant_total = %s,
                         details = %s,
                         statut = %s,
                         type_assurance = %s,
+                        societe = %s,
                         updated_at = NOW()
                     WHERE id = %s
-                """, (nouveau_total, json.dumps(data_assurance['ventes']), nouveau_statut, type_assurance, facture_id))
-                
+                """, (nouveau_total, json.dumps(data_assurance['ventes']), nouveau_statut, type_assurance, societe, facture_id))
+
                 resultats.append({
-                    'assurance': assurance, 
-                    'montant': nouveau_total, 
+                    'assurance': assurance,
+                    'societe': societe,
+                    'montant': nouveau_total,
                     'statut': 'mise_a_jour',
                     'reste': nouveau_total - deja_rembourse,
                     'type': type_assurance
@@ -8349,31 +8368,33 @@ def generer_factures_assurance():
             else:
                 result = db.execute_query("""
                     INSERT INTO factures_assurance (
-                        structure_id, 
-                        mois_reference, 
-                        assurance, 
-                        montant_total, 
+                        structure_id,
+                        mois_reference,
+                        assurance,
+                        montant_total,
                         details,
                         type_assurance,
+                        societe,
                         created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                     RETURNING id
-                """, (structure_id, mois_reference, assurance, data_assurance['total'], json.dumps(data_assurance['ventes']), data_assurance['type']))
-                
+                """, (structure_id, mois_reference, assurance, data_assurance['total'], json.dumps(data_assurance['ventes']), data_assurance['type'], societe))
+
                 resultats.append({
-                    'assurance': assurance, 
-                    'montant': data_assurance['total'], 
-                    'statut': 'nouvelle', 
+                    'assurance': assurance,
+                    'societe': societe,
+                    'montant': data_assurance['total'],
+                    'statut': 'nouvelle',
                     'id': result[0]['id'],
                     'type': data_assurance['type']
                 })
-        
+
         return jsonify({
-            'success': True, 
-            'factures': resultats, 
+            'success': True,
+            'factures': resultats,
             'total_ventes': len(ventes),
-            'total_factures': len(factures_par_assurance)
+            'total_factures': len(factures_par_cle)
         })
         
     except Exception as e:
@@ -8391,20 +8412,21 @@ def api_get_factures_assurance():
         
         # 🔥 AJOUTER LA COLONNE type_assurance
         query = """
-            SELECT 
-                id, 
-                structure_id, 
-                mois_reference, 
-                assurance, 
-                montant_total, 
-                montant_rembourse, 
-                statut, 
+            SELECT
+                id,
+                structure_id,
+                mois_reference,
+                assurance,
+                montant_total,
+                montant_rembourse,
+                statut,
                 details,
                 type_assurance,
                 created_at,
                 date_remboursement,
-                updated_at
-            FROM factures_assurance 
+                updated_at,
+                societe
+            FROM factures_assurance
             WHERE structure_id = %s
         """
         params = [structure_id]
@@ -8432,6 +8454,7 @@ def api_get_factures_assurance():
                     'id': f.get('id'),
                     'mois_reference': f.get('mois_reference'),
                     'assurance': assurance_name,
+                    'societe': f.get('societe'),
                     'type_assurance': type_assurance,
                     'type_label': type_label,
                     'montant_total': float(f.get('montant_total', 0)),

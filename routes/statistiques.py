@@ -255,117 +255,131 @@ def calculer_montants_vente(vente):
 # API : STATISTIQUES GÉNÉRALES
 # ============================================================
 
+def _ventes_filtrees(structure_id, periode, date_debut_str, date_fin_str,
+                      assurance_filter='toutes', type_assurance='toutes', categorie_filter='toutes'):
+    """Factorisation de la construction de la requête ventes filtrée,
+    partagée entre l'API JSON /stats et les routes d'impression (liste des
+    patients par assurance, bordereau) pour que les deux affichent
+    exactement les mêmes données."""
+    dates = get_dates_periode(periode, date_debut_str, date_fin_str)
+
+    from datetime import datetime as dt
+
+    if isinstance(dates['debut'], date) and not isinstance(dates['debut'], datetime):
+        debut = dt.combine(dates['debut'], dt.min.time())
+        fin = dt.combine(dates['fin'], dt.max.time())
+    else:
+        debut = dates['debut']
+        fin = dates['fin']
+
+    query = db.session.query(Vente).join(
+        Patient, Vente.patient_id == Patient.id
+    ).filter(
+        Vente.structure_id == structure_id,
+        Vente.date_vente >= debut,
+        Vente.date_vente <= fin,
+        Vente.statut == 'validee'
+    )
+
+    # Filtrer par catégorie d'actes
+    if categorie_filter != 'toutes':
+        ventes_filtrees = []
+        for v in query.all():
+            actes = extraire_actes(v)
+            if categorie_filter in actes:
+                ventes_filtrees.append(v.id)
+
+        if ventes_filtrees:
+            query = query.filter(Vente.id.in_(ventes_filtrees))
+        else:
+            query = query.filter(Vente.id == -1)
+
+    # Filtrer par type d'assurance
+    if type_assurance != 'toutes':
+        if type_assurance == 'principale':
+            query = query.filter(
+                or_(
+                    Patient.type_assurance.ilike('%amu_cnss%'),
+                    Patient.type_assurance.ilike('%amu_inam%')
+                )
+            )
+        elif type_assurance == 'complementaire':
+            query = query.filter(
+                and_(
+                    Vente.assurance2_nom != None,
+                    Vente.assurance2_nom != '',
+                    Vente.assurance2_nom != 'Aucune'
+                )
+            )
+        elif type_assurance == 'double':
+            query = query.filter(
+                and_(
+                    or_(
+                        Patient.type_assurance.ilike('%amu_cnss%'),
+                        Patient.type_assurance.ilike('%amu_inam%')
+                    ),
+                    Vente.assurance2_nom != None,
+                    Vente.assurance2_nom != '',
+                    Vente.assurance2_nom != 'Aucune'
+                )
+            )
+
+    # Filtrer par assurance spécifique
+    if assurance_filter != 'toutes':
+        if assurance_filter == 'non_assure':
+            query = query.filter(
+                or_(
+                    Patient.type_assurance == None,
+                    Patient.type_assurance == '',
+                    Patient.type_assurance == 'non_assure'
+                )
+            )
+        else:
+            if assurance_filter.lower() in ASSURANCES_PRINCIPALES:
+                query = query.filter(
+                    Patient.type_assurance.ilike(f'%{assurance_filter}%')
+                )
+            else:
+                query = query.filter(
+                    Vente.assurance2_nom.ilike(f'%{assurance_filter}%')
+                )
+
+    ventes = query.all()
+
+    # Récupérer les patients avec leurs assurances
+    patient_ids = list(set([v.patient_id for v in ventes if v.patient_id]))
+    patients = []
+    patients_dict = {}
+    if patient_ids:
+        patients = Patient.query.filter(
+            Patient.structure_id == structure_id,
+            Patient.id.in_(patient_ids)
+        ).all()
+        patients_dict = {p.id: p.type_assurance for p in patients}
+
+    return ventes, patients, patients_dict, dates
+
+
 @statistiques_bp.route('/stats')
 def api_stats():
     try:
         structure_id = session.get('structure_id')
-        
+
         if not structure_id:
             return jsonify({'error': 'Structure non trouvée'}), 400
-        
+
         periode = request.args.get('periode', 'mois')
         date_debut_str = request.args.get('date_debut')
         date_fin_str = request.args.get('date_fin')
         assurance_filter = request.args.get('assurance', 'toutes')
         categorie_filter = request.args.get('categorie', 'toutes')
         type_assurance = request.args.get('type_assurance', 'toutes')
-        
-        dates = get_dates_periode(periode, date_debut_str, date_fin_str)
-        
-        from datetime import datetime as dt
-        
-        if isinstance(dates['debut'], date) and not isinstance(dates['debut'], datetime):
-            debut = dt.combine(dates['debut'], dt.min.time())
-            fin = dt.combine(dates['fin'], dt.max.time())
-        else:
-            debut = dates['debut']
-            fin = dates['fin']
-        
-        query = db.session.query(Vente).join(
-            Patient, Vente.patient_id == Patient.id
-        ).filter(
-            Vente.structure_id == structure_id,
-            Vente.date_vente >= debut,
-            Vente.date_vente <= fin,
-            Vente.statut == 'validee'
+
+        ventes, patients, patients_dict, dates = _ventes_filtrees(
+            structure_id, periode, date_debut_str, date_fin_str,
+            assurance_filter, type_assurance, categorie_filter
         )
-        
-        # Filtrer par catégorie d'actes
-        if categorie_filter != 'toutes':
-            ventes_filtrees = []
-            for v in query.all():
-                actes = extraire_actes(v)
-                if categorie_filter in actes:
-                    ventes_filtrees.append(v.id)
-            
-            if ventes_filtrees:
-                query = query.filter(Vente.id.in_(ventes_filtrees))
-            else:
-                query = query.filter(Vente.id == -1)
-        
-        # Filtrer par type d'assurance
-        if type_assurance != 'toutes':
-            if type_assurance == 'principale':
-                query = query.filter(
-                    or_(
-                        Patient.type_assurance.ilike('%amu_cnss%'),
-                        Patient.type_assurance.ilike('%amu_inam%')
-                    )
-                )
-            elif type_assurance == 'complementaire':
-                query = query.filter(
-                    and_(
-                        Vente.assurance2_nom != None,
-                        Vente.assurance2_nom != '',
-                        Vente.assurance2_nom != 'Aucune'
-                    )
-                )
-            elif type_assurance == 'double':
-                query = query.filter(
-                    and_(
-                        or_(
-                            Patient.type_assurance.ilike('%amu_cnss%'),
-                            Patient.type_assurance.ilike('%amu_inam%')
-                        ),
-                        Vente.assurance2_nom != None,
-                        Vente.assurance2_nom != '',
-                        Vente.assurance2_nom != 'Aucune'
-                    )
-                )
-        
-        # Filtrer par assurance spécifique
-        if assurance_filter != 'toutes':
-            if assurance_filter == 'non_assure':
-                query = query.filter(
-                    or_(
-                        Patient.type_assurance == None,
-                        Patient.type_assurance == '',
-                        Patient.type_assurance == 'non_assure'
-                    )
-                )
-            else:
-                if assurance_filter.lower() in ASSURANCES_PRINCIPALES:
-                    query = query.filter(
-                        Patient.type_assurance.ilike(f'%{assurance_filter}%')
-                    )
-                else:
-                    query = query.filter(
-                        Vente.assurance2_nom.ilike(f'%{assurance_filter}%')
-                    )
-        
-        ventes = query.all()
-        
-        # Récupérer les patients avec leurs assurances
-        patient_ids = list(set([v.patient_id for v in ventes if v.patient_id]))
-        patients = []
-        patients_dict = {}
-        if patient_ids:
-            patients = Patient.query.filter(
-                Patient.structure_id == structure_id,
-                Patient.id.in_(patient_ids)
-            ).all()
-            patients_dict = {p.id: p.type_assurance for p in patients}
-        
+
         # Calcul des statistiques
         stats_actes = calculer_stats_actes(ventes)
         stats_assurances = calculer_stats_assurances(ventes, patients, patients_dict)
@@ -946,6 +960,62 @@ def get_patients_par_assurance(ventes, patients, patients_dict, type_assurance='
     
     result.sort(key=lambda x: (x['assurance'], x['patient_nom']))
     return result
+
+
+# ============================================================
+# IMPRESSION DE LA LISTE "PATIENTS PAR ASSURANCE"
+# ============================================================
+# ⭐ Remplace l'ancien bouton "Imprimer" (JS `imprimerListeAssurance()`) qui
+# ouvrait un `window.open('', '_blank')` puis faisait `document.write()` en
+# référençant des IDs DOM inexistants (`assuranceTotalMontant` etc.) — la
+# fonction plantait avant même d'écrire quoi que ce soit, et le popup pouvait
+# de toute façon être bloqué par le navigateur. Ici, page imprimable
+# classique côté serveur, avec le même en-tête (logo/nom/adresse structure)
+# que les autres documents imprimés (reçus, factures, bordereau).
+@statistiques_bp.route('/assurance/liste-patients/print')
+def liste_patients_print():
+    structure_id = session.get('structure_id')
+    if not structure_id:
+        return "Structure non trouvée", 400
+
+    periode = request.args.get('periode', 'mois')
+    date_debut_str = request.args.get('date_debut')
+    date_fin_str = request.args.get('date_fin')
+    assurance_filter = request.args.get('assurance', 'toutes')
+    type_assurance = request.args.get('type_assurance', 'toutes')
+    societe_filtre = (request.args.get('societe') or '').strip()
+
+    ventes, patients, patients_dict, dates = _ventes_filtrees(
+        structure_id, periode, date_debut_str, date_fin_str, assurance_filter, type_assurance
+    )
+    lignes = get_patients_par_assurance(ventes, patients, patients_dict, type_assurance, assurance_filter)
+
+    if societe_filtre and societe_filtre != 'toutes':
+        lignes = [l for l in lignes if (l.get('societe') or '').strip().lower() == societe_filtre.lower()]
+
+    total_beneficiaire = 0.0
+    total_part_assurance = 0.0
+    patients_uniques = set()
+    for l in lignes:
+        total_part_assurance += float(l.get('part_assurance') or 0)
+        if l.get('patient_id') not in patients_uniques:
+            patients_uniques.add(l.get('patient_id'))
+            total_beneficiaire += float(l.get('montant_beneficiaire') or 0)
+
+    structure = Structure.query.get(structure_id)
+
+    return render_template(
+        'statistiques_liste_patients_print.html',
+        structure=structure,
+        periode_libelle=dates['libelle'],
+        assurance_filtre=assurance_filter,
+        societe_filtre=societe_filtre,
+        lignes=lignes,
+        total_beneficiaire=total_beneficiaire,
+        total_part_assurance=total_part_assurance,
+        nb_patients=len(patients_uniques),
+        now=datetime.now(),
+    )
 
 
 # ============================================================
