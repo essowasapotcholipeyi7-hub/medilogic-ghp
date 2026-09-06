@@ -2201,6 +2201,7 @@ class SyncState(db.Model):
     dernier_sync_reussi = db.Column(db.DateTime)
     derniere_erreur_sync = db.Column(db.Text)
     derniere_erreur_sync_at = db.Column(db.DateTime)
+    dernier_sync_sheets = db.Column(db.DateTime)  # dernier rafraîchissement du miroir Google Sheets
 
     @classmethod
     def get_ou_creer(cls):
@@ -2226,3 +2227,26 @@ class SyncChangelog(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     synced = db.Column(db.Boolean, default=False)
     synced_at = db.Column(db.DateTime)
+
+
+class SheetsMirror(db.Model):
+    """Miroir local, en LECTURE SEULE, de certaines feuilles Google Sheets
+    (actes, produits/médicaments, users, lunettes — par structure — et la
+    feuille globale 'structures'). Permet à l'appli (y compris la connexion)
+    de continuer à fonctionner quand Google Sheets est injoignable.
+    Alimenté par utils/sheets_mirror.py — ne jamais modifier à la main,
+    ce n'est pas la source de vérité (contrairement à sync_changelog qui,
+    lui, part du local vers Neon)."""
+    __tablename__ = 'sheets_mirror'
+    __bind_key__ = 'local'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    sheet_type = db.Column(db.String(30), nullable=False)  # actes | produits | users | lunettes | structures
+    row_key = db.Column(db.String(50), nullable=False)     # colonne "ID" de la feuille
+    data = db.Column(db.JSON, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('structure_id', 'sheet_type', 'row_key', name='uq_sheets_mirror_row'),
+    )

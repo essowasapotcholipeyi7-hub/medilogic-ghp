@@ -335,10 +335,15 @@ def start_watchdog(app):
 
     def _loop():
         from models import db, SyncState
+        from utils import sheets_mirror
         last_warm_refresh = 0.0
         with app.app_context():
             etat = SyncState.get_ou_creer()
             OFFLINE_STATE.is_offline = (etat.mode == 'offline')
+            try:
+                sheets_mirror.sync_all()  # premier remplissage du miroir Sheets au démarrage
+            except Exception:
+                logger.exception("Echec du remplissage initial du miroir Sheets")
 
         while True:
             time.sleep(CHECK_INTERVAL_SECONDS)
@@ -366,6 +371,10 @@ def start_watchdog(app):
                             now = time.time()
                             if now - last_warm_refresh > WARM_REFRESH_INTERVAL_SECONDS:
                                 pull_refresh_from_neon()
+                                try:
+                                    sheets_mirror.sync_all()
+                                except Exception:
+                                    logger.exception("Echec du rafraîchissement périodique du miroir Sheets")
                                 last_warm_refresh = now
             except Exception:
                 logger.exception("Erreur dans le thread de surveillance de la bascule Neon/local")
@@ -388,4 +397,5 @@ def get_status():
         'dernier_sync_reussi': etat.dernier_sync_reussi.isoformat() if etat.dernier_sync_reussi else None,
         'derniere_erreur_sync_at': etat.derniere_erreur_sync_at.isoformat() if etat.derniere_erreur_sync_at else None,
         'changements_en_attente': pending,
+        'dernier_sync_sheets': etat.dernier_sync_sheets.isoformat() if etat.dernier_sync_sheets else None,
     }

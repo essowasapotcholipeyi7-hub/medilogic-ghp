@@ -395,7 +395,12 @@ def api_sync_forcer():
         return jsonify({'success': ok, 'message': 'Synchronisé, retour en mode normal' if ok else 'Echec de la synchronisation, voir logs serveur'})
     else:
         ok = db_failover.pull_refresh_from_neon()
-        return jsonify({'success': ok, 'message': 'Mirroir local rafraîchi depuis Neon' if ok else 'Echec du rafraîchissement'})
+        try:
+            from utils import sheets_mirror
+            sheets_mirror.sync_all()
+        except Exception:
+            pass
+        return jsonify({'success': ok, 'message': 'Mirroir local rafraîchi depuis Neon (+ Google Sheets)' if ok else 'Echec du rafraîchissement'})
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -417,7 +422,26 @@ def index():
             all_worksheets = spreadsheet.worksheets()
         except Exception as e:
             print(f"❌ Erreur accès Google Sheets: {e}")
-            flash('Erreur de connexion à la base de données', 'danger')
+            # ⭐ Google Sheets injoignable (coupure) : on tente une connexion
+            # via le miroir local — voir utils/sheets_mirror.py
+            try:
+                from utils.sheets_mirror import tenter_connexion_hors_ligne
+                infos = tenter_connexion_hors_ligne(email, hash_password(password))
+            except Exception:
+                infos = None
+            if infos:
+                session['user_id'] = infos['user_id']
+                session['user_name'] = infos['user_name']
+                session['structure_id'] = infos['structure_id']
+                session['structure_nom'] = infos['structure_nom']
+                session['structure_email'] = infos['structure_email']
+                session['structure_logo'] = infos.get('structure_logo', '')
+                session['structure_telephone'] = infos['structure_telephone']
+                session['role'] = infos['role']
+                session['is_admin'] = infos['is_admin']
+                flash(f"Bienvenue {infos['user_name']} (mode hors-ligne — Google Sheets injoignable)", 'warning')
+                return redirect(url_for('dashboard'))
+            flash('Connexion à Google Sheets impossible, et aucun compte hors-ligne correspondant trouvé.', 'danger')
             return redirect(url_for('index'))
         
         user_trouve = False
