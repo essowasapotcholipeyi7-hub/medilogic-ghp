@@ -293,3 +293,106 @@ def marquer_paie_payee(paie, mode_paiement='especes', user_nom='System'):
         print(f"⚠️ Erreur journal d'activité (paie #{paie.id}): {e}")
 
     return paie, None
+
+
+# ============================================================
+# DÉCLARATIONS MENSUELLES (IRPP, CNSS/CRT, AMU-CNSS/AMU-INAM)
+# ============================================================
+# À déposer avant le 15 du mois suivant (délai usuel pour ces organismes au
+# Togo — à confirmer avec votre comptable). Une déclaration = l'agrégation,
+# pour un mois donné, des bulletins déjà calculés (statut valide ou payée —
+# un brouillon n'a pas vocation à être déclaré).
+
+TYPES_DECLARATION = {
+    'irpp': {'label': 'IRPP', 'organisme': 'DGI'},
+    'cnss': {'label': 'CNSS (retraite — secteur privé)', 'organisme': 'CNSS'},
+    'crt': {'label': 'CRT (retraite — secteur public)', 'organisme': 'CRT'},
+    'amu-cnss': {'label': 'AMU-CNSS (secteur privé)', 'organisme': 'AMU-CNSS'},
+    'amu-inam': {'label': 'AMU-INAM (secteur public)', 'organisme': 'AMU-INAM'},
+}
+
+
+def date_limite_declaration(annee, mois):
+    """Le 15 du mois suivant la période déclarée."""
+    from datetime import date as _date
+    if mois == 12:
+        return _date(annee + 1, 1, 15)
+    return _date(annee, mois + 1, 15)
+
+
+def generer_declaration(structure_id, annee, mois, type_declaration):
+    """Agrège les bulletins de paie du mois pour un type de déclaration
+    donné (irpp, cnss, crt, amu-cnss, amu-inam). Retourne un dict prêt à
+    afficher/imprimer : lignes par employé + totaux."""
+    if type_declaration not in TYPES_DECLARATION:
+        return None
+
+    paies = Paie.query.filter_by(structure_id=structure_id, annee=annee, mois=mois) \
+        .filter(Paie.statut.in_(['valide', 'payee'])).all()
+
+    lignes = []
+    total_salarial = 0.0
+    total_patronal = 0.0
+
+    for p in paies:
+        e = p.employe
+        nom_employe = f"{e.nom} {e.prenom}" if e else f"Employé #{p.employe_id}"
+        matricule = e.matricule if e else '-'
+
+        if type_declaration == 'irpp':
+            montant = _d(p.irpp)
+            if montant <= 0:
+                continue
+            lignes.append({
+                'matricule': matricule, 'employe': nom_employe,
+                'base': _d(p.revenu_net_imposable), 'taux': None,
+                'salarial': montant, 'patronal': 0.0, 'total': montant,
+            })
+            total_salarial += montant
+
+        elif type_declaration in ('cnss', 'crt'):
+            organisme_attendu = 'CNSS' if type_declaration == 'cnss' else 'CRT'
+            if (p.organisme_retraite or '') != organisme_attendu:
+                continue
+            sal, pat = _d(p.retraite_salarial), _d(p.retraite_patronal)
+            if sal <= 0 and pat <= 0:
+                continue
+            lignes.append({
+                'matricule': matricule, 'employe': nom_employe,
+                'base': _d(p.salaire_base) if organisme_attendu == 'CRT' else _d(p.salaire_brut),
+                'taux': f"{_d(p.taux_retraite_salarial):.2f}% / {_d(p.taux_retraite_patronal):.2f}%",
+                'salarial': sal, 'patronal': pat, 'total': round(sal + pat, 2),
+            })
+            total_salarial += sal
+            total_patronal += pat
+
+        elif type_declaration in ('amu-cnss', 'amu-inam'):
+            organisme_attendu = 'AMU-CNSS' if type_declaration == 'amu-cnss' else 'AMU-INAM'
+            if (p.organisme_amu or '') != organisme_attendu:
+                continue
+            sal, pat = _d(p.amu_salarial), _d(p.amu_patronal)
+            if sal <= 0 and pat <= 0:
+                continue
+            lignes.append({
+                'matricule': matricule, 'employe': nom_employe,
+                'base': _d(p.salaire_brut),
+                'taux': f"{_d(p.taux_amu_salarial):.2f}% / {_d(p.taux_amu_patronal):.2f}%",
+                'salarial': sal, 'patronal': pat, 'total': round(sal + pat, 2),
+            })
+            total_salarial += sal
+            total_patronal += pat
+
+    lignes.sort(key=lambda l: l['employe'])
+
+    return {
+        'type': type_declaration,
+        'label': TYPES_DECLARATION[type_declaration]['label'],
+        'organisme': TYPES_DECLARATION[type_declaration]['organisme'],
+        'annee': annee, 'mois': mois,
+        'lignes': lignes,
+        'nb_employes': len(lignes),
+        'total_salarial': round(total_salarial, 2),
+        'total_patronal': round(total_patronal, 2),
+        'total': round(total_salarial + total_patronal, 2),
+        'date_limite': date_limite_declaration(annee, mois),
+    }

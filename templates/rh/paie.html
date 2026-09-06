@@ -9,8 +9,11 @@
                 <div class="d-flex gap-2 align-items-center">
                     <select class="form-select form-select-sm" id="paieMois" style="width:auto"></select>
                     <select class="form-select form-select-sm" id="paieAnnee" style="width:auto"></select>
+                    <a href="{{ url_for('rh.page_declarations') }}" class="btn btn-light btn-sm">
+                        <i class="fas fa-file-contract"></i> Déclarations mensuelles
+                    </a>
                     <a href="{{ url_for('rh.page_parametres_paie') }}" class="btn btn-light btn-sm">
-                        <i class="fas fa-sliders-h"></i> Paramètres (taux CNSS/INAM/IRPP)
+                        <i class="fas fa-sliders-h"></i> Paramètres (taux CNSS/CRT/AMU/IRPP)
                     </a>
                 </div>
             </div>

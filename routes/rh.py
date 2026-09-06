@@ -1638,3 +1638,71 @@ def bulletin_paie(structure_id, paie_id):
         return redirect(url_for('rh.page_paie'))
     return render_template('rh/bulletin_paie.html', paie=paie, employe=paie.employe,
                             date_actuelle=datetime.now().strftime('%d/%m/%Y'))
+
+
+# ============================================================
+# DÉCLARATIONS MENSUELLES (IRPP, CNSS/CRT, AMU-CNSS/AMU-INAM)
+# ============================================================
+# À déposer avant le 15 du mois suivant — voir services.paie_service.
+
+@rh_bp.route('/declarations')
+@require_structure
+def page_declarations(structure_id):
+    """Écran de synthèse des déclarations sociales/fiscales mensuelles."""
+    return render_template('rh/declarations.html')
+
+
+@rh_bp.route('/api/declarations/summary')
+@require_structure
+def api_declarations_summary(structure_id):
+    from services.paie_service import generer_declaration, date_limite_declaration, TYPES_DECLARATION
+    annee = request.args.get('annee', datetime.now().year, type=int)
+    mois = request.args.get('mois', datetime.now().month, type=int)
+
+    result = {}
+    for type_decl in TYPES_DECLARATION:
+        d = generer_declaration(structure_id, annee, mois, type_decl)
+        result[type_decl] = {
+            'label': d['label'], 'organisme': d['organisme'],
+            'nb_employes': d['nb_employes'],
+            'total_salarial': d['total_salarial'],
+            'total_patronal': d['total_patronal'],
+            'total': d['total'],
+        }
+
+    date_limite = date_limite_declaration(annee, mois)
+    return jsonify({
+        'annee': annee, 'mois': mois,
+        'declarations': result,
+        'date_limite': date_limite.strftime('%Y-%m-%d'),
+        'date_limite_label': date_limite.strftime('%d/%m/%Y'),
+        'delai_depasse': date.today() > date_limite,
+    })
+
+
+@rh_bp.route('/declarations/<type_declaration>/print')
+@require_structure
+def declaration_print(structure_id, type_declaration):
+    """Document imprimable d'une déclaration (liste par employé + totaux),
+    prêt à joindre au dépôt auprès de l'organisme concerné."""
+    from services.paie_service import generer_declaration
+    from utils.structure_info import get_structure_info
+
+    annee = request.args.get('annee', datetime.now().year, type=int)
+    mois = request.args.get('mois', datetime.now().month, type=int)
+
+    d = generer_declaration(structure_id, annee, mois, type_declaration)
+    if d is None:
+        flash('Type de déclaration inconnu', 'danger')
+        return redirect(url_for('rh.page_declarations'))
+
+    mois_noms = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+
+    return render_template(
+        'rh/declaration_print.html',
+        declaration=d,
+        periode_libelle=f"{mois_noms[mois]} {annee}",
+        structure=get_structure_info(structure_id),
+        now=datetime.now(),
+    )
