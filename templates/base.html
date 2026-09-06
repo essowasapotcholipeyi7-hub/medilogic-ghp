@@ -1969,9 +1969,16 @@ updateHorloge();
 // ============================================
 // BASCULE HORS-LIGNE — bannière Neon <-> local
 // ============================================
+let syncPollingActif = null;
+
 function verifierEtatSynchro() {
     fetch('/api/sync/status').then(r => r.ok ? r.json() : null).then(etat => {
-        if (!etat || !etat.enabled) return;
+        if (!etat || !etat.enabled) {
+            // Bascule non configurée sur ce serveur (ex: Render, sans base
+            // locale de secours) : inutile de re-sonder toutes les 15s.
+            if (syncPollingActif) { clearInterval(syncPollingActif); syncPollingActif = null; }
+            return;
+        }
         const banniere = document.getElementById('offlineBanner');
         const texte = document.getElementById('offlineBannerText');
         const badge = document.getElementById('offlineBannerPending');
@@ -1989,7 +1996,7 @@ function verifierEtatSynchro() {
     }).catch(() => {});
 }
 verifierEtatSynchro();
-setInterval(verifierEtatSynchro, 15000);
+syncPollingActif = setInterval(verifierEtatSynchro, 15000);
 
 function forcerSynchro() {
     fetch('/api/sync/forcer', {method: 'POST'})

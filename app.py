@@ -367,6 +367,8 @@ def admin_required(f):
 @app.route('/api/sync/status')
 def api_sync_status():
     """État de la bascule Neon/local — interrogé par la bannière de base.html."""
+    if not db_failover.FAILOVER_ENABLED:
+        return jsonify({'enabled': False}), 200
     if 'user_id' not in session and 'structure_id' not in session:
         return jsonify({'enabled': False}), 200
     try:
@@ -4757,7 +4759,7 @@ def mes_rendez_vous():
     
     if not patient_id:
         flash('Veuillez vous connecter en tant que patient', 'warning')
-        return redirect(url_for('login'))
+        return redirect(url_for('index'))
     
     # ============================================================
     # RÉCUPÉRER LES INFORMATIONS DU PATIENT
@@ -12074,11 +12076,15 @@ def imprimer_ordonnances_patient(patient_id):
         flash('Aucune prescription en attente pour ce patient', 'warning')
         return redirect(url_for('prescriptions_recues'))
     
-    # Rediriger vers la première prescription avec le paramètre groupe
-    return redirect(url_for('imprimer_ordonnance', 
-                         prescription_id=prescriptions[0].get('id'),
-                         format=format_impression,
-                         groupe='true'))
+    # ⭐ Route corrigée : 'imprimer_ordonnance' n'a jamais existé (aucune
+    # route de ce nom, ni de paramètre prescription_id) — cette redirection
+    # plantait (BuildError) si jamais atteinte. Elle n'est en pratique liée
+    # nulle part dans l'UI (seules /medicaments et /actes le sont), donc
+    # aucune régression visible, mais autant rediriger vers une route qui
+    # existe réellement plutôt que de laisser un lien mort.
+    return redirect(url_for('imprimer_ordonnances_medicaments',
+                         patient_id=patient_id,
+                         format=format_impression))
 
 @app.route('/ordonnance/patient/<int:patient_id>/medicaments')
 @login_required
