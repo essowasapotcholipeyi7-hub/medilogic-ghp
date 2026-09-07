@@ -35,6 +35,7 @@ from datetime import datetime, date
 
 import webauthn
 from webauthn.helpers.structs import (
+    AuthenticatorAttachment,
     AuthenticatorSelectionCriteria,
     PublicKeyCredentialDescriptor,
     ResidentKeyRequirement,
@@ -90,6 +91,14 @@ def options_enregistrement(request, employe):
         user_name=employe.matricule or f"employe-{employe.id}",
         user_display_name=f"{employe.prenom or ''} {employe.nom}".strip(),
         authenticator_selection=AuthenticatorSelectionCriteria(
+            # ⭐ Sans authenticator_attachment, le navigateur propose AUSSI
+            # une "clé de sécurité" externe (USB/FIDO2) en plus du capteur
+            # intégré — c'est cette boîte de dialogue "clé d'accès" que le
+            # personnel voit et ne sait pas remplir. PLATFORM force le
+            # capteur intégré de l'appareil (empreinte Windows Hello,
+            # Touch ID, capteur Android...), seule option pertinente pour
+            # une borne de pointage.
+            authenticator_attachment=AuthenticatorAttachment.PLATFORM,
             resident_key=ResidentKeyRequirement.DISCOURAGED,
             user_verification=UserVerificationRequirement.REQUIRED,
         ),
