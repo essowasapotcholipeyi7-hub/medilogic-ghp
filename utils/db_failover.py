@@ -192,16 +192,27 @@ def _write_changelog_entries(entries):
 # Détection de connexion / bascule
 # ----------------------------------------------------------------------
 
-def is_neon_reachable(timeout=3):
+def is_neon_reachable(timeout=6, tentatives=2):
+    """Vérifie que Neon répond. Neon suspend automatiquement son instance de
+    calcul après une période d'inactivité (« scale-to-zero ») ; la première
+    connexion qui la réveille peut prendre plusieurs secondes. Un timeout
+    trop court (3s, valeur initiale) ou un seul essai suffisait à déclarer
+    Neon "injoignable" à tort pendant ce réveil — d'où le bandeau "Mode
+    hors-ligne" qui s'affichait alors qu'il n'y avait aucune vraie coupure.
+    On laisse donc plus de marge (6s) et on retente une fois avant de
+    conclure à une coupure réelle."""
     if not NEON_URL:
         return False
-    try:
-        import psycopg2
-        conn = psycopg2.connect(NEON_URL, connect_timeout=timeout)
-        conn.close()
-        return True
-    except Exception:
-        return False
+    import psycopg2
+    for essai in range(tentatives):
+        try:
+            conn = psycopg2.connect(NEON_URL, connect_timeout=timeout)
+            conn.close()
+            return True
+        except Exception:
+            if essai + 1 < tentatives:
+                time.sleep(1)
+    return False
 
 
 def _pgtool(name):
@@ -358,6 +369,12 @@ def start_watchdog(app):
         from models import db, SyncState
         from utils import sheets_mirror
         last_warm_refresh = 0.0
+        echecs_consecutifs = 0
+        # Il faut 2 échecs consécutifs (~40s d'indisponibilité confirmée, vu
+        # CHECK_INTERVAL_SECONDS=20) avant de basculer hors-ligne — un seul
+        # échec isolé (blip réseau, réveil Neon après mise en veille) ne
+        # suffit plus, pour éviter les faux positifs vécus en pratique.
+        SEUIL_ECHECS_AVANT_BASCULE = 2
         with app.app_context():
             etat = SyncState.get_ou_creer()
             OFFLINE_STATE.is_offline = (etat.mode == 'offline')
@@ -375,6 +392,7 @@ def start_watchdog(app):
 
                     if OFFLINE_STATE.is_offline:
                         if reachable:
+                            echecs_consecutifs = 0
                             logger.info("Neon de nouveau joignable — synchronisation en cours...")
                             if push_sync_to_neon() and pull_refresh_from_neon():
                                 OFFLINE_STATE.is_offline = False
@@ -383,12 +401,17 @@ def start_watchdog(app):
                                 logger.info("Retour en mode normal (Neon)")
                     else:
                         if not reachable:
-                            OFFLINE_STATE.is_offline = True
-                            etat.mode = 'offline'
-                            etat.derniere_bascule_offline = datetime.utcnow()
-                            db.session.commit()
-                            logger.warning("Neon injoignable — bascule en mode hors-ligne (base locale)")
+                            echecs_consecutifs += 1
+                            if echecs_consecutifs >= SEUIL_ECHECS_AVANT_BASCULE:
+                                OFFLINE_STATE.is_offline = True
+                                etat.mode = 'offline'
+                                etat.derniere_bascule_offline = datetime.utcnow()
+                                db.session.commit()
+                                logger.warning("Neon injoignable (%d échecs consécutifs) — bascule en mode hors-ligne (base locale)", echecs_consecutifs)
+                            else:
+                                logger.warning("Neon injoignable (%d/%d) — pas encore de bascule, nouvelle vérification dans %ss", echecs_consecutifs, SEUIL_ECHECS_AVANT_BASCULE, CHECK_INTERVAL_SECONDS)
                         else:
+                            echecs_consecutifs = 0
                             now = time.time()
                             if now - last_warm_refresh > WARM_REFRESH_INTERVAL_SECONDS:
                                 pull_refresh_from_neon()
