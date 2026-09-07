@@ -21,7 +21,7 @@ from routes.protocoles_routes import protocoles_bp
 from routes.journal_routes import journal_bp
 import secrets
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta 
 
 
 
@@ -33,7 +33,7 @@ from services.rendez_vous_service import RendezVousService
 from services.rappels_service import RappelsService
 
 
-# ========== DÉTECTION ENVIRONNEMENT ==========
+# ========== DÉTECTION ENVIRONNEMENTt ==========
 IS_PRODUCTION = os.environ.get('RENDER') == 'true' or os.environ.get('PRODUCTION') == 'true'
 
 if IS_PRODUCTION:
