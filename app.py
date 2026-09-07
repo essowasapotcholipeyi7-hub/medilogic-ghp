@@ -11479,20 +11479,29 @@ def prescriptions_recues():
             
             prix_unitaire = 0
             pbr = 0
-            
+            # ⭐ Indépendant du prix : un article trouvé à 0 F (prix pas
+            # encore renseigné) reste "trouvé" — seul un article ABSENT du
+            # catalogue de la structure doit ressortir en rouge (= la
+            # structure ne le propose pas, le patient devra l'obtenir
+            # ailleurs).
+            article_trouve = False
+
             if type_presc == 'medicament':
                 if nom_clean in produits_dict:
+                    article_trouve = True
                     prix_unitaire = produits_dict[nom_clean]['prix']
                     pbr = produits_dict[nom_clean]['pbr']
             else:
                 if nom_clean in actes_dict:
+                    article_trouve = True
                     prix_unitaire = actes_dict[nom_clean]['prix']
                     pbr = actes_dict[nom_clean]['pbr']
-            
+
             quantite = int(p.get('quantite', 1))
             p['prix_unitaire'] = prix_unitaire
             p['pbr'] = pbr
             p['prix_total'] = prix_unitaire * quantite
+            p['article_trouve'] = article_trouve
             
             # ⭐ Utiliser les noms déjà stockés
             p['patient_nom'] = p.get('patient_nom', 'Patient inconnu')
@@ -11588,12 +11597,8 @@ def prescription_details(id):
                 
                 if not found:
                     print(f"❌ Produit non trouvé: '{nom_recherche}'")
-                    return jsonify({
-                        'success': False,
-                        'message': f'Produit non trouvé: "{nom_recherche}"',
-                        'type': type_presc
-                    }), 404
-            
+                    match_info = "❌ Absent du catalogue de cette structure"
+
         else:  # acte
             prix_info = sheets_helper.get_prix_acte(structure_id, nom_recherche)
             
@@ -11618,12 +11623,8 @@ def prescription_details(id):
                 
                 if not found:
                     print(f"❌ Acte non trouvé: '{nom_recherche}'")
-                    return jsonify({
-                        'success': False,
-                        'message': f'Acte non trouvé: "{nom_recherche}"',
-                        'type': type_presc
-                    }), 404
-        
+                    match_info = "❌ Absent du catalogue de cette structure"
+
         quantite = int(p.get('quantite', 1))
         prix_total = prix_unitaire * quantite
         
@@ -11642,7 +11643,8 @@ def prescription_details(id):
                 'date_prescription': p.get('date_prescription'),
                 'prescripteur': p.get('prescripteur') or '',
                 'statut': p.get('statut') or 'EN_ATTENTE',
-                'match_info': match_info
+                'match_info': match_info,
+                'article_trouve': found
             }
         })
         
