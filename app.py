@@ -11303,13 +11303,25 @@ def api_receive_prescriptions():
         inserted_count = 0
         
         for p in prescriptions:
+            # ⭐ Éviter les doublons : si cette prescription (même source_id,
+            # même structure) a déjà été reçue, on ne la réinsère pas — sans
+            # ça, un rattrapage du scheduler (toutes les 5 min) qui retombe
+            # sur une prescription déjà envoyée créerait une 2e ligne
+            # identique dans prescriptions_recues.
+            deja_recue = db.execute_query("""
+                SELECT id FROM prescriptions_recues
+                WHERE source_id = %s AND structure_id = %s
+            """, (p.get('id'), structure_id))
+            if deja_recue:
+                continue
+
             # ⭐ Détecter le type de prescription
             type_presc = p.get('type_prescription') or 'medicament'
-            
+
             # ⭐ Récupérer le nom du patient depuis la prescription
             patient_nom = p.get('patient_nom') or ''
             patient_prenom = p.get('patient_prenom') or ''
-            
+
             # ⭐ Pour les actes, le nom est dans 'medicament' ou 'acte_nom'
             medicament = p.get('medicament') or p.get('acte_nom') or ''
             
