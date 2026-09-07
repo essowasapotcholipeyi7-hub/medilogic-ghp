@@ -8,6 +8,20 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
+        /* ⭐ FIX : #offlineBanner porte aussi la classe utilitaire Bootstrap
+           .d-flex (display:flex !important) pour sa mise en page interne.
+           Le navigateur cache normalement un élément [hidden] via une règle
+           UA "display:none" — mais celle-ci n'est PAS !important, donc le
+           !important de .d-flex gagnait toujours et la bannière restait
+           visible en permanence, quoi que fasse le JS (qui ne fait
+           qu'ajouter/retirer l'attribut hidden). D'où le bandeau "Mode
+           hors-ligne" affiché en continu même quand tout était en ligne.
+           Cette règle, plus spécifique (#id[hidden]) et elle aussi
+           !important, reprend la main quand hidden est présent. */
+        #offlineBanner[hidden] {
+            display: none !important;
+        }
+
         /* ============================================
            BASE - CONSERVÉE
            ============================================ */
