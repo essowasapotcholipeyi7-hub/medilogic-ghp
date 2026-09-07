@@ -1948,6 +1948,30 @@
 
 <script>
 // ============================================
+// FIX GLOBAL : modales Bootstrap ouvertes derrière la navbar
+// ============================================
+// ⭐ .main-content (le conteneur du bloc "content" de chaque page) a un
+// backdrop-filter (effet verre dépoli) ET overflow-y:auto (c'est son
+// propre conteneur de défilement). Un backdrop-filter sur un ancêtre crée
+// une nouvelle "containing block" pour tout descendant en position:fixed
+// (comme .transform le ferait) — une modale Bootstrap, normalement fixe
+// par rapport à la fenêtre, se retrouve donc positionnée par rapport à
+// .main-content à la place, ET défile avec son contenu au lieu de rester
+// à l'écran. Résultat concret : la modale s'ouvre "collée" à la position
+// de défilement courante de .main-content, avec son en-tête caché
+// au-dessus de la zone visible, sous la navbar sticky.
+// Fix : au moment où Bootstrap s'apprête à afficher une modale, on la
+// déplace pour qu'elle devienne un enfant direct de <body> — elle échappe
+// ainsi à la containing block de .main-content et redevient fixe par
+// rapport à la fenêtre, comme prévu. Un seul écouteur global : s'applique
+// à toutes les modales de l'application, sur toutes les pages.
+document.addEventListener('show.bs.modal', function(e) {
+    if (e.target && e.target.parentElement !== document.body) {
+        document.body.appendChild(e.target);
+    }
+});
+
+// ============================================
 // HORLOGE - CONSERVÉE
 // ============================================
 function updateHorloge() {
