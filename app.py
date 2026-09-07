@@ -11163,6 +11163,51 @@ def notify_consultation_app(patient_id, structure_id):
         print(f"❌ Erreur webhook: {e}")
         return False
 
+@app.route('/api/actes/disponibles', methods=['GET'])
+def api_actes_disponibles():
+    """
+    API token (comme /api/medicamentos) pour récupérer le catalogue
+    d'actes d'une structure — utilisée par gestion_patients pour la
+    recherche d'actes posés (onglet "Actes posés"), afin de matcher
+    contre le VRAI catalogue de la structure plutôt qu'une copie locale
+    qui pourrait diverger.
+
+    ⭐ Construit le nom de la feuille directement (struct_<id>_actes) au
+    lieu de passer par sheets_helper.set_structure()/structure_prefix
+    (état partagé entre requêtes concurrentes) — cette route n'a pas de
+    session (appel cross-app par token), donc pas question de dépendre
+    d'un état posé par une AUTRE requête en cours.
+    """
+    token = request.args.get('token')
+    if not token:
+        return jsonify({'error': 'Token manquant'}), 401
+
+    mapping = StructureMapping.query.filter_by(api_key=token, actif=True).first()
+    if not mapping:
+        return jsonify({'error': 'Token invalide'}), 401
+
+    try:
+        structure_id = mapping.source_structure_id
+        sheet_name = f"struct_{structure_id}_actes"
+        try:
+            worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+            actes = worksheet.get_all_records()
+        except Exception:
+            actes = sheets_helper.get_all_records('actes', use_prefix=False)
+
+        result = []
+        for a in actes:
+            nom = a.get('nom') or ''
+            if nom:
+                result.append({'nom': nom})
+        result.sort(key=lambda x: x['nom'])
+
+        return jsonify({'success': True, 'actes': result, 'total': len(result)})
+    except Exception as e:
+        print(f"❌ Erreur /api/actes/disponibles: {e}")
+        return jsonify({'success': False, 'actes': [], 'error': str(e)}), 500
+
+
 @app.route('/api/medicamentos', methods=['GET'])
 def api_medicamentos():
     """
@@ -11303,20 +11348,26 @@ def api_receive_prescriptions():
         inserted_count = 0
         
         for p in prescriptions:
-            # ⭐ Éviter les doublons : si cette prescription (même source_id,
-            # même structure) a déjà été reçue, on ne la réinsère pas — sans
-            # ça, un rattrapage du scheduler (toutes les 5 min) qui retombe
-            # sur une prescription déjà envoyée créerait une 2e ligne
-            # identique dans prescriptions_recues.
-            deja_recue = db.execute_query("""
-                SELECT id FROM prescriptions_recues
-                WHERE source_id = %s AND structure_id = %s
-            """, (p.get('id'), structure_id))
-            if deja_recue:
-                continue
-
             # ⭐ Détecter le type de prescription
             type_presc = p.get('type_prescription') or 'medicament'
+
+            # ⭐ Éviter les doublons : si cette prescription (même source_id,
+            # même structure, même type) a déjà été reçue, on ne la
+            # réinsère pas — sans ça, un rattrapage du scheduler (toutes
+            # les 5 min) qui retombe sur une prescription déjà envoyée
+            # créerait une 2e ligne identique dans prescriptions_recues.
+            # Le type est inclus dans la comparaison car gestion_patients a
+            # PLUSIEURS sources (Prescription, ActePose...) dont les ID sont
+            # des séquences indépendantes qui recommencent chacune à 1 — un
+            # acte posé #1 et une prescription #1 partagent donc le même
+            # source_id sans être la même chose (vécu en test : ça écrasait
+            # silencieusement l'un des deux avant ce fix).
+            deja_recue = db.execute_query("""
+                SELECT id FROM prescriptions_recues
+                WHERE source_id = %s AND structure_id = %s AND type_prescription = %s
+            """, (p.get('id'), structure_id, type_presc))
+            if deja_recue:
+                continue
 
             # ⭐ Récupérer le nom du patient depuis la prescription
             patient_nom = p.get('patient_nom') or ''
