@@ -16,21 +16,36 @@
         }
         .conteneur { max-width: 1100px; margin: 0 auto; }
 
+        /* ⭐ Bande d'en-tête pleine (fond bleu foncé) — tout le contenu de
+           l'en-tête (nom de la structure, adresse, titre du bordereau,
+           période...) vit à l'intérieur de cette bande, pas juste sous un
+           simple filet de couleur. -webkit-print-color-adjust/print-color-
+           adjust forcent l'impression du fond même quand l'utilisateur n'a
+           pas coché "Graphiques d'arrière-plan" dans la boîte de dialogue
+           d'impression du navigateur — sans ça, la bande ressortirait
+           blanche au papier. */
         .entete {
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
-            border-bottom: 3px solid #1a2a6c;
-            padding-bottom: 18px;
+            align-items: center;
+            background: #1a2a6c;
+            color: white;
+            padding: 18px 24px;
+            border-radius: 8px;
             margin-bottom: 20px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
         .entete .structure { display: flex; align-items: center; gap: 12px; }
-        .entete img { max-height: 55px; max-width: 110px; object-fit: contain; }
-        .entete h1 { font-size: 17px; color: #1a2a6c; }
-        .entete .sub { font-size: 11px; color: #6c7a89; margin-top: 3px; }
+        .entete img {
+            max-height: 55px; max-width: 110px; object-fit: contain;
+            background: white; padding: 5px; border-radius: 6px;
+        }
+        .entete h1 { font-size: 17px; color: white; }
+        .entete .sub { font-size: 11px; color: rgba(255,255,255,0.75); margin-top: 3px; }
         .entete .droite { text-align: right; }
-        .entete .droite h2 { font-size: 16px; color: #1a2a6c; }
-        .entete .droite .periode { font-size: 12px; color: #555; margin-top: 4px; }
+        .entete .droite h2 { font-size: 16px; color: white; }
+        .entete .droite .periode { font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 4px; }
 
         .kpis { display: flex; gap: 14px; margin-bottom: 22px; }
         .kpi {
@@ -44,6 +59,8 @@
         thead th {
             background: #1a2a6c; color: white; text-align: left;
             padding: 8px 10px; font-size: 11.5px; text-transform: uppercase;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
         tbody td { padding: 8px 10px; border-bottom: 1px solid #e8ecf1; vertical-align: top; }
         tbody tr:nth-child(even) { background: #f9fafc; }
@@ -68,7 +85,43 @@
             position: fixed; top: 16px; right: 130px; padding: 8px 16px;
             background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer;
         }
-        @media print { .btn-print, .btn-fermer { display: none; } body { padding: 15px; } }
+        /* ⭐ Sur le PAPIER, on limite la couleur à deux endroits seulement —
+           la bande de l'en-tête et la bande d'en-tête du tableau — pour ne
+           pas gaspiller d'encre couleur : le reste (KPI, zébrage des lignes,
+           totaux, encadré "arrêtée à la somme de", bloc société) repasse en
+           noir sur blanc. L'écran, lui, garde son rendu habituel : ces
+           règles ne s'appliquent qu'à l'impression. */
+        @media print {
+            .btn-print, .btn-fermer { display: none; }
+            body { padding: 15px; }
+
+            .kpi {
+                background: white !important;
+                border: 1px solid #333 !important;
+            }
+            .kpi .label { color: #333 !important; }
+            .kpi .valeur { color: #000 !important; }
+
+            tbody tr:nth-child(even) { background: white !important; }
+            tbody td { border-bottom: 1px solid #999 !important; }
+            .prestations { color: #000 !important; }
+
+            tfoot td {
+                border-top: 2px solid #000 !important;
+                background: white !important;
+                color: #000 !important;
+            }
+
+            .bloc-societe {
+                background: white !important;
+                border: 1px solid #333 !important;
+            }
+            .bloc-arretee {
+                background: white !important;
+                border: 1.5px solid #000 !important;
+            }
+            .bloc-arretee .montant-lettres { color: #000 !important; }
+        }
     </style>
 </head>
 <body>
@@ -97,7 +150,7 @@
         </div>
 
         {% if nom_societe %}
-        <div style="background:#eef1fa; border:1px solid #dde3ea; border-radius:8px; padding:10px 14px; margin-bottom:18px; font-size:12.5px;">
+        <div class="bloc-societe" style="background:#eef1fa; border:1px solid #dde3ea; border-radius:8px; padding:10px 14px; margin-bottom:18px; font-size:12.5px;">
             <strong>Société souscriptrice :</strong> {{ nom_societe }} — contrat groupe {{ nom_compagnie }}
         </div>
         {% endif %}
@@ -160,9 +213,9 @@
             </tfoot>
         </table>
 
-        <div style="margin-top:24px; padding:14px 18px; border:1.5px solid #1a2a6c; border-radius:8px; background:#f7f9fc;">
+        <div class="bloc-arretee" style="margin-top:24px; padding:14px 18px; border:1.5px solid #1a2a6c; border-radius:8px; background:#f7f9fc;">
             <strong>Arrêtée la présente facture à la somme de :</strong><br>
-            <span style="font-size:14px; font-weight:700; color:#1a2a6c; text-transform:uppercase;">{{ montant_lettres }}</span>
+            <span class="montant-lettres" style="font-size:14px; font-weight:700; color:#1a2a6c; text-transform:uppercase;">{{ montant_lettres }}</span>
             <div style="font-size:11px; color:#6c7a89; margin-top:6px;">
                 (soit {{ '{:,.0f}'.format(total_part_assurance).replace(',', ' ') }} F CFA en chiffres)
                 — à adresser à {{ nom_compagnie }}{% if nom_societe %} pour le compte de la société {{ nom_societe }}{% endif %}.
