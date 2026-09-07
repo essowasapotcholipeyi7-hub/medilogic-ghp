@@ -132,6 +132,12 @@
                 </a>
                 {% endif %}
 
+                <!-- ===== GUIDE D'UTILISATION (visible à tous les utilisateurs) ===== -->
+                <a class="nav-link {% if request.endpoint == 'guide_utilisation' %}active{% endif %}" href="{{ url_for('guide_utilisation') }}">
+                    <i class="fas fa-book-open"></i>
+                    <span class="menu-text">Guide d'utilisation</span>
+                </a>
+
 </div>
 
 <!-- ============================================================

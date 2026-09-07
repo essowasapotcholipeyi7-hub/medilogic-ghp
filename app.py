@@ -405,6 +405,15 @@ def api_sync_forcer():
         return jsonify({'success': ok, 'message': 'Mirroir local rafraîchi depuis Neon (+ Google Sheets)' if ok else 'Echec du rafraîchissement'})
 
 
+@app.route('/guide')
+@login_required
+def guide_utilisation():
+    """Guide d'utilisation de l'application, à destination des utilisateurs
+    (pas un manuel technique) — accessible à tout le monde, pas seulement
+    aux admins."""
+    return render_template('guide.html')
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if 'user_id' in session:
