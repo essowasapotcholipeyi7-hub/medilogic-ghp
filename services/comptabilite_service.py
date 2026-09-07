@@ -820,77 +820,11 @@ def generer_ecriture_dotation_amortissement(immo, montant, annee, user_nom='SYST
 
 
 # ============================================================
-# TAFIRE SIMPLIFIÉ (tableau des flux de trésorerie)
-# ============================================================
-# ⭐ NOTE HONNÊTE : ce n'est PAS le TAFIRE officiel OHADA au format exact
-# (qui a ~40 lignes normées ZA/ZB/ZC... et suppose un suivi complet des
-# retraitements de la CAFG). C'est un flux de trésorerie à 3 masses
-# (Exploitation / Investissement / Financement), construit à partir des
-# mouvements réels des comptes de trésorerie (521/571), catégorisés par le
-# type d'opération qui a généré chaque écriture — déjà très utile pour
-# suivre d'où vient et où part l'argent, mais à ne pas présenter comme LE
-# TAFIRE réglementaire sans revue par un expert-comptable.
-
-_CATEGORIE_FLUX_PAR_SOURCE = {
-    'vente': 'exploitation', 'paiement_facture': 'exploitation', 'paiement_assurance': 'exploitation',
-    'annulation_vente': 'exploitation', 'annulation_facture': 'exploitation', 'depense': 'exploitation',
-    'recette': 'exploitation', 'paie': 'exploitation',
-    'provision_creance': 'exploitation', 'reprise_provision': 'exploitation', 'perte_creance': 'exploitation',
-    'immobilisation_acquisition': 'investissement', 'immobilisation_cession': 'investissement',
-    'dotation_amortissement': None,  # n'affecte pas la trésorerie (écriture non-cash)
-    'capital': 'financement', 'emprunt': 'financement',
-}
-
-
-def get_tafire(structure_id, annee):
-    comptes_tresorerie = CompteComptable.query.filter(
-        CompteComptable.structure_id == structure_id,
-        CompteComptable.numero.in_(['571', '521'])
-    ).all()
-    compte_ids = [c.id for c in comptes_tresorerie]
-
-    date_debut = date(annee, 1, 1)
-    date_fin = date(annee, 12, 31)
-
-    tresorerie_debut = sum(_to_float(c.get_solde(date_fin=date_debut - timedelta(days=1)))
-                            for c in comptes_tresorerie)
-    tresorerie_fin = sum(_to_float(c.get_solde(date_fin=date_fin)) for c in comptes_tresorerie)
-
-    lignes = LigneEcriture.query.join(EcritureComptable).filter(
-        EcritureComptable.structure_id == structure_id,
-        EcritureComptable.statut == 'valide',
-        EcritureComptable.date_ecriture >= date_debut,
-        EcritureComptable.date_ecriture <= date_fin,
-        LigneEcriture.compte_id.in_(compte_ids),
-    ).all()
-
-    flux = {'exploitation': 0.0, 'investissement': 0.0, 'financement': 0.0, 'non_categorise': 0.0}
-    for l in lignes:
-        net = _to_float(l.debit) - _to_float(l.credit)  # entrée positive, sortie négative
-        categorie = _CATEGORIE_FLUX_PAR_SOURCE.get(l.ecriture.source_type)
-        if categorie is None and l.ecriture.source_type is not None:
-            continue  # ex: dotation aux amortissements, non-cash
-        cle = categorie or 'non_categorise'
-        flux[cle] = flux.get(cle, 0) + net
-
-    variation = flux['exploitation'] + flux['investissement'] + flux['financement'] + flux['non_categorise']
-
-    return {
-        'annee': annee,
-        'tresorerie_debut': round(tresorerie_debut, 2),
-        'flux_exploitation': round(flux['exploitation'], 2),
-        'flux_investissement': round(flux['investissement'], 2),
-        'flux_financement': round(flux['financement'], 2),
-        'flux_non_categorise': round(flux['non_categorise'], 2),
-        'variation_tresorerie': round(variation, 2),
-        'tresorerie_fin': round(tresorerie_fin, 2),
-        'coherent': abs((tresorerie_debut + variation) - tresorerie_fin) < 1,
-    }
-
-
-# ============================================================
 # LES DEUX CAISSES (tableau de bord comptabilité)
 # ============================================================
+# ⭐ Le TAFIRE officiel OHADA (méthode CAFG + variation FR/BFR) vit
+# maintenant dans routes/comptabilite.py (get_tafire), à côté de
+# get_bilan()/get_compte_resultat() dont il dépend directement.
 
 def get_soldes_caisses(structure_id, date_debut=None, date_fin=None):
     """Retourne les deux indicateurs demandés :

@@ -1085,6 +1085,20 @@ def get_compte_resultat(structure_id, date_debut, date_fin):
                 WHERE e.structure_id = :structure_id
                 AND e.statut = 'valide'
                 AND c.type IN ('charge', 'produit')
+                -- ⭐ Exclut l'écriture ENTIÈRE dès qu'UNE de ses lignes touche
+                -- un compte sans classe (ancien compte ad-hoc pré-SYSCOHADA,
+                -- ex: "706"/"909"/"611"/"616" créés avant la migration,
+                -- encore actifs et référencés par de vieilles écritures de
+                -- test). Un filtre ligne par ligne laissait passer la charge
+                -- (compte à classe correcte) sans sa contrepartie de
+                -- trésorerie (souvent l'ancien "211"/"212", sans classe) —
+                -- gonflant charges/produits sans cohérence de trésorerie.
+                -- Trouvé en fiabilisant le TAFIRE (voir get_tafire ci-après).
+                AND NOT EXISTS (
+                    SELECT 1 FROM lignes_ecritures l2
+                    JOIN comptes_comptables c2 ON c2.id = l2.compte_id
+                    WHERE l2.ecriture_id = e.id AND (c2.classe IS NULL OR c2.classe = '')
+                )
                 AND (:date_debut IS NULL OR e.date_ecriture >= :date_debut)
                 AND (:date_fin IS NULL OR e.date_ecriture <= :date_fin)
             )
@@ -1167,6 +1181,14 @@ def get_bilan(structure_id, date_fin):
                 WHERE e.structure_id = :structure_id
                 AND e.statut = 'valide'
                 AND c.type IN ('actif', 'passif')
+                -- ⭐ voir même remarque que get_compte_resultat() ci-dessus :
+                -- exclut l'écriture entière dès qu'une de ses lignes touche
+                -- un compte ad-hoc pré-SYSCOHADA sans classe.
+                AND NOT EXISTS (
+                    SELECT 1 FROM lignes_ecritures l2
+                    JOIN comptes_comptables c2 ON c2.id = l2.compte_id
+                    WHERE l2.ecriture_id = e.id AND (c2.classe IS NULL OR c2.classe = '')
+                )
                 AND (:date_fin IS NULL OR e.date_ecriture <= :date_fin)
             )
             SELECT
@@ -1241,6 +1263,279 @@ def get_bilan(structure_id, date_fin):
     except Exception as e:
         print(f"❌ Erreur get_bilan: {e}")
         return {'actifs': [], 'passifs': [], 'capitaux_propres': [], 'total_actif': 0, 'total_passif': 0, 'total_capitaux': 0, 'total_passif_capitaux': 0, 'est_equilibre': True}
+
+
+# ============================================================
+# TAFIRE OFFICIEL OHADA (méthode indirecte : CAFG + variation FR/BFR)
+# ============================================================
+# Contrairement à un simple relevé des flux de trésorerie par nature
+# d'opération, le TAFIRE SYSCOHADA part du résultat comptable pour calculer
+# la CAFG (Capacité d'Autofinancement Globale), puis compare le bilan de
+# fin d'exercice à celui de fin d'exercice précédent pour dériver la
+# variation du Fonds de Roulement (ressources et emplois durables) et du
+# Besoin en Fonds de Roulement (stocks, créances, dettes circulantes).
+# Codes de lignes conformes à la nomenclature officielle (FA à FN).
+#
+# La classification par grande masse (immobilisations, stocks, créances,
+# dettes circulantes, capitaux propres, dotations, charges/produits
+# financiers) s'appuie sur les colonnes `classe` et `type` du plan
+# comptable — donc valable automatiquement pour tout nouveau compte
+# ajouté au bon endroit, sans liste de numéros à maintenir à la main.
+
+def _soldes_comptes_a_date(structure_id, date_fin, types=None, classes=None):
+    """Solde (débit - crédit) de chaque compte, cumulé depuis toujours
+    jusqu'à date_fin incluse (photo de bilan à un instant donné)."""
+    from sqlalchemy import text
+    filtres_type = "AND c.type = ANY(:types)" if types else ""
+    filtres_classe = "AND c.classe = ANY(:classes)" if classes else ""
+    params = {'structure_id': structure_id, 'date_fin': date_fin.strftime('%Y-%m-%d')}
+    if types:
+        params['types'] = list(types)
+    if classes:
+        params['classes'] = list(classes)
+    rows = db.session.execute(text(f"""
+        SELECT c.numero, c.nom, c.type, c.classe,
+               COALESCE(SUM(l.debit), 0) AS debit, COALESCE(SUM(l.credit), 0) AS credit
+        FROM comptes_comptables c
+        JOIN lignes_ecritures l ON l.compte_id = c.id
+        JOIN ecritures_comptables e ON e.id = l.ecriture_id
+        WHERE c.structure_id = :structure_id
+        AND e.structure_id = :structure_id
+        AND e.statut = 'valide'
+        AND e.date_ecriture <= :date_fin
+        -- ⭐ exclut l'écriture entière si une de ses lignes touche un compte
+        -- ad-hoc pré-SYSCOHADA sans classe (voir get_compte_resultat()).
+        AND NOT EXISTS (
+            SELECT 1 FROM lignes_ecritures l2
+            JOIN comptes_comptables c2 ON c2.id = l2.compte_id
+            WHERE l2.ecriture_id = e.id AND (c2.classe IS NULL OR c2.classe = '')
+        )
+        {filtres_type} {filtres_classe}
+        GROUP BY c.numero, c.nom, c.type, c.classe
+    """), params).fetchall()
+    return {r.numero: {'nom': r.nom, 'solde': float(r.debit) - float(r.credit)} for r in rows}
+
+
+def _mouvements_charges_produits(structure_id, date_debut, date_fin):
+    """Charges/produits de l'exercice (pas cumulés depuis toujours,
+    seulement la période) — pour la cascade des soldes intermédiaires."""
+    from sqlalchemy import text
+    rows = db.session.execute(text("""
+        SELECT c.numero, c.nom, c.type,
+               COALESCE(SUM(l.debit), 0) AS debit, COALESCE(SUM(l.credit), 0) AS credit
+        FROM comptes_comptables c
+        JOIN lignes_ecritures l ON l.compte_id = c.id
+        JOIN ecritures_comptables e ON e.id = l.ecriture_id
+        WHERE c.structure_id = :structure_id
+        AND e.structure_id = :structure_id
+        AND e.statut = 'valide'
+        AND c.type IN ('charge', 'produit')
+        -- ⭐ comme get_compte_resultat()/get_bilan() : exclut l'écriture
+        -- entière si une de ses lignes touche un compte ad-hoc pré-SYSCOHADA
+        -- sans classe renseignée.
+        AND NOT EXISTS (
+            SELECT 1 FROM lignes_ecritures l2
+            JOIN comptes_comptables c2 ON c2.id = l2.compte_id
+            WHERE l2.ecriture_id = e.id AND (c2.classe IS NULL OR c2.classe = '')
+        )
+        AND e.date_ecriture >= :date_debut AND e.date_ecriture <= :date_fin
+        GROUP BY c.numero, c.nom, c.type
+    """), {
+        'structure_id': structure_id,
+        'date_debut': date_debut.strftime('%Y-%m-%d'),
+        'date_fin': date_fin.strftime('%Y-%m-%d'),
+    }).fetchall()
+    charges = {r.numero: float(r.debit) - float(r.credit) for r in rows if r.type == 'charge'}
+    produits = {r.numero: float(r.credit) - float(r.debit) for r in rows if r.type == 'produit'}
+    return charges, produits
+
+
+# Comptes calculés (non décaissables/encaissables) à isoler du résultat
+# d'exploitation/financier pour remonter à la CAFG.
+_COMPTES_DOTATIONS = ('681', '6591')       # charges calculées
+_COMPTES_REPRISES = ('7591',)              # produits calculés
+_COMPTES_CHARGES_FINANCIERES = ('671',)
+_COMPTES_PRODUITS_FINANCIERS = ('771',)
+
+
+def _sig_et_cafg(structure_id, date_debut, date_fin):
+    """Cascade des Soldes Intermédiaires de Gestion jusqu'à la CAFG.
+    Pas de comptes HAO (cessions d'immobilisations, etc.) ni de
+    participation des travailleurs/impôt sur les sociétés dans le plan
+    comptable actuel de la structure -> traités à 0, pas ignorés en
+    silence (lignes gardées dans le résultat, prêtes si ces comptes
+    apparaissent un jour)."""
+    charges, produits = _mouvements_charges_produits(structure_id, date_debut, date_fin)
+
+    dotations = sum(v for n, v in charges.items() if n in _COMPTES_DOTATIONS)
+    reprises = sum(v for n, v in produits.items() if n in _COMPTES_REPRISES)
+    charges_financieres = sum(v for n, v in charges.items() if n in _COMPTES_CHARGES_FINANCIERES)
+    produits_financiers = sum(v for n, v in produits.items() if n in _COMPTES_PRODUITS_FINANCIERS)
+
+    charges_exploitation = sum(v for n, v in charges.items()
+                                if n not in _COMPTES_DOTATIONS and n not in _COMPTES_CHARGES_FINANCIERES)
+    produits_exploitation = sum(v for n, v in produits.items()
+                                 if n not in _COMPTES_REPRISES and n not in _COMPTES_PRODUITS_FINANCIERS)
+
+    ebe = produits_exploitation - charges_exploitation
+    resultat_exploitation = ebe - dotations + reprises
+    resultat_financier = produits_financiers - charges_financieres
+    resultat_hao = 0.0            # pas de comptes 82x/83x/84x dans le plan actuel
+    participation_travailleurs = 0.0
+    impot_resultat = 0.0
+    resultat_net = resultat_exploitation + resultat_financier + resultat_hao - participation_travailleurs - impot_resultat
+
+    cafg = resultat_net + dotations - reprises
+
+    return {
+        'produits_exploitation': round(produits_exploitation, 2),
+        'charges_exploitation': round(charges_exploitation, 2),
+        'ebe': round(ebe, 2),
+        'dotations_amortissements_provisions': round(dotations, 2),
+        'reprises_amortissements_provisions': round(reprises, 2),
+        'resultat_exploitation': round(resultat_exploitation, 2),
+        'produits_financiers': round(produits_financiers, 2),
+        'charges_financieres': round(charges_financieres, 2),
+        'resultat_financier': round(resultat_financier, 2),
+        'resultat_hao': round(resultat_hao, 2),
+        'participation_travailleurs': round(participation_travailleurs, 2),
+        'impot_resultat': round(impot_resultat, 2),
+        'resultat_net': round(resultat_net, 2),
+        'cafg': round(cafg, 2),
+    }
+
+
+def get_tafire(structure_id, annee):
+    """TAFIRE officiel OHADA (méthode indirecte), sur l'année civile
+    `annee`. N-1 = tout ce qui a été comptabilisé avant le 1er janvier de
+    `annee` (peut être incomplet/nul si le système comptable vient de
+    démarrer — signalé via `premier_exercice`, pas caché)."""
+    date_debut_n = date(annee, 1, 1)
+    date_fin_n = date(annee, 12, 31)
+    date_fin_n1 = date_debut_n - timedelta(days=1)
+
+    # --- 1) CAFG (cascade SIG sur l'année N) ---
+    sig = _sig_et_cafg(structure_id, date_debut_n, date_fin_n)
+    cafg = sig['cafg']
+
+    # --- 2) Bilans de fin N et fin N-1, par grande masse ---
+    soldes_n = _soldes_comptes_a_date(structure_id, date_fin_n)
+    soldes_n1 = _soldes_comptes_a_date(structure_id, date_fin_n1)
+    premier_exercice = len(soldes_n1) == 0
+
+    def masse(soldes, predicat):
+        return sum(v['solde'] for numero, v in soldes.items() if predicat(numero))
+
+    # Comptes réellement présents dans le plan de CETTE structure, pour
+    # savoir à quelle classe/type appartient chaque numéro rencontré.
+    comptes_meta = {c.numero: c for c in CompteComptable.query.filter_by(structure_id=structure_id).all()}
+
+    def est(numero, classe=None, type_=None, prefixe_exclu=None):
+        c = comptes_meta.get(numero)
+        if not c:
+            return False
+        if classe and c.classe != classe:
+            return False
+        if type_ and c.type != type_:
+            return False
+        if prefixe_exclu and numero.startswith(prefixe_exclu):
+            return False
+        return True
+
+    immobilisations_brutes_n = masse(soldes_n, lambda n: est(n, classe='2') and not n.startswith('28'))
+    immobilisations_brutes_n1 = masse(soldes_n1, lambda n: est(n, classe='2') and not n.startswith('28'))
+    capitaux_propres_n = masse(soldes_n, lambda n: est(n, classe='1'))
+    capitaux_propres_n1 = masse(soldes_n1, lambda n: est(n, classe='1'))
+    # Capitaux propres = comptes de passif (solde créditeur -> négatif en
+    # debit-credit) : on les remet en valeur positive pour lire "combien
+    # de ressources propres", comme au bilan.
+    capitaux_propres_n = -capitaux_propres_n
+    capitaux_propres_n1 = -capitaux_propres_n1
+
+    stocks_n = masse(soldes_n, lambda n: est(n, classe='3'))
+    stocks_n1 = masse(soldes_n1, lambda n: est(n, classe='3'))
+    creances_n = masse(soldes_n, lambda n: est(n, classe='4', type_='actif'))
+    creances_n1 = masse(soldes_n1, lambda n: est(n, classe='4', type_='actif'))
+    dettes_circulantes_n = -masse(soldes_n, lambda n: est(n, classe='4', type_='passif'))
+    dettes_circulantes_n1 = -masse(soldes_n1, lambda n: est(n, classe='4', type_='passif'))
+    tresorerie_n = masse(soldes_n, lambda n: est(n, classe='5'))
+    tresorerie_n1 = masse(soldes_n1, lambda n: est(n, classe='5'))
+
+    # --- 3) Tableau emplois-ressources (variation du Fonds de Roulement) ---
+    # Comptes 101 (capital)/131 (report à nouveau) uniquement (classe '1'
+    # sans 120/129, jamais mouvementés hors clôture formelle) : leur
+    # variation ne reflète QUE des apports/retraits réels de capital, pas
+    # le résultat de l'exercice (qui n'y transite jamais dans ce système
+    # tant que l'exercice n'est pas formellement clôturé) — donc rien à
+    # neutraliser ici, contrairement à un bilan où le résultat est déjà
+    # intégré aux capitaux propres.
+    variation_capital = capitaux_propres_n - capitaux_propres_n1
+
+    fa_autofinancement = cafg  # pas de distribution de dividendes suivie -> autofinancement = CAFG
+    fb_cessions_immobilisations = 0.0   # pas de comptes HAO de cession dans le plan actuel
+    fd_augmentation_capital = max(0.0, variation_capital)
+    ff_nouveaux_emprunts = 0.0           # pas de comptes de dettes financières (classe 16) dans le plan actuel
+    ressources_durables = fa_autofinancement + fb_cessions_immobilisations + fd_augmentation_capital + ff_nouveaux_emprunts
+
+    fi_acquisitions_immobilisations = max(0.0, immobilisations_brutes_n - immobilisations_brutes_n1)
+    fk_remboursement_capitaux = max(0.0, -variation_capital)
+    fl_remboursement_emprunts = 0.0
+    emplois_durables = fi_acquisitions_immobilisations + fk_remboursement_capitaux + fl_remboursement_emprunts
+
+    variation_fr = ressources_durables - emplois_durables
+
+    # --- 4) Variation du Besoin en Fonds de Roulement ---
+    variation_stocks = stocks_n - stocks_n1
+    variation_creances = creances_n - creances_n1
+    variation_dettes_circulantes = dettes_circulantes_n - dettes_circulantes_n1
+    variation_bfr = variation_stocks + variation_creances - variation_dettes_circulantes
+
+    # --- 5) Variation de trésorerie (dérivée) vs réelle (constatée) ---
+    variation_tresorerie_derivee = variation_fr - variation_bfr
+    variation_tresorerie_reelle = tresorerie_n - tresorerie_n1
+    ecart_non_affecte = round(variation_tresorerie_reelle - variation_tresorerie_derivee, 2)
+
+    return {
+        'annee': annee,
+        'premier_exercice': premier_exercice,
+        'sig': sig,
+        'bilan_n1': {
+            'immobilisations_brutes': round(immobilisations_brutes_n1, 2),
+            'capitaux_propres': round(capitaux_propres_n1, 2),
+            'stocks': round(stocks_n1, 2), 'creances': round(creances_n1, 2),
+            'dettes_circulantes': round(dettes_circulantes_n1, 2), 'tresorerie': round(tresorerie_n1, 2),
+        },
+        'bilan_n': {
+            'immobilisations_brutes': round(immobilisations_brutes_n, 2),
+            'capitaux_propres': round(capitaux_propres_n, 2),
+            'stocks': round(stocks_n, 2), 'creances': round(creances_n, 2),
+            'dettes_circulantes': round(dettes_circulantes_n, 2), 'tresorerie': round(tresorerie_n, 2),
+        },
+        'emplois_ressources': {
+            'fa_autofinancement': round(fa_autofinancement, 2),
+            'fb_cessions_immobilisations': round(fb_cessions_immobilisations, 2),
+            'fd_augmentation_capital': round(fd_augmentation_capital, 2),
+            'ff_nouveaux_emprunts': round(ff_nouveaux_emprunts, 2),
+            'ressources_durables': round(ressources_durables, 2),
+            'fi_acquisitions_immobilisations': round(fi_acquisitions_immobilisations, 2),
+            'fk_remboursement_capitaux': round(fk_remboursement_capitaux, 2),
+            'fl_remboursement_emprunts': round(fl_remboursement_emprunts, 2),
+            'emplois_durables': round(emplois_durables, 2),
+            'variation_fr': round(variation_fr, 2),
+        },
+        'bfr': {
+            'variation_stocks': round(variation_stocks, 2),
+            'variation_creances': round(variation_creances, 2),
+            'variation_dettes_circulantes': round(variation_dettes_circulantes, 2),
+            'variation_bfr': round(variation_bfr, 2),
+        },
+        'tresorerie_debut': round(tresorerie_n1, 2),
+        'tresorerie_fin': round(tresorerie_n, 2),
+        'variation_tresorerie': round(variation_tresorerie_reelle, 2),
+        'variation_tresorerie_derivee': round(variation_tresorerie_derivee, 2),
+        'ecart_non_affecte': ecart_non_affecte,
+        'coherent': abs(ecart_non_affecte) < 1,
+    }
 
 
 # ============================================================
@@ -2350,5 +2645,4 @@ def api_generer_dotations():
 def api_tafire():
     structure_id = session.get('structure_id')
     annee = request.args.get('annee', datetime.now().year, type=int)
-    from services.comptabilite_service import get_tafire
     return jsonify(get_tafire(structure_id, annee))
