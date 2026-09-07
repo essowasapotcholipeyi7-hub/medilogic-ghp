@@ -364,6 +364,7 @@ let patientTaux = 0;
 let patientName = '';
 let patientAssurance = '';
 let patientAssurance2 = '';
+let patientSocieteAssurance2 = '';
 let patientTaux2 = 0;
 let patientTaux2Original = 0;
 let tauxTempModifie = false;
@@ -426,7 +427,8 @@ function checkSelectedPatient() {
     let taux = sessionStorage.getItem('selectedPatientTaux');
     patientAssurance2 = sessionStorage.getItem('selectedPatientAssurance2') || '';
     patientTaux2 = parseFloat(sessionStorage.getItem('selectedPatientTaux2')) || 0;
-    
+    patientSocieteAssurance2 = sessionStorage.getItem('selectedPatientSocieteAssurance2') || '';
+
     if (!patientId || patientId === 'null' || patientId === 'undefined') {
         patientId = localStorage.getItem('selectedPatientId');
         patientName = localStorage.getItem('selectedPatientName');
@@ -434,6 +436,7 @@ function checkSelectedPatient() {
         taux = localStorage.getItem('selectedPatientTaux');
         patientAssurance2 = localStorage.getItem('selectedPatientAssurance2') || '';
         patientTaux2 = parseFloat(localStorage.getItem('selectedPatientTaux2')) || 0;
+        patientSocieteAssurance2 = localStorage.getItem('selectedPatientSocieteAssurance2') || '';
     }
     
     if (patientId && patientId !== 'null' && patientId !== 'undefined' && patientId !== '') {
@@ -457,7 +460,9 @@ function checkSelectedPatient() {
         
         if (assurance2Display) {
             if (patientAssurance2 && patientAssurance2 !== '' && patientAssurance2 !== 'Aucune' && patientTaux2 > 0) {
-                assurance2Display.textContent = patientAssurance2;
+                assurance2Display.textContent = patientSocieteAssurance2
+                    ? `${patientAssurance2} (${patientSocieteAssurance2})`
+                    : patientAssurance2;
                 if (taux2Display) taux2Display.textContent = patientTaux2 + '%';
                 if (cacBadge) cacBadge.style.display = 'inline-block';
             } else {
@@ -1875,6 +1880,7 @@ function finaliserVente() {
         taux_assurance: parseFloat(tauxPrincipal),
         assurance2_nom: assurance2Active ? (patientAssurance2 || '') : '',
         taux_assurance2: assurance2Active ? parseFloat(tauxComplementaire || 0) : 0,
+        societe_assurance2: assurance2Active ? (patientSocieteAssurance2 || '') : '',
         assurance2_active: assurance2Active,
         taux_temp_modifie: tauxTempModifie,
         taux_original: patientTaux2Original || 0,

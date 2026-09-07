@@ -120,7 +120,7 @@
                 </thead>
                 <tbody id="patientsList">
                     {% for patient in patients %}
-                    <tr class="patient-row" data-id="{{ patient.ID }}">
+                    <tr class="patient-row" data-id="{{ patient.ID }}" data-societe="{{ patient.societe_assurance2 or '' }}">
                         <td style="vertical-align: middle; text-align: center;">{{ patient.ID }}</td>
                         <td style="vertical-align: middle;">
                             <strong>{{ patient.nom }} {{ patient.prenom }}</strong>
@@ -142,6 +142,9 @@
                         <td style="vertical-align: middle; white-space: nowrap;">
                             {% if patient.assurance2_nom %}
                                 <span class="badge bg-success">{{ patient.assurance2_nom }}</span>
+                                {% if patient.societe_assurance2 %}
+                                <br><small class="text-muted">{{ patient.societe_assurance2 }}</small>
+                                {% endif %}
                             {% else %}
                                 <span class="text-muted">-</span>
                             {% endif %}
@@ -150,7 +153,7 @@
                         <td style="vertical-align: middle; text-align: center;">
                             <div class="d-flex flex-wrap gap-1 justify-content-center align-items-center">
                                 <button class="btn btn-sm btn-outline-primary px-2"
-                                        onclick='selectPatient({{ patient.ID }}, "{{ patient.nom }} {{ patient.prenom }}", "{{ patient.type_assurance }}", {{ patient.taux_prise_charge or 0 }}, "{{ patient.assurance2_nom or '' }}", {{ patient.taux_assurance2 or 0 }})'
+                                        onclick='selectPatient({{ patient.ID }}, "{{ patient.nom }} {{ patient.prenom }}", "{{ patient.type_assurance }}", {{ patient.taux_prise_charge or 0 }}, "{{ patient.assurance2_nom or '' }}", {{ patient.taux_assurance2 or 0 }}, "{{ patient.societe_assurance2 or '' }}")'
                                         title="Sélectionner ce patient">
                                     <i class="fas fa-check me-1"></i> Sélectionner
                                 </button>
@@ -379,10 +382,20 @@
                                     <input type="text" class="form-control" id="autre_assurance2" placeholder="Ex: MUTUELLE, CNPS...">
                                 </div>
                             </div>
+                            <div class="row" id="societe_assurance2_div" style="display:none;">
+                                <div class="col-md-12 mb-2">
+                                    <label class="form-label">Société souscriptrice <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="societe_assurance2"
+                                           list="societesAssuranceList" placeholder="Ex: SOTOCO, TOGOCEL..."
+                                           autocomplete="off">
+                                    <datalist id="societesAssuranceList"></datalist>
+                                    <small class="text-muted">Société ayant souscrit cette assurance complémentaire pour le patient. Tapez le nom une première fois : il sera ensuite proposé au choix.</small>
+                                </div>
+                            </div>
                             <div class="row">
                                 <div class="col-md-12">
                                     <small class="text-muted">
-                                        <i class="fas fa-info-circle"></i> 
+                                        <i class="fas fa-info-circle"></i>
                                         L'assurance complémentaire intervient après l'assurance principale sur le reste à charge.
                                     </small>
                                 </div>
@@ -555,10 +568,20 @@
                                     <input type="text" class="form-control" id="editAutreAssurance2" placeholder="Ex: MUTUELLE, CNPS...">
                                 </div>
                             </div>
+                            <div class="row" id="editSocieteAssurance2Div" style="display:none;">
+                                <div class="col-md-12 mb-2">
+                                    <label class="form-label">Société souscriptrice <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="editSocieteAssurance2"
+                                           list="editSocietesAssuranceList" placeholder="Ex: SOTOCO, TOGOCEL..."
+                                           autocomplete="off">
+                                    <datalist id="editSocietesAssuranceList"></datalist>
+                                    <small class="text-muted">Société ayant souscrit cette assurance complémentaire pour le patient. Tapez le nom une première fois : il sera ensuite proposé au choix.</small>
+                                </div>
+                            </div>
                             <div class="row">
                                 <div class="col-md-12">
                                     <small class="text-muted">
-                                        <i class="fas fa-info-circle"></i> 
+                                        <i class="fas fa-info-circle"></i>
                                         L'assurance complémentaire intervient après l'assurance principale sur le reste à charge.
                                     </small>
                                 </div>
@@ -782,7 +805,7 @@ function exporterPDF() {
         const telephone = cells[2]?.innerText || '-';
         const assurance = cells[3]?.innerText || '-';
         const taux = cells[4]?.innerText || '0%';
-        const assurance2 = cells[5]?.innerText || '-';
+        const assurance2 = (cells[5]?.innerText || '-').split('\n')[0].trim();
         const taux2 = cells[6]?.innerText || '0%';
         
         tableRows += `
@@ -940,13 +963,15 @@ function exporterPDF() {
 // EXPORT EXCEL (CSV)
 // ============================================
 function exportToCSV() {
-    let csvContent = "ID,Nom complet,Téléphone,Assurance,Taux,Assurance2,Taux2\n";
+    let csvContent = "ID,Nom complet,Téléphone,Assurance,Taux,Assurance2,Taux2,Société\n";
     const patients = currentFiltered.length > 0 ? currentFiltered : allPatients;
-    
+
     patients.forEach(p => {
         const cells = p.element.cells;
         const nomComplet = cells[1]?.innerText?.replace(/<br>.*/, '').trim() || '-';
-        csvContent += `"${cells[0]?.innerText || '-'}","${nomComplet}","${cells[2]?.innerText || '-'}","${cells[3]?.innerText || '-'}","${cells[4]?.innerText || '0%'}","${cells[5]?.innerText || '-'}","${cells[6]?.innerText || '0%'}"\n`;
+        const assurance2 = (cells[5]?.innerText || '-').split('\n')[0].trim();
+        const societe = p.element.dataset.societe || '';
+        csvContent += `"${cells[0]?.innerText || '-'}","${nomComplet}","${cells[2]?.innerText || '-'}","${cells[3]?.innerText || '-'}","${cells[4]?.innerText || '0%'}","${assurance2}","${cells[6]?.innerText || '0%'}","${societe}"\n`;
     });
     
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -1129,8 +1154,9 @@ function voirDetails(id) {
                 age: '-',
                 type_assurance: cells[3]?.innerText || '-',
                 taux_prise_charge: parseInt(cells[4]?.innerText) || 0,
-                assurance2_nom: cells[5]?.innerText || '-',
+                assurance2_nom: (cells[5]?.innerText || '-').split('\n')[0].trim(),
                 taux_assurance2: parseInt(cells[6]?.innerText) || 0,
+                societe_assurance2: row.dataset.societe || '-',
                 personne_a_prevenir_nom: '-',
                 personne_a_prevenir_telephone: '-',
                 personne_a_prevenir_relation: '-',
@@ -1174,6 +1200,7 @@ function afficherDetailsPatient(patient) {
     const patientTaux = patient.taux_prise_charge || 0;
     const patientAssurance2 = patient.assurance2_nom || '-';
     const patientTaux2 = patient.taux_assurance2 || 0;
+    const patientSocieteAssurance2 = patient.societe_assurance2 || '-';
     const patientPersonnePrevenirNom = patient.personne_a_prevenir_nom || '-';
     const patientPersonnePrevenirTelephone = patient.personne_a_prevenir_telephone || '-';
     const patientPersonnePrevenirRelation = patient.personne_a_prevenir_relation || '-';
@@ -1223,6 +1250,7 @@ function afficherDetailsPatient(patient) {
                         <td>${patientAssurance2 !== '-' ? `<span class="badge bg-success">${patientAssurance2}</span>` : '-'}</td>
                     </tr>
                     <tr><td><strong>Taux 2</strong></td><td>${patientTaux2}%</td></tr>
+                    <tr><td><strong>Société souscriptrice</strong></td><td>${patientSocieteAssurance2}</td></tr>
                 </table>
             </div>
         </div>
@@ -1252,17 +1280,18 @@ function selectionnerDepuisDetails() {
             const nomComplet = cells[1].innerText.trim();
             const assurance = cells[3].innerText.trim();
             const taux = cells[4].innerText.trim();
-            const assurance2 = cells[5].innerText.trim();
+            const assurance2 = cells[5].innerText.trim().split('\n')[0].trim();
             const taux2 = cells[6].innerText.trim();
-            
+            const societeAssurance2 = row.dataset.societe || '';
+
             let assuranceCode = 'non_assure';
             if (assurance.toLowerCase().includes('amu-cnss')) assuranceCode = 'amu_cnss';
             else if (assurance.toLowerCase().includes('amu-inam')) assuranceCode = 'amu_inam';
             else if (assurance.toLowerCase().includes('non assuré')) assuranceCode = 'non_assure';
             else assuranceCode = assurance;
-            
+
             bootstrap.Modal.getInstance(document.getElementById('detailPatientModal')).hide();
-            selectPatient(id, nomComplet, assuranceCode, parseInt(taux) || 0, assurance2, parseInt(taux2) || 0);
+            selectPatient(id, nomComplet, assuranceCode, parseInt(taux) || 0, assurance2, parseInt(taux2) || 0, societeAssurance2);
         }
     }
 }
@@ -1378,20 +1407,25 @@ function toggleAssurance2() {
     const type = document.getElementById('assurance2_nom').value;
     const tauxInput = document.getElementById('taux_assurance2');
     const autreDiv = document.getElementById('autre_assurance2_div');
-    
+    const societeDiv = document.getElementById('societe_assurance2_div');
+
     if (!type) {
         tauxInput.value = 0;
         tauxInput.readOnly = true;
         autreDiv.style.display = 'none';
+        societeDiv.style.display = 'none';
+        document.getElementById('societe_assurance2').value = '';
     } else {
         tauxInput.readOnly = false;
         autreDiv.style.display = (type === 'autre') ? 'block' : 'none';
+        societeDiv.style.display = 'block';
         if (type === 'GTA') tauxInput.value = 60;
         else if (type === 'OLEA') tauxInput.value = 70;
         else if (type === 'NSIA') tauxInput.value = 65;
         else if (type === 'SUNU') tauxInput.value = 50;
         else if (type === 'FIDELIA') tauxInput.value = 50;
         else if (type === 'autre') tauxInput.value = 50;
+        chargerSocietesAssurance(type, 'societesAssuranceList');
     }
 }
 
@@ -1399,21 +1433,47 @@ function toggleEditAssurance2() {
     const type = document.getElementById('editAssurance2_nom').value;
     const tauxInput = document.getElementById('editTauxAssurance2');
     const autreDiv = document.getElementById('editAutreAssurance2Div');
-    
+    const societeDiv = document.getElementById('editSocieteAssurance2Div');
+
     if (!type) {
         tauxInput.value = 0;
         tauxInput.readOnly = true;
         autreDiv.style.display = 'none';
+        societeDiv.style.display = 'none';
+        document.getElementById('editSocieteAssurance2').value = '';
     } else {
         tauxInput.readOnly = false;
         autreDiv.style.display = (type === 'autre') ? 'block' : 'none';
+        societeDiv.style.display = 'block';
         if (type === 'GTA') tauxInput.value = 60;
         else if (type === 'OLEA') tauxInput.value = 70;
         else if (type === 'NSIA') tauxInput.value = 65;
         else if (type === 'SUNU') tauxInput.value = 50;
         else if (type === 'FIDELIA') tauxInput.value = 50;
         else if (type === 'autre') tauxInput.value = 50;
+        chargerSocietesAssurance(type, 'editSocietesAssuranceList');
     }
+}
+
+// ============================================
+// AUTOCOMPLÉTION DES SOCIÉTÉS SOUSCRIPTRICES
+// ============================================
+// Alimente le <datalist> avec les sociétés déjà saisies pour cette
+// assurance complémentaire : on tape une fois, on choisit ensuite.
+function chargerSocietesAssurance(assuranceNom, datalistId) {
+    const datalist = document.getElementById(datalistId);
+    if (!datalist || !assuranceNom) return;
+    fetch(`/api/societes-assurance?assurance=${encodeURIComponent(assuranceNom)}`)
+        .then(response => response.json())
+        .then(societes => {
+            datalist.innerHTML = '';
+            (societes || []).forEach(nom => {
+                const option = document.createElement('option');
+                option.value = nom;
+                datalist.appendChild(option);
+            });
+        })
+        .catch(() => { datalist.innerHTML = ''; });
 }
 
 // ============================================
@@ -1429,6 +1489,8 @@ function showAddModal() {
     document.getElementById('taux_assurance2').value = 0;
     document.getElementById('taux_assurance2').readOnly = true;
     document.getElementById('autre_assurance2_div').style.display = 'none';
+    document.getElementById('societe_assurance2_div').style.display = 'none';
+    document.getElementById('societe_assurance2').value = '';
     document.getElementById('personne_prevenir_nom').value = '';
     document.getElementById('personne_prevenir_telephone').value = '';
     document.getElementById('personne_prevenir_relation').value = '';
@@ -1497,7 +1559,14 @@ function savePatient() {
             return;
         }
     }
-    
+
+    let societeAssurance2 = document.getElementById('societe_assurance2').value.trim();
+    if (assurance2Nom && assurance2Nom !== '' && societeAssurance2 === '') {
+        alert(`Veuillez préciser la société ayant souscrit l'assurance complémentaire "${assurance2Nom}"`);
+        document.getElementById('societe_assurance2').focus();
+        return;
+    }
+
     let personnePrevenirNom = document.getElementById('personne_prevenir_nom').value.trim();
     let personnePrevenirTelephone = document.getElementById('personne_prevenir_telephone').value.trim();
     let personnePrevenirRelation = document.getElementById('personne_prevenir_relation').value;
@@ -1514,11 +1583,12 @@ function savePatient() {
         assurance2_nom: assurance2Nom || null,
         taux_assurance2: tauxAssurance2,
         numero_assure2: document.getElementById('numero_assure2').value.trim() || null,
+        societe_assurance2: societeAssurance2 || null,
         personne_a_prevenir_nom: personnePrevenirNom || null,
         personne_a_prevenir_telephone: personnePrevenirTelephone || null,
         personne_a_prevenir_relation: personnePrevenirRelation || null
     };
-    
+
     if (!patient.nom || !patient.telephone) {
         alert('Veuillez remplir les champs obligatoires (Nom et Téléphone)');
         return;
@@ -1590,8 +1660,9 @@ function editPatient(id) {
         autreAssuranceValue = cells[3].innerText.trim();
     }
     
-    const assurance2Text = cells[5]?.innerText || '';
+    const assurance2Text = (cells[5]?.innerText || '').split('\n')[0].trim();
     const taux2Text = cells[6]?.innerText || '';
+    const societeAssurance2Text = row.dataset.societe || '';
     
     fetch(`/api/patients/${id}`)
         .then(response => response.json())
@@ -1614,9 +1685,10 @@ function editPatient(id) {
             document.getElementById('editAssurance2_nom').value = patient.assurance2_nom || '';
             document.getElementById('editTauxAssurance2').value = patient.taux_assurance2 || 0;
             document.getElementById('editNumeroAssure2').value = patient.numero_assure2 || '';
+            document.getElementById('editSocieteAssurance2').value = patient.societe_assurance2 || '';
             document.getElementById('editAutreAssurance2').value = '';
             document.getElementById('editAutreAssurance2Div').style.display = 'none';
-            
+
             document.getElementById('editPersonnePrevenirNom').value = patient.personne_a_prevenir_nom || '';
             document.getElementById('editPersonnePrevenirTelephone').value = patient.personne_a_prevenir_telephone || '';
             document.getElementById('editPersonnePrevenirRelation').value = patient.personne_a_prevenir_relation || '';
@@ -1674,6 +1746,7 @@ function editPatient(id) {
             document.getElementById('editAssurance2_nom').value = assurance2Text.trim() || '';
             document.getElementById('editTauxAssurance2').value = parseFloat(taux2Text) || 0;
             document.getElementById('editNumeroAssure2').value = '';
+            document.getElementById('editSocieteAssurance2').value = societeAssurance2Text;
             document.getElementById('editAutreAssurance2').value = '';
             document.getElementById('editAutreAssurance2Div').style.display = 'none';
             
@@ -1738,7 +1811,14 @@ function saveEditPatient() {
         document.getElementById('editAutreAssurance2').focus();
         return;
     }
-    
+
+    let societeAssurance2 = document.getElementById('editSocieteAssurance2').value.trim();
+    if (assurance2Nom && assurance2Nom !== '' && societeAssurance2 === '') {
+        alert(`Veuillez préciser la société ayant souscrit l'assurance complémentaire "${assurance2Nom}"`);
+        document.getElementById('editSocieteAssurance2').focus();
+        return;
+    }
+
     const patient = {
         nom: document.getElementById('editNom').value.trim(),
         prenom: document.getElementById('editPrenom').value.trim(),
@@ -1751,6 +1831,7 @@ function saveEditPatient() {
         assurance2_nom: assurance2Nom || null,
         taux_assurance2: parseFloat(document.getElementById('editTauxAssurance2').value) || 0,
         numero_assure2: document.getElementById('editNumeroAssure2').value.trim() || null,
+        societe_assurance2: societeAssurance2 || null,
         personne_a_prevenir_nom: personnePrevenirNom || null,
         personne_a_prevenir_telephone: personnePrevenirTelephone || null,
         personne_a_prevenir_relation: personnePrevenirRelation || null
@@ -1787,12 +1868,12 @@ function saveEditPatient() {
 // ============================================
 // SÉLECTION PATIENT
 // ============================================
-function selectPatient(id, nom, assurance, taux, assurance2, taux2) {
+function selectPatient(id, nom, assurance, taux, assurance2, taux2, societeAssurance2) {
     if (!id || id === 'undefined') {
         alert('❌ Erreur: ID patient invalide');
         return;
     }
-    
+
     sessionStorage.setItem('selectedPatientId', String(id));
     sessionStorage.setItem('selectedPatientName', nom);
     sessionStorage.setItem('selectedPatientPrenom', '');
@@ -1802,9 +1883,10 @@ function selectPatient(id, nom, assurance, taux, assurance2, taux2) {
     sessionStorage.setItem('selectedPatientAssurance2', assurance2 || '');
     sessionStorage.setItem('selectedPatientTaux2', String(taux2 || 0));
     sessionStorage.setItem('selectedPatientNumero2', '');
-    
-    console.log('✅ Patient sélectionné:', { id, nom, assurance, taux, assurance2, taux2 });
-    
+    sessionStorage.setItem('selectedPatientSocieteAssurance2', societeAssurance2 || '');
+
+    console.log('✅ Patient sélectionné:', { id, nom, assurance, taux, assurance2, taux2, societeAssurance2 });
+
     showPatientDestinationModal(id, nom, assurance, taux, assurance2, taux2);
 }
 

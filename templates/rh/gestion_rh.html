@@ -124,41 +124,64 @@
                     <!-- ========================================= -->
                     <ul class="nav nav-tabs rh-tabs" id="rhTabs" role="tablist">
                         <li class="nav-item">
-                            <button class="nav-link active" id="personnel-tab" 
-                                    data-bs-toggle="tab" data-bs-target="#personnel" 
+                            <button class="nav-link" id="dashboardrh-tab"
+                                    data-bs-toggle="tab" data-bs-target="#dashboardrh"
+                                    type="button" role="tab">
+                                <i class="fas fa-chart-pie me-1"></i> Tableau de bord
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link active" id="personnel-tab"
+                                    data-bs-toggle="tab" data-bs-target="#personnel"
                                     type="button" role="tab">
                                 <i class="fas fa-user-friends me-1"></i> Personnel
                                 <span class="badge bg-secondary ms-1" id="badgePersonnel">0</span>
                             </button>
                         </li>
                         <li class="nav-item">
-                            <button class="nav-link" id="conges-tab" 
-                                    data-bs-toggle="tab" data-bs-target="#conges" 
+                            <button class="nav-link" id="pointage-tab"
+                                    data-bs-toggle="tab" data-bs-target="#pointage"
+                                    type="button" role="tab" onclick="chargerPointageDuJour()">
+                                <i class="fas fa-fingerprint me-1"></i> Pointage
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" id="conges-tab"
+                                    data-bs-toggle="tab" data-bs-target="#conges"
                                     type="button" role="tab">
                                 <i class="fas fa-calendar-alt me-1"></i> Congés
                                 <span class="badge bg-warning text-dark ms-1" id="badgeCongesAttente">0</span>
                             </button>
                         </li>
-                        <li class="nav-item">
-                            <button class="nav-link" id="permissions-tab" 
-                                    data-bs-toggle="tab" data-bs-target="#permissions" 
-                                    type="button" role="tab">
-                                <i class="fas fa-door-open me-1"></i> Permissions
+                        <li class="nav-item dropdown">
+                            <button class="nav-link dropdown-toggle" id="rhPlus-tab" data-bs-toggle="dropdown" type="button" aria-expanded="false">
+                                <i class="fas fa-ellipsis"></i> Plus
                             </button>
-                        </li>
-                        <li class="nav-item">
-                            <button class="nav-link" id="services-tab" 
-                                    data-bs-toggle="tab" data-bs-target="#services" 
-                                    type="button" role="tab">
-                                <i class="fas fa-building me-1"></i> Services
-                            </button>
-                        </li>
-                        <li class="nav-item">
-                            <button class="nav-link" id="dashboardrh-tab" 
-                                    data-bs-toggle="tab" data-bs-target="#dashboardrh" 
-                                    type="button" role="tab">
-                                <i class="fas fa-chart-pie me-1"></i> Tableau de bord
-                            </button>
+                            <ul class="dropdown-menu" aria-labelledby="rhPlus-tab">
+                                <li>
+                                    <button class="dropdown-item" id="permissions-tab"
+                                            data-bs-toggle="tab" data-bs-target="#permissions" type="button" role="tab">
+                                        <i class="fas fa-door-open me-2"></i>Permissions
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="dropdown-item" id="services-tab"
+                                            data-bs-toggle="tab" data-bs-target="#services" type="button" role="tab">
+                                        <i class="fas fa-building me-2"></i>Services
+                                    </button>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('rh.page_paie') }}">
+                                        <i class="fas fa-money-check-dollar me-2"></i>Paie (salaires)
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('rh.page_declarations') }}">
+                                        <i class="fas fa-file-invoice me-2"></i>Déclarations mensuelles
+                                    </a>
+                                </li>
+                            </ul>
                         </li>
                     </ul>
 
@@ -274,6 +297,184 @@
                                 <nav>
                                     <ul class="pagination pagination-sm" id="paginationEmployes"></ul>
                                 </nav>
+                            </div>
+                        </div>
+
+                        <!-- ========================= -->
+                        <!-- ONGLET POINTAGE (empreinte)-->
+                        <!-- ========================= -->
+                        <div class="tab-pane fade" id="pointage" role="tabpanel">
+
+                            <div class="alert alert-info small" id="alertePointageContexte">
+                                <i class="fas fa-circle-info me-1"></i>
+                                Le pointage par empreinte <strong>et</strong> par visage (caméra) ne sont
+                                utilisables par le navigateur que sur <code>http://localhost:&lt;port&gt;</code>
+                                ou en HTTPS — pas sur une adresse IP locale en http:// simple (règle de
+                                sécurité imposée par les navigateurs, pour l'empreinte comme pour la caméra).
+                            </div>
+
+                            <div class="row g-3 mb-4">
+                                <!-- Borne de pointage : PAS de bouton "Pointer" ici, exprès — cet
+                                     onglet est réservé à l'administration (réglages, empreintes).
+                                     Le personnel utilise la borne plein écran (aucun réglage dessus,
+                                     rien à modifier), à ouvrir sur le poste dédié (accueil...). -->
+                                <div class="col-lg-5">
+                                    <div class="card border-0 shadow-sm h-100" style="background:linear-gradient(135deg,#667eea,#764ba2);">
+                                        <div class="card-body text-white text-center py-4">
+                                            <i class="fas fa-fingerprint" style="font-size:56px;"></i>
+                                            <h5 class="mt-2 mb-1">Borne de pointage</h5>
+                                            <p class="small opacity-75 mb-3">
+                                                Écran séparé, sans aucun réglage — à laisser ouvert sur le poste
+                                                où le personnel pointe (rien d'administratif dessus).
+                                            </p>
+                                            <a href="{{ url_for('rh.page_borne_pointage') }}" target="_blank" class="btn btn-light btn-lg w-100">
+                                                <i class="fas fa-arrow-up-right-from-square me-2"></i> Ouvrir la borne
+                                            </a>
+                                            <button class="btn btn-outline-light btn-sm w-100 mt-2" onclick="pointer()">
+                                                <i class="fas fa-vial me-1"></i> Tester ici (admin)
+                                            </button>
+                                            <div id="resultatPointage" class="mt-3 small"></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Réglages -->
+                                <div class="col-lg-7">
+                                    <div class="card border-0 shadow-sm h-100">
+                                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                            <span><i class="fas fa-sliders me-2"></i>Règles de pointage</span>
+                                            <button class="btn btn-sm btn-primary" onclick="sauvegarderParametragePointage()">
+                                                <i class="fas fa-save me-1"></i> Enregistrer
+                                            </button>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row g-2">
+                                                <div class="col-4">
+                                                    <label class="form-label small fw-bold">Heure de début</label>
+                                                    <input type="time" class="form-control form-control-sm" id="paramHeureDebut">
+                                                </div>
+                                                <div class="col-4">
+                                                    <label class="form-label small fw-bold">Heure de fin</label>
+                                                    <input type="time" class="form-control form-control-sm" id="paramHeureFin">
+                                                </div>
+                                                <div class="col-4">
+                                                    <label class="form-label small fw-bold">Tolérance retard (min)</label>
+                                                    <input type="number" min="0" class="form-control form-control-sm" id="paramTolerance">
+                                                </div>
+                                            </div>
+                                            <label class="form-label small fw-bold mt-3 d-block">Jours travaillés</label>
+                                            <div class="d-flex flex-wrap gap-2" id="paramJoursTravailles">
+                                                <!-- généré en JS -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-12">
+                                    <div class="card border-0 shadow-sm h-100">
+                                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                            <span><i class="fas fa-list-check me-2"></i>Pointages du jour</span>
+                                            <input type="date" class="form-control form-control-sm w-auto" id="datePointage" onchange="chargerPointageDuJour()">
+                                        </div>
+                                        <div class="card-body p-0">
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-hover table-rh mb-0">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Employé</th><th>Arrivée</th><th>Statut</th>
+                                                            <th>Départ</th><th>Durée</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="pointagesDuJourBody">
+                                                        <tr><td colspan="5" class="text-center text-muted py-3">Chargement...</td></tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div id="absentsDuJour" class="p-2 small text-muted"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-4">
+                                <!-- Empreintes enregistrées -->
+                                <div class="col-lg-6">
+                                    <div class="card border-0 shadow-sm h-100">
+                                        <div class="card-header bg-light">
+                                            <i class="fas fa-id-card me-2"></i>Empreintes enregistrées
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="input-group input-group-sm mb-3">
+                                                <select class="form-select" id="selectEmployeEmpreinte"></select>
+                                                <button class="btn btn-success" onclick="enregistrerEmpreinte()">
+                                                    <i class="fas fa-fingerprint me-1"></i> Enregistrer une empreinte
+                                                </button>
+                                            </div>
+                                            <div id="listeEmpreintes" style="max-height:220px; overflow-y:auto;">
+                                                <p class="text-muted small">Chargement...</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Visages enregistrés (reconnaissance faciale, webcam standard) -->
+                                <div class="col-lg-6">
+                                    <div class="card border-0 shadow-sm h-100">
+                                        <div class="card-header bg-light">
+                                            <i class="fas fa-camera-retro me-2"></i>Visages enregistrés
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="input-group input-group-sm mb-2">
+                                                <select class="form-select" id="selectEmployeVisage"></select>
+                                                <button class="btn btn-success" onclick="ouvrirCaptureVisage()">
+                                                    <i class="fas fa-camera me-1"></i> Enregistrer un visage
+                                                </button>
+                                            </div>
+                                            <div id="zoneCaptureVisage" style="display:none;" class="text-center mb-2 p-2 bg-light rounded">
+                                                <video id="videoEnrolementVisage" autoplay muted playsinline style="width:100%; max-width:280px; border-radius:8px; transform:scaleX(-1);"></video>
+                                                <div class="mt-2">
+                                                    <button class="btn btn-sm btn-primary" onclick="capturerVisage()"><i class="fas fa-check"></i> Capturer</button>
+                                                    <button class="btn btn-sm btn-outline-secondary" onclick="fermerCaptureVisage()">Annuler</button>
+                                                </div>
+                                                <div class="small text-muted mt-1" id="statutCaptureVisage"></div>
+                                            </div>
+                                            <div id="listeVisages" style="max-height:220px; overflow-y:auto;">
+                                                <p class="text-muted small">Chargement...</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Résumé mensuel -->
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <span><i class="fas fa-calendar-days me-2"></i>Résumé de la période</span>
+                                    <div class="d-flex gap-2">
+                                        <input type="date" class="form-control form-control-sm" id="resumeDateDebut">
+                                        <input type="date" class="form-control form-control-sm" id="resumeDateFin">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="chargerResumePointage()">
+                                            <i class="fas fa-search me-1"></i> Voir
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover table-rh mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Employé</th><th>Jours ouvrés</th><th>Présent</th>
+                                                    <th>Retards</th><th>Absences</th><th>Heures travaillées</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="resumePointageBody">
+                                                <tr><td colspan="6" class="text-center text-muted py-3">Choisissez une période</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -2189,19 +2390,394 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // ⭐ Charger UNE SEULE FOIS
     chargerToutesLesDonnees();
+
+    // ⭐ Activer l'onglet ciblé par l'URL (ex: /rh/dashboard -> #dashboardrh)
+    if (window.location.hash) {
+        const tabButton = document.getElementById(window.location.hash.substring(1) + '-tab');
+        if (tabButton) {
+            new bootstrap.Tab(tabButton).show();
+        }
+    }
 });
 
 function chargerToutesLesDonnees() {
     if (donneesChargees) return;
-    
+
     console.log('📦 Chargement initial...');
     chargerEmployes();
     chargerConges();
     chargerPermissions();
     chargerServices();
     chargerDashboard();
-    
+    chargerParametragePointage();
+    chargerListeEmpreintes();
+    chargerListeVisages();
+
     donneesChargees = true;
+}
+
+// ============================================================
+// POINTAGE PAR EMPREINTE (WebAuthn)
+// ============================================================
+
+const JOURS_SEMAINE = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+function webauthnDisponible() {
+    return !!(window.SimpleWebAuthnBrowser && SimpleWebAuthnBrowser.browserSupportsWebAuthn());
+}
+
+function chargerParametragePointage() {
+    fetch('/rh/api/pointage/parametrage')
+        .then(r => r.json())
+        .then(p => {
+            document.getElementById('paramHeureDebut').value = p.heure_debut;
+            document.getElementById('paramHeureFin').value = p.heure_fin;
+            document.getElementById('paramTolerance').value = p.tolerance_retard_minutes;
+
+            const zone = document.getElementById('paramJoursTravailles');
+            zone.innerHTML = JOURS_SEMAINE.map((nom, i) => `
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" value="${i}" id="jourTravaille${i}"
+                           ${p.jours_travailles.includes(i) ? 'checked' : ''}>
+                    <label class="form-check-label small" for="jourTravaille${i}">${nom}</label>
+                </div>`).join('');
+
+            // Aujourd'hui par défaut pour les filtres de date
+            const aujourdhui = new Date().toISOString().split('T')[0];
+            if (!document.getElementById('datePointage').value) document.getElementById('datePointage').value = aujourdhui;
+            if (!document.getElementById('resumeDateFin').value) {
+                document.getElementById('resumeDateFin').value = aujourdhui;
+                document.getElementById('resumeDateDebut').value = aujourdhui.slice(0, 8) + '01';
+            }
+        })
+        .catch(err => console.error('Erreur chargement paramétrage pointage:', err));
+}
+
+function sauvegarderParametragePointage() {
+    const jours = [];
+    JOURS_SEMAINE.forEach((_, i) => { if (document.getElementById('jourTravaille' + i).checked) jours.push(i); });
+
+    fetch('/rh/api/pointage/parametrage', {
+        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            heure_debut: document.getElementById('paramHeureDebut').value,
+            heure_fin: document.getElementById('paramHeureFin').value,
+            tolerance_retard_minutes: parseInt(document.getElementById('paramTolerance').value || 0),
+            jours_travailles: jours,
+        })
+    })
+    .then(r => r.json())
+    .then(d => alert(d.success ? 'Règles de pointage enregistrées.' : ('Erreur : ' + d.message)))
+    .catch(() => alert('Erreur réseau.'));
+}
+
+function chargerListeEmpreintes() {
+    fetch('/rh/api/empreintes')
+        .then(r => r.json())
+        .then(d => {
+            if (!d.success) return;
+
+            const select = document.getElementById('selectEmployeEmpreinte');
+            select.innerHTML = d.data.map(e => `<option value="${e.employe_id}">${e.employe_nom}</option>`).join('');
+
+            const zone = document.getElementById('listeEmpreintes');
+            const avecEmpreintes = d.data.filter(e => e.empreintes.length > 0);
+            if (avecEmpreintes.length === 0) {
+                zone.innerHTML = '<p class="text-muted small">Aucune empreinte enregistrée pour le moment.</p>';
+                return;
+            }
+            zone.innerHTML = avecEmpreintes.map(e => `
+                <div class="mb-2 pb-2 border-bottom">
+                    <div class="fw-bold small">${e.employe_nom}</div>
+                    ${e.empreintes.map(emp => `
+                        <div class="d-flex justify-content-between align-items-center small text-muted">
+                            <span><i class="fas fa-fingerprint me-1"></i>${emp.libelle_appareil || 'Appareil'} — depuis le ${emp.created_at}</span>
+                            <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="supprimerEmpreinte(${emp.id})" title="Révoquer">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>`).join('')}
+                </div>`).join('');
+        })
+        .catch(err => console.error('Erreur chargement empreintes:', err));
+}
+
+function supprimerEmpreinte(empreinteId) {
+    if (!confirm('Révoquer cette empreinte ? L\'employé ne pourra plus pointer avec, jusqu\'à un nouvel enregistrement.')) return;
+    fetch('/rh/api/empreintes/' + empreinteId, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(d => { if (d.success) chargerListeEmpreintes(); else alert('Erreur : ' + d.message); });
+}
+
+async function enregistrerEmpreinte() {
+    const employeId = document.getElementById('selectEmployeEmpreinte').value;
+    if (!employeId) { alert('Sélectionnez un employé.'); return; }
+    if (!webauthnDisponible()) {
+        alert("Ce poste/navigateur ne supporte pas l'empreinte (WebAuthn). Utilisez http://localhost:<port> sur un poste équipé d'un lecteur d'empreinte compatible Windows Hello.");
+        return;
+    }
+    try {
+        const rOpt = await fetch('/rh/api/empreintes/enregistrer/options', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({employe_id: parseInt(employeId)})
+        });
+        const dOpt = await rOpt.json();
+        if (!dOpt.success) { alert(dOpt.message); return; }
+
+        const attestation = await SimpleWebAuthnBrowser.startRegistration(dOpt.options);
+        const libelle = prompt("Nom de cet appareil (ex : PC accueil)", navigator.platform || 'Ce poste') || 'Ce poste';
+
+        const rVer = await fetch('/rh/api/empreintes/enregistrer/verifier', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({credential: attestation, libelle_appareil: libelle})
+        });
+        const dVer = await rVer.json();
+        if (dVer.success) {
+            alert('Empreinte enregistrée avec succès.');
+            chargerListeEmpreintes();
+        } else {
+            alert("Échec de l'enregistrement : " + dVer.message);
+        }
+    } catch (err) {
+        console.error(err);
+        alert("Échec de l'enregistrement de l'empreinte : " + (err.message || err));
+    }
+}
+
+async function pointer() {
+    const btn = document.getElementById('btnPointer');
+    const resultat = document.getElementById('resultatPointage');
+
+    if (!webauthnDisponible()) {
+        resultat.innerHTML = '<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i>Empreinte non disponible sur ce poste/navigateur.</span>';
+        return;
+    }
+
+    btn.disabled = true;
+    resultat.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Posez le doigt sur le capteur...';
+
+    try {
+        const rOpt = await fetch('/rh/api/pointage/webauthn/options', {method: 'POST'});
+        const dOpt = await rOpt.json();
+        if (!dOpt.success) {
+            resultat.innerHTML = '<span class="text-warning">' + dOpt.message + '</span>';
+            return;
+        }
+
+        const assertion = await SimpleWebAuthnBrowser.startAuthentication(dOpt.options);
+
+        const rVer = await fetch('/rh/api/pointage/webauthn/verifier', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({credential: assertion})
+        });
+        const dVer = await rVer.json();
+
+        if (dVer.success) {
+            const d = dVer.data;
+            if (d.type === 'arrivee') {
+                const statutTxt = d.statut === 'retard' ? `retard de ${d.retard_minutes} min` : 'à l\'heure';
+                resultat.innerHTML = `<span class="text-success"><i class="fas fa-circle-check me-1"></i>Bonjour ${d.employe_nom} — arrivée ${d.heure} (${statutTxt})</span>`;
+            } else {
+                resultat.innerHTML = `<span class="text-success"><i class="fas fa-circle-check me-1"></i>Au revoir ${d.employe_nom} — départ ${d.heure}</span>`;
+            }
+            chargerPointageDuJour();
+        } else {
+            resultat.innerHTML = '<span class="text-danger">' + dVer.message + '</span>';
+        }
+    } catch (err) {
+        console.error(err);
+        resultat.innerHTML = '<span class="text-danger">Échec : ' + (err.message || err) + '</span>';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function chargerPointageDuJour() {
+    const jour = document.getElementById('datePointage').value || new Date().toISOString().split('T')[0];
+    fetch('/rh/api/pointage/liste?date=' + jour)
+        .then(r => r.json())
+        .then(d => {
+            if (!d.success) return;
+            const tbody = document.getElementById('pointagesDuJourBody');
+            if (d.pointages.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Aucun pointage ce jour</td></tr>';
+            } else {
+                tbody.innerHTML = d.pointages.map(p => `
+                    <tr>
+                        <td>${p.employe_nom}</td>
+                        <td>${p.heure_arrivee || '-'}</td>
+                        <td>${p.statut_arrivee === 'retard'
+                            ? `<span class="badge bg-warning text-dark">Retard ${p.retard_minutes}min</span>`
+                            : (p.heure_arrivee ? '<span class="badge bg-success">À l\'heure</span>' : '-')}</td>
+                        <td>${p.heure_depart || '-'}</td>
+                        <td>${p.duree_travaillee_minutes != null ? Math.floor(p.duree_travaillee_minutes/60) + 'h' + String(p.duree_travaillee_minutes%60).padStart(2,'0') : '-'}</td>
+                    </tr>`).join('');
+            }
+            const absDiv = document.getElementById('absentsDuJour');
+            absDiv.innerHTML = d.absents.length > 0
+                ? '<i class="fas fa-user-clock me-1"></i>Pas encore pointé : ' + d.absents.map(a => a.employe_nom).join(', ')
+                : '';
+        })
+        .catch(err => console.error('Erreur chargement pointages du jour:', err));
+}
+
+function chargerResumePointage() {
+    const debut = document.getElementById('resumeDateDebut').value;
+    const fin = document.getElementById('resumeDateFin').value;
+    if (!debut || !fin) return;
+
+    fetch(`/rh/api/pointage/resume?date_debut=${debut}&date_fin=${fin}`)
+        .then(r => r.json())
+        .then(d => {
+            const tbody = document.getElementById('resumePointageBody');
+            if (!d.success || d.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Aucune donnée</td></tr>';
+                return;
+            }
+            tbody.innerHTML = d.data.map(r => `
+                <tr>
+                    <td>${r.employe_nom}</td>
+                    <td>${r.jours_ouvres}</td>
+                    <td>${r.jours_presents}</td>
+                    <td>${r.jours_retard > 0 ? `<span class="text-warning fw-bold">${r.jours_retard}</span>` : 0}</td>
+                    <td>${r.jours_absents > 0 ? `<span class="text-danger fw-bold">${r.jours_absents}</span>` : 0}</td>
+                    <td>${r.heures_travaillees} h</td>
+                </tr>`).join('');
+        })
+        .catch(err => console.error('Erreur chargement résumé pointage:', err));
+}
+
+// ============================================================
+// POINTAGE PAR VISAGE (webcam standard, face-api.js)
+// ============================================================
+
+const MODELES_VISAGE_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+let modelesVisageCharges = false;
+let fluxCameraEnrolement = null;
+
+async function chargerModelesVisage() {
+    if (modelesVisageCharges) return true;
+    if (typeof faceapi === 'undefined') return false;
+    try {
+        await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri(MODELES_VISAGE_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODELES_VISAGE_URL),
+            faceapi.nets.faceRecognitionNet.loadFromUri(MODELES_VISAGE_URL),
+        ]);
+        modelesVisageCharges = true;
+        return true;
+    } catch (err) {
+        console.error('Erreur chargement modèles reconnaissance faciale:', err);
+        return false;
+    }
+}
+
+function chargerListeVisages() {
+    fetch('/rh/api/visages')
+        .then(r => r.json())
+        .then(d => {
+            if (!d.success) return;
+
+            const select = document.getElementById('selectEmployeVisage');
+            select.innerHTML = d.data.map(e => `<option value="${e.employe_id}">${e.employe_nom}</option>`).join('');
+
+            const zone = document.getElementById('listeVisages');
+            const avecVisages = d.data.filter(e => e.visages.length > 0);
+            if (avecVisages.length === 0) {
+                zone.innerHTML = '<p class="text-muted small">Aucun visage enregistré pour le moment.</p>';
+                return;
+            }
+            zone.innerHTML = avecVisages.map(e => `
+                <div class="mb-2 pb-2 border-bottom">
+                    <div class="fw-bold small">${e.employe_nom}</div>
+                    ${e.visages.map(v => `
+                        <div class="d-flex justify-content-between align-items-center small text-muted">
+                            <span><i class="fas fa-camera-retro me-1"></i>${v.libelle || 'Visage'} — depuis le ${v.created_at}</span>
+                            <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="supprimerVisage(${v.id})" title="Révoquer">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>`).join('')}
+                </div>`).join('');
+        })
+        .catch(err => console.error('Erreur chargement visages:', err));
+}
+
+function supprimerVisage(visageId) {
+    if (!confirm("Révoquer ce visage ? L'employé ne pourra plus pointer avec, jusqu'à un nouvel enregistrement.")) return;
+    fetch('/rh/api/visages/' + visageId, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(d => { if (d.success) chargerListeVisages(); else alert('Erreur : ' + d.message); });
+}
+
+async function ouvrirCaptureVisage() {
+    const employeId = document.getElementById('selectEmployeVisage').value;
+    if (!employeId) { alert('Sélectionnez un employé.'); return; }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Caméra non disponible sur ce poste/navigateur (nécessite http://localhost ou HTTPS).");
+        return;
+    }
+
+    const zone = document.getElementById('zoneCaptureVisage');
+    const statut = document.getElementById('statutCaptureVisage');
+    zone.style.display = '';
+    statut.textContent = 'Chargement des modèles de reconnaissance...';
+
+    const ok = await chargerModelesVisage();
+    if (!ok) {
+        statut.textContent = "Échec du chargement des modèles (vérifiez la connexion internet).";
+        return;
+    }
+
+    try {
+        fluxCameraEnrolement = await navigator.mediaDevices.getUserMedia({video: {width: 320, height: 240}});
+        const video = document.getElementById('videoEnrolementVisage');
+        video.srcObject = fluxCameraEnrolement;
+        statut.textContent = 'Positionnez le visage bien en face, puis cliquez sur Capturer.';
+    } catch (err) {
+        console.error(err);
+        statut.textContent = "Impossible d'accéder à la caméra : " + (err.message || err);
+    }
+}
+
+function fermerCaptureVisage() {
+    if (fluxCameraEnrolement) {
+        fluxCameraEnrolement.getTracks().forEach(t => t.stop());
+        fluxCameraEnrolement = null;
+    }
+    document.getElementById('zoneCaptureVisage').style.display = 'none';
+}
+
+async function capturerVisage() {
+    const employeId = document.getElementById('selectEmployeVisage').value;
+    const video = document.getElementById('videoEnrolementVisage');
+    const statut = document.getElementById('statutCaptureVisage');
+
+    statut.textContent = 'Analyse du visage...';
+    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks().withFaceDescriptor();
+
+    if (!detection) {
+        statut.textContent = "Aucun visage détecté — repositionnez-vous et réessayez.";
+        return;
+    }
+
+    const libelle = prompt("Nom de cet enregistrement (ex : lumière du matin)", "Visage principal") || 'Visage principal';
+
+    fetch('/rh/api/visages/enregistrer', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({employe_id: parseInt(employeId), descripteur: Array.from(detection.descriptor), libelle})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            alert('Visage enregistré avec succès.');
+            fermerCaptureVisage();
+            chargerListeVisages();
+        } else {
+            statut.textContent = 'Échec : ' + d.message;
+        }
+    })
+    .catch(err => { statut.textContent = 'Erreur réseau : ' + err; });
 }
 
 // ⭐ Rafraîchir sur demande
@@ -2235,4 +2811,17 @@ function rafraichirTout() {
 }
 
 </script>
+{% endblock %}
+
+{% block scripts %}
+<!-- Pointage par empreinte : pilote l'API WebAuthn du navigateur (mêmes
+     capteurs que Windows Hello) — convertit les échanges avec le serveur
+     dans les deux formats (base64url <-> ArrayBuffer) attendus par les
+     navigateurs, en accord avec la librairie Python webauthn côté serveur. -->
+<script src="https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@10.0.0/dist/bundle/index.umd.min.js"></script>
+<!-- Pointage par visage : détection + calcul du descripteur facial (128
+     nombres) entièrement dans le navigateur, via une webcam standard — la
+     photo elle-même ne quitte jamais l'appareil. Modèles chargés à la
+     demande (pas au chargement de la page) par chargerModelesVisage(). -->
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 {% endblock %}

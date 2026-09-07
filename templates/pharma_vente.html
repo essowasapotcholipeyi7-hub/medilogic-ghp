@@ -418,6 +418,7 @@ let patientName = '';
 let produitsList = [];
 let patientAssurance = '';
 let patientAssurance2 = '';
+let patientSocieteAssurance2 = '';
 let patientTaux2 = 0;
 let patientTaux2Original = 0;
 let tauxTempModifie = false;
@@ -466,6 +467,7 @@ function checkSelectedPatient() {
     patientAssurance = sessionStorage.getItem('selectedPatientAssurance') || localStorage.getItem('selectedPatientAssurance');
     patientTaux = parseFloat(sessionStorage.getItem('selectedPatientTaux') || localStorage.getItem('selectedPatientTaux') || 0);
     patientAssurance2 = sessionStorage.getItem('selectedPatientAssurance2') || localStorage.getItem('selectedPatientAssurance2') || '';
+    patientSocieteAssurance2 = sessionStorage.getItem('selectedPatientSocieteAssurance2') || localStorage.getItem('selectedPatientSocieteAssurance2') || '';
     patientTaux2 = parseFloat(sessionStorage.getItem('selectedPatientTaux2') || localStorage.getItem('selectedPatientTaux2') || 0);
     patientTaux2Original = patientTaux2;
     
@@ -485,7 +487,9 @@ function checkSelectedPatient() {
         const cacBadge = document.getElementById('cacActiveBadge');
         
         if (patientAssurance2 && patientAssurance2 !== '' && patientAssurance2 !== 'Aucune' && patientTaux2 > 0) {
-            assurance2Display.textContent = patientAssurance2;
+            assurance2Display.textContent = patientSocieteAssurance2
+                ? `${patientAssurance2} (${patientSocieteAssurance2})`
+                : patientAssurance2;
             taux2Display.textContent = patientTaux2 + '%';
             cacBadge.style.display = 'inline-block';
         } else {
@@ -1874,6 +1878,7 @@ function finaliserVente() {
         taux_assurance: tauxUtilise,
         assurance2_nom: assurance2Active ? (patientAssurance2 || '') : '',
         taux_assurance2: assurance2Active ? (tauxTempModifie ? tauxTempValeur : patientTaux2) : 0,
+        societe_assurance2: assurance2Active ? (patientSocieteAssurance2 || '') : '',
         assurance2_active: assurance2Active,
         assurance_nom: patientAssurance || 'non_assure',
         montant_donne: montantDonne,

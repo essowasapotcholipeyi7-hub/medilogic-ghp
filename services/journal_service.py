@@ -23,7 +23,14 @@ class JournalService:
         {'id': 'depense_enregistree', 'nom': 'Dépense enregistrée'},
         {'id': 'proforma_cree', 'nom': 'Proforma créé'},
         {'id': 'rendez_vous_pris', 'nom': 'Rendez-vous pris'},
-        {'id': 'consultation_terminee', 'nom': 'Consultation terminée'}
+        {'id': 'consultation_terminee', 'nom': 'Consultation terminée'},
+        # ⭐ Comptabilité / RH (branchés à partir de la refonte SYSCOHADA)
+        {'id': 'ecriture_generee', 'nom': 'Écriture comptable générée'},
+        {'id': 'salaire_paye', 'nom': 'Salaire payé'},
+        {'id': 'employe_ajoute', 'nom': 'Employé ajouté'},
+        {'id': 'conge_approuve', 'nom': 'Congé approuvé'},
+        {'id': 'permission_approuvee', 'nom': 'Permission approuvée'},
+        {'id': 'cloture_exercice', 'nom': 'Clôture d\'exercice'},
     ]
     
     @classmethod

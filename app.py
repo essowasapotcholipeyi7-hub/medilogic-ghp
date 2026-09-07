@@ -13,7 +13,7 @@ from io import BytesIO
 from models import Vente
 # ⭐ Importer depuis db_helper et models
 from db_helper import db as db_helper
-from models import db, StructureMapping, Patient, Utilisateur, Structure, Employe, Service, Conge, Permission, DocumentRH, Vente, SignatureRH
+from models import db, StructureMapping, Patient, Utilisateur, Structure, Employe, Service, Conge, Permission, DocumentRH, Vente, SignatureRH, AnnulationVente, Facture, PaiementFacture, FactureAssurance, Recette, Depense
 from models import RendezVous
 from models import Medecin, Patient, Structure
 from datetime import datetime, date, timedelta
@@ -50,6 +50,18 @@ app.secret_key = Config.SECRET_KEY
 
 # ⭐ Initialiser le db SQLAlchemy
 db.init_app(app)
+
+# ⭐ Bascule hors-ligne Neon <-> Postgres local (inactif si DATABASE_URL_LOCAL
+# n'est pas définie dans l'environnement — voir utils/db_failover.py)
+from utils import db_failover
+with app.app_context():
+    db_failover.register_events(db)
+    if db_failover.FAILOVER_ENABLED:
+        try:
+            db.create_all(bind_key='local')  # crée sync_state/sync_changelog si absentes
+        except Exception as _e:
+            print(f"⚠️ Bascule hors-ligne : impossible de préparer la base locale ({_e})")
+db_failover.start_watchdog(app)
 
 # ⭐ Importer le blueprint RH
 from routes.rh import rh_bp
@@ -201,63 +213,26 @@ db.execute_query = execute_query
 print("✅ db.execute_query défini avec succès")  # Pour vérifier
 
 
-# app.py - Fonction de traitement auto (version sans dépendance aux scripts)
+def upsert_societe_assurance(structure_id, assurance_nom, nom_societe):
+    """Mémorise (une seule fois) le nom d'une société souscriptrice pour une
+    assurance complémentaire donnée, afin que la prochaine saisie propose un
+    simple choix au lieu d'une re-saisie manuelle. Ne doit jamais faire
+    échouer l'appelant (patient/vente) si l'enregistrement échoue."""
+    if not assurance_nom or not nom_societe:
+        return
+    assurance_nom = str(assurance_nom).strip()
+    nom_societe = str(nom_societe).strip()
+    if not assurance_nom or not nom_societe or not structure_id:
+        return
+    try:
+        db.execute_query("""
+            INSERT INTO societes_assurance (structure_id, assurance_nom, nom_societe)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (structure_id, assurance_nom, nom_societe) DO NOTHING
+        """, (structure_id, assurance_nom, nom_societe), commit=True)
+    except Exception as e:
+        print(f"⚠️ upsert_societe_assurance: {e}")
 
-def traiter_vente_auto(vente_id, structure_id):
-    """
-    Traite automatiquement une vente (sans dépendance aux scripts)
-    """
-    from sqlalchemy import text
-    import json
-    from datetime import date
-    from utils.categorisation import categoriser_acte
-    
-    with app.app_context():
-        try:
-            print(f"🚀 Traitement automatique de la vente #{vente_id}")
-            
-            # ⭐ 1. Récupérer la vente
-            vente = Vente.query.get(vente_id)
-            if not vente:
-                print(f"❌ Vente #{vente_id} non trouvée")
-                return
-            
-            # ⭐ 2. Catégoriser les actes (si pas déjà fait)
-            if not vente.traite_comptable:
-                actes = vente.actes if isinstance(vente.actes, list) else []
-                
-                if actes:
-                    actes_categorises = []
-                    for acte in actes:
-                        if isinstance(acte, dict):
-                            nom = acte.get('nom', '')
-                            info = categoriser_acte(nom)
-                            acte['categorie'] = info['categorie']
-                            acte['compte'] = info['compte']
-                            acte['code'] = info['code']
-                            actes_categorises.append(acte)
-                    
-                    vente.categorie_actes = actes_categorises
-                    vente.traite_comptable = True
-                    db.session.commit()
-                    print(f"✅ Vente #{vente_id} catégorisée ({len(actes_categorises)} actes)")
-                else:
-                    vente.traite_comptable = True
-                    db.session.commit()
-            
-            # ⭐ 3. Marquer comme générée (regroupement se fera via le script)
-            if vente.traite_comptable and not vente.ecriture_generee:
-                vente.ecriture_generee = True
-                db.session.commit()
-                print(f"✅ Vente #{vente_id} marquée comme générée")
-            
-            print(f"✅ Vente #{vente_id} traitée avec succès")
-            
-        except Exception as e:
-            print(f"❌ Erreur traitement auto vente #{vente_id}: {e}")
-            import traceback
-            traceback.print_exc()
-            db.session.rollback()
 
 # ========== CONFIGURATION EMAIL ==========
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
@@ -388,6 +363,57 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+
+@app.route('/api/sync/status')
+def api_sync_status():
+    """État de la bascule Neon/local — interrogé par la bannière de base.html."""
+    if not db_failover.FAILOVER_ENABLED:
+        return jsonify({'enabled': False}), 200
+    if 'user_id' not in session and 'structure_id' not in session:
+        return jsonify({'enabled': False}), 200
+    try:
+        return jsonify(db_failover.get_status())
+    except Exception as e:
+        return jsonify({'enabled': False, 'erreur': str(e)}), 200
+
+
+@app.route('/api/sync/forcer', methods=['POST'])
+@admin_required
+def api_sync_forcer():
+    """Force une synchronisation immédiate (admin) — utile pour vérifier
+    manuellement au lieu d'attendre le prochain passage du watchdog."""
+    if not db_failover.FAILOVER_ENABLED:
+        return jsonify({'success': False, 'message': "Bascule hors-ligne non configurée sur cette machine"}), 400
+    if db_failover.OFFLINE_STATE.is_offline:
+        if not db_failover.is_neon_reachable():
+            return jsonify({'success': False, 'message': 'Neon toujours injoignable'}), 200
+        ok = db_failover.push_sync_to_neon() and db_failover.pull_refresh_from_neon()
+        if ok:
+            db_failover.OFFLINE_STATE.is_offline = False
+            from models import SyncState
+            etat = SyncState.get_ou_creer()
+            etat.mode = 'online'
+            db.session.commit()
+        return jsonify({'success': ok, 'message': 'Synchronisé, retour en mode normal' if ok else 'Echec de la synchronisation, voir logs serveur'})
+    else:
+        ok = db_failover.pull_refresh_from_neon()
+        try:
+            from utils import sheets_mirror
+            sheets_mirror.sync_all()
+        except Exception:
+            pass
+        return jsonify({'success': ok, 'message': 'Mirroir local rafraîchi depuis Neon (+ Google Sheets)' if ok else 'Echec du rafraîchissement'})
+
+
+@app.route('/guide')
+@login_required
+def guide_utilisation():
+    """Guide d'utilisation de l'application, à destination des utilisateurs
+    (pas un manuel technique) — accessible à tout le monde, pas seulement
+    aux admins."""
+    return render_template('guide.html')
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if 'user_id' in session:
@@ -407,7 +433,26 @@ def index():
             all_worksheets = spreadsheet.worksheets()
         except Exception as e:
             print(f"❌ Erreur accès Google Sheets: {e}")
-            flash('Erreur de connexion à la base de données', 'danger')
+            # ⭐ Google Sheets injoignable (coupure) : on tente une connexion
+            # via le miroir local — voir utils/sheets_mirror.py
+            try:
+                from utils.sheets_mirror import tenter_connexion_hors_ligne
+                infos = tenter_connexion_hors_ligne(email, hash_password(password))
+            except Exception:
+                infos = None
+            if infos:
+                session['user_id'] = infos['user_id']
+                session['user_name'] = infos['user_name']
+                session['structure_id'] = infos['structure_id']
+                session['structure_nom'] = infos['structure_nom']
+                session['structure_email'] = infos['structure_email']
+                session['structure_logo'] = infos.get('structure_logo', '')
+                session['structure_telephone'] = infos['structure_telephone']
+                session['role'] = infos['role']
+                session['is_admin'] = infos['is_admin']
+                flash(f"Bienvenue {infos['user_name']} (mode hors-ligne — Google Sheets injoignable)", 'warning')
+                return redirect(url_for('dashboard'))
+            flash('Connexion à Google Sheets impossible, et aucun compte hors-ligne correspondant trouvé.', 'danger')
             return redirect(url_for('index'))
         
         user_trouve = False
@@ -1000,60 +1045,56 @@ def dashboard():
     
     total_patients = result if result else 0
     
-    today = datetime.now().strftime('%Y-%m-%d')
-    
-    # ========== VENTES ACTES ==========
-    ventes_actes = sheets_helper.get_all_records('ventes_actes')
-    ventes_actes_filtrees = [v for v in ventes_actes if str(v.get('structure_id')) == str(structure_id)]
-    
+    # ⭐ FIX : les ventes vivent dans Postgres (table `ventes`) depuis
+    # longtemps déjà — ce tableau de bord lisait encore d'anciennes feuilles
+    # Google Sheets ('ventes_actes'/'ventes_pharma') qui n'existent plus
+    # ("Feuille struct_X_ventes_actes non trouvée"), donc les compteurs du
+    # jour et le CA affichaient toujours zéro. Lecture directe en base,
+    # comme partout ailleurs dans l'application (historique des ventes,
+    # comptabilité...).
+    stats_jour = db.session.execute(text("""
+        SELECT type,
+               COUNT(*) as nb,
+               COALESCE(SUM(net_a_payer), 0) as ca
+        FROM ventes
+        WHERE structure_id = :structure_id
+        AND DATE(date_vente) = CURRENT_DATE
+        AND (statut IS NULL OR statut != 'annulee')
+        GROUP BY type
+    """), {'structure_id': structure_id}).fetchall()
+
     actes_today = 0
-    ca_actes_today = 0
-    
-    for v in ventes_actes_filtrees:
-        date_vente = v.get('date', '')
-        if date_vente and date_vente.startswith(today):
-            actes_today += 1
-            ca_actes_today += float(v.get('net_a_payer', 0))
-    
-    # ========== VENTES PHARMACIE ==========
-    ventes_pharma = sheets_helper.get_all_records('ventes_pharma')
-    ventes_pharma_filtrees = [v for v in ventes_pharma if str(v.get('structure_id')) == str(structure_id)]
-    
+    ca_actes_today = 0.0
     ventes_pharma_today = 0
-    ca_pharma_today = 0
-    
-    for v in ventes_pharma_filtrees:
-        date_vente = v.get('date', '')
-        if date_vente and date_vente.startswith(today):
-            ventes_pharma_today += 1
-            ca_pharma_today += float(v.get('net_a_payer', 0))
-    
-    # ========== CA TOTAL ==========
+    ca_pharma_today = 0.0
+    for row in stats_jour:
+        nb, ca = int(row.nb or 0), float(row.ca or 0)
+        if row.type in ('pharma', 'pharmacie'):
+            ventes_pharma_today += nb
+            ca_pharma_today += ca
+        else:  # actes, mixte, lunettes...
+            actes_today += nb
+            ca_actes_today += ca
+
     ca_today = ca_actes_today + ca_pharma_today
-    
+
     # ========== ACTIVITÉS RÉCENTES ==========
-    toutes_ventes = []
-    
-    for v in ventes_actes_filtrees:
-        toutes_ventes.append({
-            'id': v.get('ID'),
-            'type': 'actes',
-            'patient_nom': v.get('patient_nom', 'Patient'),
-            'date': v.get('date', ''),
-            'montant': float(v.get('net_a_payer', 0))
-        })
-    
-    for v in ventes_pharma_filtrees:
-        toutes_ventes.append({
-            'id': v.get('ID'),
-            'type': 'pharma',
-            'patient_nom': v.get('patient_nom', 'Patient'),
-            'date': v.get('date', ''),
-            'montant': float(v.get('net_a_payer', 0))
-        })
-    
-    toutes_ventes.sort(key=lambda x: x.get('date', ''), reverse=True)
-    recentes = toutes_ventes[:10]
+    ventes_recentes = db.session.execute(text("""
+        SELECT id, type, patient_nom, date_vente, net_a_payer
+        FROM ventes
+        WHERE structure_id = :structure_id
+        AND (statut IS NULL OR statut != 'annulee')
+        ORDER BY date_vente DESC
+        LIMIT 10
+    """), {'structure_id': structure_id}).fetchall()
+
+    recentes = [{
+        'id': r.id,
+        'type': 'pharma' if r.type in ('pharma', 'pharmacie') else (r.type or 'actes'),
+        'patient_nom': r.patient_nom or 'Patient',
+        'date': r.date_vente.strftime('%Y-%m-%d %H:%M') if r.date_vente else '',
+        'montant': float(r.net_a_payer or 0),
+    } for r in ventes_recentes]
     
     return render_template('dashboard.html',
                          total_patients=total_patients,
@@ -1102,13 +1143,13 @@ def patients():
         patients = db.execute_query("""
             SELECT id, nom, prenom, telephone, adresse, date_naissance,
                    type_assurance, taux_prise_charge, numero_assure,
-                   assurance2_nom, taux_assurance2, numero_assure2,
+                   assurance2_nom, taux_assurance2, numero_assure2, societe_assurance2,
                    personne_a_prevenir_nom, personne_a_prevenir_telephone, personne_a_prevenir_relation
-            FROM patients 
-            WHERE structure_id = %s 
+            FROM patients
+            WHERE structure_id = %s
             ORDER BY id DESC
         """, (structure_id,))
-        
+
         patients_list = []
         if patients:
             for p in patients:
@@ -1128,6 +1169,7 @@ def patients():
                         'assurance2_nom': p.get('assurance2_nom', ''),
                         'taux_assurance2': p.get('taux_assurance2', 0),
                         'numero_assure2': p.get('numero_assure2', ''),
+                        'societe_assurance2': p.get('societe_assurance2', ''),
                         # 🔥 NOUVEAUX CHAMPS
                         'personne_a_prevenir_nom': p.get('personne_a_prevenir_nom', ''),
                         'personne_a_prevenir_telephone': p.get('personne_a_prevenir_telephone', ''),
@@ -1149,10 +1191,11 @@ def patients():
                         'assurance2_nom': p[9] if len(p) > 9 else '',
                         'taux_assurance2': p[10] if len(p) > 10 else 0,
                         'numero_assure2': p[11] if len(p) > 11 else '',
+                        'societe_assurance2': p[12] if len(p) > 12 else '',
                         # 🔥 NOUVEAUX CHAMPS
-                        'personne_a_prevenir_nom': p[12] if len(p) > 12 else '',
-                        'personne_a_prevenir_telephone': p[13] if len(p) > 13 else '',
-                        'personne_a_prevenir_relation': p[14] if len(p) > 14 else ''
+                        'personne_a_prevenir_nom': p[13] if len(p) > 13 else '',
+                        'personne_a_prevenir_telephone': p[14] if len(p) > 14 else '',
+                        'personne_a_prevenir_relation': p[15] if len(p) > 15 else ''
                     })
         
         return render_template('patients.html', patients=patients_list)
@@ -1162,22 +1205,50 @@ def patients():
         flash(f'Erreur: {str(e)}', 'error')
         return render_template('patients.html', patients=[])
 
+@app.route('/api/societes-assurance', methods=['GET'])
+@login_required
+def api_societes_assurance():
+    """Autocomplétion : sociétés déjà saisies pour une assurance
+    complémentaire donnée (?assurance=GTA) — pour proposer un choix au lieu
+    d'une re-saisie manuelle."""
+    structure_id = session.get('structure_id')
+    assurance = (request.args.get('assurance') or '').strip()
+    if not structure_id or not assurance:
+        return jsonify([])
+    try:
+        rows = db.execute_query("""
+            SELECT nom_societe FROM societes_assurance
+            WHERE structure_id = %s AND assurance_nom = %s
+            ORDER BY nom_societe
+        """, (structure_id, assurance))
+        return jsonify([r['nom_societe'] for r in (rows or [])])
+    except Exception as e:
+        print(f"❌ api_societes_assurance: {e}")
+        return jsonify([])
+
+
 @app.route('/api/patients', methods=['POST'])
 @login_required
 def api_add_patient():
     try:
         data = request.json
         structure_id = session.get('structure_id')
-        
+
         # 🔥 Ajouter les colonnes de la personne à prévenir
+        # ⭐ created_at fixé explicitement à NOW() — ne pas compter sur un
+        # DEFAULT au niveau de la table (absent sur certaines bases, ce qui
+        # laissait created_at NULL et cassait les statistiques
+        # aujourd'hui/semaine/mois/année de la page Patients, qui restaient
+        # bloquées à zéro malgré des patients bien enregistrés).
         result = db.execute_query("""
             INSERT INTO patients (
-                structure_id, nom, prenom, telephone, adresse, 
+                structure_id, nom, prenom, telephone, adresse,
                 date_naissance, type_assurance, taux_prise_charge, numero_assure,
-                assurance2_nom, taux_assurance2, numero_assure2,
-                personne_a_prevenir_nom, personne_a_prevenir_telephone, personne_a_prevenir_relation
+                assurance2_nom, taux_assurance2, numero_assure2, societe_assurance2,
+                personne_a_prevenir_nom, personne_a_prevenir_telephone, personne_a_prevenir_relation,
+                created_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
             RETURNING id
         """, (
             structure_id,
@@ -1192,15 +1263,17 @@ def api_add_patient():
             data.get('assurance2_nom'),
             data.get('taux_assurance2', 0),
             data.get('numero_assure2'),
+            data.get('societe_assurance2'),
             data.get('personne_a_prevenir_nom'),
             data.get('personne_a_prevenir_telephone'),
             data.get('personne_a_prevenir_relation')
         ))
-        
+
         if result and len(result) > 0:
+            upsert_societe_assurance(structure_id, data.get('assurance2_nom'), data.get('societe_assurance2'))
             return jsonify({'success': True, 'id': result[0]['id']})
         return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
-        
+
     except Exception as e:
         print(f"❌ Erreur: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1249,6 +1322,7 @@ def api_get_patient(id):
                 'assurance2_nom': row.get('assurance2_nom', ''),
                 'taux_assurance2': row.get('taux_assurance2', 0),
                 'numero_assure2': row.get('numero_assure2', ''),
+                'societe_assurance2': row.get('societe_assurance2', ''),
                 'personne_a_prevenir_nom': row.get('personne_a_prevenir_nom', ''),
                 'personne_a_prevenir_telephone': row.get('personne_a_prevenir_telephone', ''),
                 'personne_a_prevenir_relation': row.get('personne_a_prevenir_relation', ''),
@@ -1275,13 +1349,13 @@ def api_get_patients():
         patients = db.execute_query("""
             SELECT id, nom, prenom, telephone, adresse, date_naissance,
                    type_assurance, taux_prise_charge, numero_assure,
-                   assurance2_nom, taux_assurance2, numero_assure2,
+                   assurance2_nom, taux_assurance2, numero_assure2, societe_assurance2,
                    personne_a_prevenir_nom, personne_a_prevenir_telephone, personne_a_prevenir_relation
-            FROM patients 
-            WHERE structure_id = %s 
+            FROM patients
+            WHERE structure_id = %s
             ORDER BY nom, prenom
         """, (structure_id,))
-        
+
         result = []
         for p in patients:
             if isinstance(p, dict):
@@ -1299,6 +1373,7 @@ def api_get_patients():
                     'assurance2_nom': p.get('assurance2_nom', ''),
                     'taux_assurance2': p.get('taux_assurance2', 0),
                     'numero_assure2': p.get('numero_assure2', ''),
+                    'societe_assurance2': p.get('societe_assurance2', ''),
                     # 🔥 NOUVEAUX CHAMPS
                     'personne_a_prevenir_nom': p.get('personne_a_prevenir_nom', ''),
                     'personne_a_prevenir_telephone': p.get('personne_a_prevenir_telephone', ''),
@@ -1319,10 +1394,11 @@ def api_get_patients():
                     'assurance2_nom': p[9] if len(p) > 9 else '',
                     'taux_assurance2': p[10] if len(p) > 10 else 0,
                     'numero_assure2': p[11] if len(p) > 11 else '',
+                    'societe_assurance2': p[12] if len(p) > 12 else '',
                     # 🔥 NOUVEAUX CHAMPS
-                    'personne_a_prevenir_nom': p[12] if len(p) > 12 else '',
-                    'personne_a_prevenir_telephone': p[13] if len(p) > 13 else '',
-                    'personne_a_prevenir_relation': p[14] if len(p) > 14 else ''
+                    'personne_a_prevenir_nom': p[13] if len(p) > 13 else '',
+                    'personne_a_prevenir_telephone': p[14] if len(p) > 14 else '',
+                    'personne_a_prevenir_relation': p[15] if len(p) > 15 else ''
                 })
         
         return jsonify(result)
@@ -1764,22 +1840,26 @@ def facture(vente_id, type):
     prise_en_charge2 = 0
     numero_assure2 = ''
     
-    # CORRECTION : Accepter 'pharma' et 'pharmacie'
-    type_bd = 'pharmacie' if type == 'pharma' else type
-    
-    # Lire depuis NEON
+    # ⭐ FIX : même correctif que /recu — ne pas exiger v.type = %s en plus
+    # de l'id, sinon une vente réelle mais dont le type stocké diverge du
+    # type de l'URL (ex: mixte) renvoie un faux "non trouvée". On récupère
+    # par id + structure_id, puis on déduit type_bd de la ligne trouvée.
     vente = db.execute_query("""
         SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
-               p.assurance2_nom as patient_assurance2_nom, 
-               p.taux_assurance2 as patient_taux_assurance2, 
+               p.assurance2_nom as patient_assurance2_nom,
+               p.taux_assurance2 as patient_taux_assurance2,
                p.numero_assure2
         FROM ventes v
         LEFT JOIN patients p ON v.patient_id = p.id
-        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
-    """, (vente_id, structure_id, type_bd))
-    
+        WHERE v.id = %s AND v.structure_id = %s
+    """, (vente_id, structure_id))
+
     if not vente or len(vente) == 0:
         return f"Vente {vente_id} non trouvée", 404
+
+    v0 = vente[0]
+    type_bd_stockee = v0.get('type') if isinstance(v0, dict) else (v0[3] if len(v0) > 3 else None)
+    type_bd = type_bd_stockee or ('pharmacie' if type == 'pharma' else type)
     
     if isinstance(vente[0], dict):
         v = vente[0]
@@ -1803,6 +1883,7 @@ def facture(vente_id, type):
         taux_assurance2 = float(v.get('taux_assurance2', 0))
         prise_en_charge2 = float(v.get('prise_en_charge2', 0))
         numero_assure2 = v.get('numero_assure2', '')
+        societe_assurance2 = v.get('societe_assurance2', '')
         
         # Récupérer le taux original du patient
         patient_taux_original = float(v.get('patient_taux_assurance2', 0))
@@ -1880,6 +1961,7 @@ def facture(vente_id, type):
                          taux_assurance2=taux_assurance2,
                          prise_en_charge2=prise_en_charge2,
                          numero_assure2=numero_assure2,
+                         societe_assurance2=societe_assurance2,
                          assurance2_appliquee=assurance2_appliquee,
                          taux_modifie=taux_modifie,
                          taux_original=taux_original)
@@ -1922,22 +2004,26 @@ def facture_structure(vente_id, type):
     prise_en_charge2 = 0
     numero_assure2 = ''
     
-    # CORRECTION : Accepter 'pharma' et 'pharmacie'
-    type_bd = 'pharmacie' if type == 'pharma' else type
-    
-    # Lire depuis NEON
+    # ⭐ FIX : même correctif que /recu — ne pas exiger v.type = %s en plus
+    # de l'id, sinon une vente réelle mais dont le type stocké diverge du
+    # type de l'URL (ex: mixte) renvoie un faux "non trouvée". On récupère
+    # par id + structure_id, puis on déduit type_bd de la ligne trouvée.
     vente = db.execute_query("""
         SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
-               p.assurance2_nom as patient_assurance2_nom, 
-               p.taux_assurance2 as patient_taux_assurance2, 
+               p.assurance2_nom as patient_assurance2_nom,
+               p.taux_assurance2 as patient_taux_assurance2,
                p.numero_assure2
         FROM ventes v
         LEFT JOIN patients p ON v.patient_id = p.id
-        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
-    """, (vente_id, structure_id, type_bd))
-    
+        WHERE v.id = %s AND v.structure_id = %s
+    """, (vente_id, structure_id))
+
     if not vente or len(vente) == 0:
         return f"Vente {vente_id} non trouvée", 404
+
+    v0 = vente[0]
+    type_bd_stockee = v0.get('type') if isinstance(v0, dict) else (v0[3] if len(v0) > 3 else None)
+    type_bd = type_bd_stockee or ('pharmacie' if type == 'pharma' else type)
     
     if isinstance(vente[0], dict):
         v = vente[0]
@@ -1961,6 +2047,7 @@ def facture_structure(vente_id, type):
         taux_assurance2 = float(v.get('taux_assurance2', 0))
         prise_en_charge2 = float(v.get('prise_en_charge2', 0))
         numero_assure2 = v.get('numero_assure2', '')
+        societe_assurance2 = v.get('societe_assurance2', '')
         
         # Récupérer le taux original du patient
         patient_taux_original = float(v.get('patient_taux_assurance2', 0))
@@ -2038,6 +2125,7 @@ def facture_structure(vente_id, type):
                          taux_assurance2=taux_assurance2,
                          prise_en_charge2=prise_en_charge2,
                          numero_assure2=numero_assure2,
+                         societe_assurance2=societe_assurance2,
                          assurance2_appliquee=assurance2_appliquee,
                          taux_modifie=taux_modifie,
                          taux_original=taux_original)
@@ -2201,45 +2289,45 @@ def recu(vente_id, type):
     aide_hospitaliere = 0
     assurance_principale_active = True
     
-    # 🔥🔥🔥 CORRECTION : Gérer le type 'mixte' 🔥🔥🔥
-    # Si type = 'mixte', on ne filtre pas sur le type de vente
-    if type == 'mixte':
-        vente = db.execute_query("""
-            SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
-                   p.assurance2_nom as patient_assurance2_nom, 
-                   p.taux_assurance2 as patient_taux_assurance2, 
-                   p.numero_assure2,
-                   v.reste_a_payer,
-                   v.base_remboursement,
-                   v.assurance_principale_active,
-                   v.taux_aide,
-                   v.aide_hospitaliere
-            FROM ventes v
-            LEFT JOIN patients p ON v.patient_id = p.id
-            WHERE v.id = %s AND v.structure_id = %s
-        """, (vente_id, structure_id))
+    # ⭐ FIX : la route exigeait avant AND v.type = %s en plus de l'id — si le
+    # type stocké en base diverge de la moindre façon du type demandé dans
+    # l'URL (ex: vente réellement 'mixte' mais reçu ouvert avec type='actes',
+    # ou toute incohérence de saisie historique), une vente pourtant bien
+    # réelle et visible partout ailleurs dans l'appli renvoyait un 404. On
+    # cherche maintenant par id + structure_id UNIQUEMENT (identifiant fiable
+    # à lui seul), puis on détermine le type EFFECTIF à partir de la ligne
+    # trouvée pour savoir quels articles afficher.
+    vente = db.execute_query("""
+        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
+               p.assurance2_nom as patient_assurance2_nom,
+               p.taux_assurance2 as patient_taux_assurance2,
+               p.numero_assure2,
+               v.reste_a_payer,
+               v.base_remboursement,
+               v.assurance_principale_active,
+               v.taux_aide,
+               v.aide_hospitaliere
+        FROM ventes v
+        LEFT JOIN patients p ON v.patient_id = p.id
+        WHERE v.id = %s AND v.structure_id = %s
+    """, (vente_id, structure_id))
+
+    type_bd_stockee = None
+    if vente and len(vente) > 0:
+        v0 = vente[0]
+        type_bd_stockee = v0.get('type') if isinstance(v0, dict) else (v0[3] if len(v0) > 3 else None)
+
+    if type == 'mixte' or type_bd_stockee == 'mixte':
         type_bd = 'mixte'
+    elif type_bd_stockee:
+        type_bd = type_bd_stockee  # ⭐ on fait confiance à la valeur réelle en base
     else:
         type_bd = 'pharmacie' if type == 'pharma' else type
-        vente = db.execute_query("""
-            SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
-                   p.assurance2_nom as patient_assurance2_nom, 
-                   p.taux_assurance2 as patient_taux_assurance2, 
-                   p.numero_assure2,
-                   v.reste_a_payer,
-                   v.base_remboursement,
-                   v.assurance_principale_active,
-                   v.taux_aide,
-                   v.aide_hospitaliere
-            FROM ventes v
-            LEFT JOIN patients p ON v.patient_id = p.id
-            WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
-        """, (vente_id, structure_id, type_bd))
-    
-    print(f"🔍 Recherche vente {vente_id} (type reçu: {type}, type BD: {type_bd})")
-    
+
+    print(f"🔍 Recherche vente {vente_id} (type reçu: {type}, type en base: {type_bd_stockee}, type retenu: {type_bd})")
+
     if not vente or len(vente) == 0:
-        return f"Vente {vente_id} non trouvée (type: {type_bd})", 404
+        return f"Vente {vente_id} non trouvée (structure {structure_id})", 404
     
     if isinstance(vente[0], dict):
         v = vente[0]
@@ -2262,6 +2350,7 @@ def recu(vente_id, type):
         taux_assurance2 = float(v.get('taux_assurance2', 0))
         prise_en_charge2 = float(v.get('prise_en_charge2', 0))
         numero_assure2 = v.get('numero_assure2', '')
+        societe_assurance2 = v.get('societe_assurance2', '')
         
         assurance2_appliquee = assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and prise_en_charge2 > 0
         
@@ -2303,7 +2392,12 @@ def recu(vente_id, type):
                 produits_data = []
         
         # 🔥🔥🔥 SI MIXTE : Prendre actes + produits 🔥🔥🔥
-        if type == 'mixte':
+        # ⭐ FIX : se base sur type_bd (le type réellement stocké en base,
+        # déterminé plus haut) plutôt que sur `type` (paramètre d'URL, qui
+        # peut être un ancien lien 'actes'/'pharma' pour une vente en réalité
+        # mixte) — sinon une vente mixte affiche uniquement ses actes OU ses
+        # produits selon le lien utilisé pour ouvrir le reçu.
+        if type_bd == 'mixte':
             # Utiliser actes_data + produits_data
             tous_articles = actes_data + produits_data
             print(f"📊 MIXTE: {len(actes_data)} actes + {len(produits_data)} produits = {len(tous_articles)} articles")
@@ -2460,6 +2554,7 @@ def recu(vente_id, type):
                          taux_assurance2=taux_assurance2,
                          prise_en_charge2=prise_en_charge2,
                          numero_assure2=numero_assure2,
+                         societe_assurance2=societe_assurance2,
                          assurance2_appliquee=assurance2_appliquee,
                          taux_modifie=taux_modifie,
                          taux_original=taux_original,
@@ -2509,22 +2604,26 @@ def recu_structure(vente_id, type):
     prise_en_charge2 = 0
     numero_assure2 = ''
     
-    # CORRECTION : Accepter 'pharma' et 'pharmacie'
-    type_bd = 'pharmacie' if type == 'pharma' else type
-    
-    # Lire depuis NEON
+    # ⭐ FIX : même correctif que /recu — ne pas exiger v.type = %s en plus
+    # de l'id, sinon une vente réelle mais dont le type stocké diverge du
+    # type de l'URL (ex: mixte) renvoie un faux "non trouvée". On récupère
+    # par id + structure_id, puis on déduit type_bd de la ligne trouvée.
     vente = db.execute_query("""
         SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
-               p.assurance2_nom as patient_assurance2_nom, 
-               p.taux_assurance2 as patient_taux_assurance2, 
+               p.assurance2_nom as patient_assurance2_nom,
+               p.taux_assurance2 as patient_taux_assurance2,
                p.numero_assure2
         FROM ventes v
         LEFT JOIN patients p ON v.patient_id = p.id
-        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
-    """, (vente_id, structure_id, type_bd))
-    
+        WHERE v.id = %s AND v.structure_id = %s
+    """, (vente_id, structure_id))
+
     if not vente or len(vente) == 0:
         return f"Vente {vente_id} non trouvée", 404
+
+    v0 = vente[0]
+    type_bd_stockee = v0.get('type') if isinstance(v0, dict) else (v0[3] if len(v0) > 3 else None)
+    type_bd = type_bd_stockee or ('pharmacie' if type == 'pharma' else type)
     
     if isinstance(vente[0], dict):
         v = vente[0]
@@ -2547,6 +2646,7 @@ def recu_structure(vente_id, type):
         taux_assurance2 = float(v.get('taux_assurance2', 0))
         prise_en_charge2 = float(v.get('prise_en_charge2', 0))
         numero_assure2 = v.get('numero_assure2', '')
+        societe_assurance2 = v.get('societe_assurance2', '')
         
         # Récupérer le taux original du patient
         patient_taux_original = float(v.get('patient_taux_assurance2', 0))
@@ -2623,6 +2723,7 @@ def recu_structure(vente_id, type):
                          taux_assurance2=taux_assurance2,
                          prise_en_charge2=prise_en_charge2,
                          numero_assure2=numero_assure2,
+                         societe_assurance2=societe_assurance2,
                          assurance2_appliquee=assurance2_appliquee,
                          taux_modifie=taux_modifie,
                          taux_original=taux_original)
@@ -3483,11 +3584,18 @@ def api_historique_medecin(id):
             stats_data = {'total': 0, 'termines': 0, 'annules': 0, 'confirmes': 0, 'programmes': 0, 'reportes': 0}
         
         # 3. Recuperer l'historique - TOUT EN STRING avec TO_CHAR
+        # ⭐ FIX : la table rendez_vous a DEUX paires de colonnes date/heure
+        # (date_rdv/heure_rdv ET date_rendez_vous/heure_rendez_vous, issues
+        # de deux flux de creation de RDV differents dans l'app). Cette
+        # requete ne lisait que date_rdv/heure_rdv, systematiquement vides
+        # pour les RDV crees via l'autre flux -> l'historique du medecin
+        # semblait vide/casse. On prend la colonne renseignee, quelle
+        # qu'elle soit.
         historique = db.execute_query("""
-            SELECT 
+            SELECT
                 r.id,
-                TO_CHAR(r.date_rdv, 'YYYY-MM-DD') as date_rdv,
-                TO_CHAR(r.heure_rdv, 'HH24:MI') as heure_rdv,
+                TO_CHAR(COALESCE(r.date_rendez_vous, r.date_rdv), 'YYYY-MM-DD') as date_rdv,
+                COALESCE(r.heure_rendez_vous, TO_CHAR(r.heure_rdv, 'HH24:MI')) as heure_rdv,
                 COALESCE(r.motif, '') as motif,
                 COALESCE(r.statut, 'programme') as statut,
                 COALESCE(r.duree, 30) as duree,
@@ -3496,7 +3604,8 @@ def api_historique_medecin(id):
                 TO_CHAR(r.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at
             FROM rendez_vous r
             WHERE r.medecin_id = %s AND r.structure_id = %s
-            ORDER BY r.date_rdv DESC, r.heure_rdv DESC
+            ORDER BY COALESCE(r.date_rendez_vous, r.date_rdv) DESC,
+                     COALESCE(r.heure_rendez_vous, TO_CHAR(r.heure_rdv, 'HH24:MI')) DESC
             LIMIT 50
         """, (id, structure_id))
         
@@ -3528,11 +3637,12 @@ def api_historique_medecin(id):
                     'created_at': r[8] if len(r) > 8 else None
                 })
         
-        # 4. Statistiques par mois
+        # 4. Statistiques par mois (même fix que ci-dessus : COALESCE des
+        # deux paires de colonnes date possibles)
         stats_mois = db.execute_query("""
-            SELECT 
-                EXTRACT(YEAR FROM date_rdv) as annee,
-                EXTRACT(MONTH FROM date_rdv) as mois,
+            SELECT
+                EXTRACT(YEAR FROM COALESCE(date_rendez_vous, date_rdv)) as annee,
+                EXTRACT(MONTH FROM COALESCE(date_rendez_vous, date_rdv)) as mois,
                 COUNT(*) as total
             FROM rendez_vous
             WHERE medecin_id = %s AND structure_id = %s AND statut = 'termine'
@@ -3613,41 +3723,59 @@ def get_medecins():
             honoraire = m[8] if len(m) > 8 else 0
             actif = m[9] if len(m) > 9 else True
         
+        # ⭐ FIX (2 bugs corrigés ici) :
+        # 1) `db.execute_query` retourne toujours des dicts (RealDictCursor) —
+        #    faire `resultat[0][0]` levait `KeyError: 0` a chaque appel, ce
+        #    qui faisait planter la liste ENTIERE des medecins (500) des
+        #    qu'une structure avait au moins un medecin.
+        # 2) COALESCE(date_rendez_vous, date_rdv) — la table a deux paires de
+        #    colonnes date/heure selon le flux de creation du RDV ; se fier
+        #    uniquement a date_rdv (souvent vide) faisait ressortir 0
+        #    consultation partout meme une fois le crash corrige.
+        def _scalar(rows, cle='total'):
+            if not rows:
+                return 0
+            r0 = rows[0]
+            if isinstance(r0, dict):
+                return r0.get(cle) or next(iter(r0.values()), 0) or 0
+            return r0[0] if len(r0) > 0 else 0
+
         # Compter les consultations terminees
         nb_total = db.execute_query("""
-            SELECT COUNT(*) FROM rendez_vous 
+            SELECT COUNT(*) as total FROM rendez_vous
             WHERE medecin_id = %s AND statut = 'termine'
         """, (med_id,))
-        nb_total = nb_total[0][0] if nb_total else 0
-        
+        nb_total = _scalar(nb_total)
+
         # Ce mois
         now = datetime.now()
         nb_mois = db.execute_query("""
-            SELECT COUNT(*) FROM rendez_vous 
-            WHERE medecin_id = %s AND statut = 'termine' 
-            AND EXTRACT(YEAR FROM date_rdv) = %s 
-            AND EXTRACT(MONTH FROM date_rdv) = %s
+            SELECT COUNT(*) as total FROM rendez_vous
+            WHERE medecin_id = %s AND statut = 'termine'
+            AND EXTRACT(YEAR FROM COALESCE(date_rendez_vous, date_rdv)) = %s
+            AND EXTRACT(MONTH FROM COALESCE(date_rendez_vous, date_rdv)) = %s
         """, (med_id, now.year, now.month))
-        nb_mois = nb_mois[0][0] if nb_mois else 0
-        
+        nb_mois = _scalar(nb_mois)
+
         # Cette semaine
         today = date.today()
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
         nb_semaine = db.execute_query("""
-            SELECT COUNT(*) FROM rendez_vous 
-            WHERE medecin_id = %s AND statut = 'termine' 
-            AND date_rdv >= %s AND date_rdv <= %s
+            SELECT COUNT(*) as total FROM rendez_vous
+            WHERE medecin_id = %s AND statut = 'termine'
+            AND COALESCE(date_rendez_vous, date_rdv) >= %s AND COALESCE(date_rendez_vous, date_rdv) <= %s
         """, (med_id, week_start, week_end))
-        nb_semaine = nb_semaine[0][0] if nb_semaine else 0
-        
+        nb_semaine = _scalar(nb_semaine)
+
         # Derniere consultation
         dernier = db.execute_query("""
-            SELECT date_rdv FROM rendez_vous 
-            WHERE medecin_id = %s AND statut = 'termine' 
-            ORDER BY date_rdv DESC, heure_rdv DESC LIMIT 1
+            SELECT COALESCE(date_rendez_vous, date_rdv) as derniere FROM rendez_vous
+            WHERE medecin_id = %s AND statut = 'termine'
+            ORDER BY COALESCE(date_rendez_vous, date_rdv) DESC, COALESCE(heure_rendez_vous, TO_CHAR(heure_rdv, 'HH24:MI')) DESC LIMIT 1
         """, (med_id,))
-        derniere_date = dernier[0][0].isoformat() if dernier and len(dernier) > 0 else None
+        derniere_val = _scalar(dernier, cle='derniere')
+        derniere_date = derniere_val.isoformat() if derniere_val and hasattr(derniere_val, 'isoformat') else None
         
         result.append({
             'id': med_id,
@@ -3689,15 +3817,15 @@ def get_medecin_details(id):
             m.honoraire_consultation,
             m.actif,
             COUNT(CASE WHEN r.statut = 'termine' THEN 1 END) as total_consultations,
-            COUNT(CASE WHEN r.statut = 'termine' 
-                AND EXTRACT(YEAR FROM r.date_rdv) = EXTRACT(YEAR FROM CURRENT_DATE)
-                AND EXTRACT(MONTH FROM r.date_rdv) = EXTRACT(MONTH FROM CURRENT_DATE) 
+            COUNT(CASE WHEN r.statut = 'termine'
+                AND EXTRACT(YEAR FROM COALESCE(r.date_rendez_vous, r.date_rdv)) = EXTRACT(YEAR FROM CURRENT_DATE)
+                AND EXTRACT(MONTH FROM COALESCE(r.date_rendez_vous, r.date_rdv)) = EXTRACT(MONTH FROM CURRENT_DATE)
                 THEN 1 END) as consultations_mois,
-            COUNT(CASE WHEN r.statut = 'termine' 
-                AND r.date_rdv >= date_trunc('week', CURRENT_DATE)
-                AND r.date_rdv <= date_trunc('week', CURRENT_DATE) + interval '6 days'
+            COUNT(CASE WHEN r.statut = 'termine'
+                AND COALESCE(r.date_rendez_vous, r.date_rdv) >= date_trunc('week', CURRENT_DATE)
+                AND COALESCE(r.date_rendez_vous, r.date_rdv) <= date_trunc('week', CURRENT_DATE) + interval '6 days'
                 THEN 1 END) as consultations_semaine,
-            MAX(CASE WHEN r.statut = 'termine' THEN r.date_rdv END) as derniere_consultation
+            MAX(CASE WHEN r.statut = 'termine' THEN COALESCE(r.date_rendez_vous, r.date_rdv) END) as derniere_consultation
         FROM medecins m
         LEFT JOIN rendez_vous r ON m.id = r.medecin_id
         WHERE m.id = %s AND m.structure_id = %s
@@ -3754,11 +3882,13 @@ def get_medecin_consultations(id):
     structure_id = session.get('structure_id')
     
     rendez_vous = db.execute_query("""
-        SELECT r.id, r.date_rdv, r.heure_rdv, r.patient_nom, 
-               r.patient_telephone, r.motif, r.statut, r.duree
+        SELECT r.id, COALESCE(r.date_rendez_vous, r.date_rdv) as date_rdv,
+               COALESCE(r.heure_rendez_vous, TO_CHAR(r.heure_rdv, 'HH24:MI')) as heure_rdv,
+               r.patient_nom, r.patient_telephone, r.motif, r.statut, r.duree
         FROM rendez_vous r
         WHERE r.medecin_id = %s AND r.structure_id = %s
-        ORDER BY r.date_rdv DESC, r.heure_rdv DESC
+        ORDER BY COALESCE(r.date_rendez_vous, r.date_rdv) DESC,
+                 COALESCE(r.heure_rendez_vous, TO_CHAR(r.heure_rdv, 'HH24:MI')) DESC
     """, (id, structure_id))
     
     result = []
@@ -4638,7 +4768,7 @@ def mes_rendez_vous():
     
     if not patient_id:
         flash('Veuillez vous connecter en tant que patient', 'warning')
-        return redirect(url_for('login'))
+        return redirect(url_for('index'))
     
     # ============================================================
     # RÉCUPÉRER LES INFORMATIONS DU PATIENT
@@ -5374,11 +5504,11 @@ def api_update_patient(patient_id):
         
         # 🔥 Ajouter les colonnes de la personne à prévenir
         db.execute_query("""
-            UPDATE patients 
+            UPDATE patients
             SET nom = %s, prenom = %s, telephone = %s, adresse = %s,
                 date_naissance = %s,
                 type_assurance = %s, taux_prise_charge = %s, numero_assure = %s,
-                assurance2_nom = %s, taux_assurance2 = %s, numero_assure2 = %s,
+                assurance2_nom = %s, taux_assurance2 = %s, numero_assure2 = %s, societe_assurance2 = %s,
                 personne_a_prevenir_nom = %s, personne_a_prevenir_telephone = %s, personne_a_prevenir_relation = %s
             WHERE id = %s AND structure_id = %s
         """, (
@@ -5393,13 +5523,16 @@ def api_update_patient(patient_id):
             data.get('assurance2_nom'),
             data.get('taux_assurance2', 0),
             data.get('numero_assure2'),
+            data.get('societe_assurance2'),
             data.get('personne_a_prevenir_nom'),
             data.get('personne_a_prevenir_telephone'),
             data.get('personne_a_prevenir_relation'),
             patient_id,
             structure_id
         ))
-        
+
+        upsert_societe_assurance(structure_id, data.get('assurance2_nom'), data.get('societe_assurance2'))
+
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -6018,16 +6151,17 @@ def api_vente_pharma():
         taux_assurance = float(data.get('taux_assurance', 0))
         assurance2_nom = data.get('assurance2_nom', '')
         taux_assurance2 = float(data.get('taux_assurance2', 0))
+        societe_assurance2 = data.get('societe_assurance2', '') or None
         prise_en_charge = float(data.get('prise_en_charge', 0))
         prise_en_charge2 = float(data.get('prise_en_charge2', 0))
-        
+
         # 🔥 Récupérer le montant donné et le rendu
         montant_donne = float(data.get('montant_donne', 0))
         rendu = float(data.get('rendu', 0))
-        
+
         # 🔥 Récupérer le base_remboursement (PBR total)
         base_remboursement = float(data.get('base_remboursement', 0))
-        
+
         # 🔥 Récupérer le reste à payer
         reste_a_payer = float(data.get('reste_a_payer', 0))
         
@@ -6093,6 +6227,7 @@ def api_vente_pharma():
                 assurances,
                 assurance2_nom,
                 taux_assurance2,
+                societe_assurance2,
                 prise_en_charge2,
                 montant_donne,
                 rendu,
@@ -6104,7 +6239,7 @@ def api_vente_pharma():
                 taux_aide,
                 aide_hospitaliere
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, 'validee', %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, 'validee', %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             patient_id,
@@ -6121,6 +6256,7 @@ def api_vente_pharma():
             json.dumps(assurances_data, ensure_ascii=False),
             assurance2_nom,
             taux_assurance2,
+            societe_assurance2,
             prise_en_charge2,
             montant_donne,
             rendu,
@@ -6132,11 +6268,13 @@ def api_vente_pharma():
             taux_aide,                    # 🔥 NOUVEAU
             aide_hospitaliere             # 🔥 NOUVEAU
         ))
-        
+
         if not result or len(result) == 0:
             print("❌ Erreur: Aucun ID retourné pour la vente")
             return jsonify({'success': False, 'error': 'Erreur insertion vente'}), 500
-        
+
+        upsert_societe_assurance(structure_id, assurance2_nom, societe_assurance2)
+
         vente_id = result[0]['id']
         print(f"✅ Vente pharmacie enregistrée dans Neon avec ID: {vente_id}")
         
@@ -6243,22 +6381,34 @@ def api_vente_pharma():
             
         except Exception as e:
             print(f"⚠️ Erreur mise à jour solde: {e}")
-        
+
+        # ⭐⭐⭐ COMPTABILISATION AUTOMATIQUE (écriture SYSCOHADA validée) ⭐⭐⭐
+        try:
+            from services.comptabilite_service import generer_ecriture_vente
+            vente_orm = Vente.query.get(vente_id)
+            if vente_orm:
+                ecriture = generer_ecriture_vente(vente_orm, user_nom=vendeur)
+                if ecriture:
+                    print(f"🧾 Écriture comptable #{ecriture.id} générée pour la vente pharma #{vente_id}")
+        except Exception as e:
+            print(f"⚠️ Erreur génération écriture comptable (vente pharma #{vente_id} conservée): {e}")
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        try:
+            from services.journal_service import JournalService
+            JournalService.creer_mouvement(
+                structure_id=structure_id, categorie='vente_pharmacie',
+                description=f"Vente pharmacie #{vente_id}",
+                montant=montant_effectif, type_montant='credit',
+                reference_type='vente', reference_id=vente_id,
+                patient_id=patient_id, patient_nom=data.get('patient_nom', 'Patient'),
+                utilisateur_nom=vendeur,
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur journal d'activité (vente pharma #{vente_id}): {e}")
+
         # ========== 6. RETOUR API AVEC TOUTES LES INFOS ==========
         print(f"✅ Vente pharmacie #{vente_id} terminée avec succès!")
-
-        # ⭐⭐⭐ TRAITEMENT AUTOMATIQUE COMMENTÉ TEMPORAIREMENT ⭐⭐⭐
-        # try:
-        #     import threading
-        #     thread = threading.Thread(
-        #         target=traiter_vente_auto,
-        #         args=(vente_id, structure_id)
-        #     )
-        #     thread.daemon = True
-        #     thread.start()
-        #     print(f"⏳ Traitement automatique de la vente pharma #{vente_id} lancé en arrière-plan")
-        # except Exception as e:
-        #     print(f"⚠️ Erreur lancement traitement auto pharma: {e}")
 
         return jsonify({
             'success': True, 
@@ -6274,72 +6424,6 @@ def api_vente_pharma():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
-
-# app.py - Après la route pharma
-
-def traiter_vente_auto(vente_id, structure_id):
-    """
-    Traite automatiquement une vente (valable pour actes ET pharmacie)
-    """
-    from sqlalchemy import text
-    import json
-    from datetime import date
-    from utils.categorisation import categoriser_acte
-    
-    with app.app_context():
-        try:
-            print(f"🚀 Traitement automatique de la vente #{vente_id}")
-            
-            # ⭐ Récupérer la vente
-            vente = Vente.query.get(vente_id)
-            if not vente:
-                print(f"❌ Vente #{vente_id} non trouvée")
-                return
-            
-            # ⭐ Pour la pharmacie, les produits sont déjà catégorisés (compte 712)
-            # On les marque simplement comme traités
-            if vente.type == 'pharmacie':
-                vente.traite_comptable = True
-                vente.ecriture_generee = True
-                db.session.commit()
-                print(f"✅ Vente pharmacie #{vente_id} traitée")
-                return
-            
-            # ⭐ Pour les actes : catégoriser
-            if not vente.traite_comptable:
-                actes = vente.actes if isinstance(vente.actes, list) else []
-                
-                if actes:
-                    actes_categorises = []
-                    for acte in actes:
-                        if isinstance(acte, dict):
-                            nom = acte.get('nom', '')
-                            info = categoriser_acte(nom)
-                            acte['categorie'] = info['categorie']
-                            acte['compte'] = info['compte']
-                            acte['code'] = info['code']
-                            actes_categorises.append(acte)
-                    
-                    vente.categorie_actes = actes_categorises
-                    print(f"✅ Vente #{vente_id} catégorisée ({len(actes_categorises)} actes)")
-                
-                vente.traite_comptable = True
-                db.session.commit()
-            
-            # ⭐ Marquer comme générée
-            if not vente.ecriture_generee:
-                vente.ecriture_generee = True
-                db.session.commit()
-                print(f"✅ Vente #{vente_id} marquée comme générée")
-            
-            print(f"✅ Vente #{vente_id} traitée avec succès")
-            
-        except Exception as e:
-            print(f"❌ Erreur traitement auto vente #{vente_id}: {e}")
-            import traceback
-            traceback.print_exc()
-            db.session.rollback()
-
 
 @app.route('/api/produits/<int:id>/stock', methods=['GET'])
 @login_required
@@ -6562,16 +6646,17 @@ def api_add_acte_vente():
         taux_assurance = float(data.get('taux_assurance', 0))
         assurance2_nom = data.get('assurance2_nom', '')
         taux_assurance2 = float(data.get('taux_assurance2', 0))
+        societe_assurance2 = data.get('societe_assurance2', '') or None
         prise_en_charge = float(data.get('prise_en_charge', 0))
         prise_en_charge2 = float(data.get('prise_en_charge2', 0))
-        
+
         # 🔥 Récupérer le montant donné et le rendu
         montant_donne = float(data.get('montant_donne', 0))
         rendu = float(data.get('rendu', 0))
-        
+
         # 🔥 Récupérer le base_remboursement (PBR total)
         base_remboursement = float(data.get('base_remboursement', 0))
-        
+
         # 🔥 Récupérer le reste à payer
         reste_a_payer = float(data.get('reste_a_payer', 0))
         
@@ -6636,6 +6721,7 @@ def api_add_acte_vente():
                 assurances,
                 assurance2_nom,
                 taux_assurance2,
+                societe_assurance2,
                 prise_en_charge2,
                 montant_donne,
                 rendu,
@@ -6647,7 +6733,7 @@ def api_add_acte_vente():
                 taux_aide,
                 aide_hospitaliere
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             patient_id,
@@ -6664,6 +6750,7 @@ def api_add_acte_vente():
             json.dumps(assurances_data, ensure_ascii=False),
             assurance2_nom,
             taux_assurance2,
+            societe_assurance2,
             prise_en_charge2,
             montant_donne,
             rendu,
@@ -6675,11 +6762,13 @@ def api_add_acte_vente():
             taux_aide,                    # 🔥 NOUVEAU
             aide_hospitaliere             # 🔥 NOUVEAU
         ))
-        
+
         if not result or len(result) == 0:
             print("❌ Erreur: Aucun ID retourné pour la vente")
             return jsonify({'success': False, 'error': 'Erreur insertion vente'}), 500
-        
+
+        upsert_societe_assurance(structure_id, assurance2_nom, societe_assurance2)
+
         vente_id = result[0]['id']
         print(f"✅ Vente actes enregistrée dans Neon avec ID: {vente_id}")
         
@@ -6744,26 +6833,36 @@ def api_add_acte_vente():
             
         except Exception as e:
             print(f"⚠️ Erreur mise à jour solde: {e}")
-        
-        # ⭐⭐⭐ NOUVEAU : TRAITEMENT AUTOMATIQUE DE LA VENTE ⭐⭐⭐
-        #try:
-            # ⭐ Lancer le traitement en arrière-plan
-            #import threading
-            #thread = threading.Thread(
-            #    target=traiter_vente_auto,
-            #    args=(vente_id, structure_id)
-            #)
-            #thread.daemon = True  # Le thread s'arrête si l'app s'arrête
-            #thread.start()
-            #print(f"⏳ Traitement automatique de la vente #{vente_id} lancé en arrière-plan")
-        #except Exception as e:
-            #print(f"⚠️ Erreur lancement traitement auto: {e}")
-            # La vente est déjà enregistrée, on continue
-        
+
+        # ⭐⭐⭐ COMPTABILISATION AUTOMATIQUE (écriture SYSCOHADA validée) ⭐⭐⭐
+        try:
+            from services.comptabilite_service import generer_ecriture_vente
+            vente_orm = Vente.query.get(vente_id)
+            if vente_orm:
+                ecriture = generer_ecriture_vente(vente_orm, user_nom=user_name)
+                if ecriture:
+                    print(f"🧾 Écriture comptable #{ecriture.id} générée pour la vente #{vente_id}")
+        except Exception as e:
+            print(f"⚠️ Erreur génération écriture comptable (vente #{vente_id} conservée): {e}")
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        try:
+            from services.journal_service import JournalService
+            JournalService.creer_mouvement(
+                structure_id=structure_id, categorie='vente_actes',
+                description=f"Vente actes #{vente_id}",
+                montant=(montant_donne - rendu), type_montant='credit',
+                reference_type='vente', reference_id=vente_id,
+                patient_id=patient_id, patient_nom=data.get('patient_nom', 'Patient'),
+                utilisateur_nom=user_name,
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur journal d'activité (vente #{vente_id}): {e}")
+
         print(f"✅ Vente actes #{vente_id} terminée avec succès!")
-        
+
         return jsonify({
-            'success': True, 
+            'success': True,
             'vente_id': vente_id,
             'montant_donne': montant_donne,
             'reste_a_payer': reste_a_payer,
@@ -6777,42 +6876,12 @@ def api_add_acte_vente():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# ============================================================
-# ⭐ FONCTION DE TRAITEMENT AUTOMATIQUE (en dehors de la route)
-# ============================================================
-
-def traiter_vente_auto(vente_id, structure_id):
-    """
-    Traite automatiquement une vente :
-    1. Catégorisation des actes
-    2. Mise à jour du groupe de ventes du jour
-    """
-    with app.app_context():
-        try:
-            print(f"🚀 Traitement automatique de la vente #{vente_id}")
-            
-            # ⭐ 1. Récupérer la vente
-            vente = Vente.query.get(vente_id)
-            if not vente:
-                print(f"❌ Vente #{vente_id} non trouvée")
-                return
-            
-            # ⭐ 2. Catégoriser les actes (si pas déjà fait)
-            if not vente.traite_comptable:
-                from scripts.traiter_ventes import traiter_une_vente
-                traiter_une_vente(vente)
-                print(f"✅ Vente #{vente_id} catégorisée")
-            
-            # ⭐ 3. Mettre à jour ou créer l'écriture groupée
-            from scripts.generer_ecritures_groupes import mettre_a_jour_ecriture_groupee
-            mettre_a_jour_ecriture_groupee(vente_id)
-            
-            print(f"✅ Vente #{vente_id} traitée et intégrée au groupe")
-            
-        except Exception as e:
-            print(f"❌ Erreur traitement auto vente #{vente_id}: {e}")
-            import traceback
-            traceback.print_exc()
+# ⭐ NOTE : l'ancien pipeline de traitement asynchrone (catégorisation +
+# écritures groupées quotidiennes via scripts/traiter_ventes.py et
+# scripts/generer_ecritures_groupes.py) a été retiré — remplacé par la
+# génération synchrone, par transaction, dans services/comptabilite_service.py
+# (une écriture par vente/paiement, immédiatement validée). Ces scripts
+# restent dans le dépôt pour référence mais ne sont plus appelés depuis l'app.
 
 @app.route('/api/ventes/all')
 @login_required
@@ -6834,19 +6903,21 @@ def api_get_all_ventes():
                 v.produits, 
                 v.created_by_nom, 
                 v.statut,
-                v.assurance2_nom, 
-                v.taux_assurance2, 
+                v.assurance2_nom,
+                v.taux_assurance2,
                 v.prise_en_charge2,
-                v.assurances, 
-                v.montant_donne, 
-                v.rendu, 
+                v.societe_assurance2,
+                v.assurances,
+                v.montant_donne,
+                v.rendu,
                 v.reste_a_payer,
-                v.base_remboursement, 
-                v.taux_temp_modifie, 
+                v.base_remboursement,
+                v.taux_temp_modifie,
                 v.taux_original,
                 p.type_assurance,
                 p.assurance2_nom as patient_assurance2_nom,
                 p.taux_assurance2 as patient_taux_assurance2,
+                p.societe_assurance2 as patient_societe_assurance2,
                 v.taux_aide,
                 v.aide_hospitaliere,
                 v.prise_en_charge
@@ -6951,7 +7022,9 @@ def api_get_all_ventes():
                 taux_assurance2 = float(v.get('taux_assurance2', 0))
                 if taux_assurance2 == 0 and v.get('patient_taux_assurance2'):
                     taux_assurance2 = float(v.get('patient_taux_assurance2', 0))
-                
+
+                societe_assurance2 = v.get('societe_assurance2') or v.get('patient_societe_assurance2') or ''
+
                 prise_en_charge2 = float(v.get('prise_en_charge2', 0))
                 montant_donne = float(v.get('montant_donne', 0))
                 rendu = float(v.get('rendu', 0))
@@ -6986,6 +7059,7 @@ def api_get_all_ventes():
                     'assurance2_nom': assurance2_nom,
                     'taux_assurance2': float(taux_assurance2 or 0),
                     'prise_en_charge2': float(prise_en_charge2 or 0),
+                    'societe_assurance2': societe_assurance2,
                     'assurances': assurances,
                     'montant_donne': montant_donne,
                     'rendu': rendu,
@@ -7360,9 +7434,34 @@ def annuler_vente(vente_id):
         
         print(f"✅ Vente {vente_id} ({vente_type}) annulee par {user_name}")
         print(f"💰 Nouveau solde: {nouveau_solde} FCFA")
-        
+
+        # ⭐⭐⭐ COMPTABILISATION AUTOMATIQUE : contre-passation de l'écriture ⭐⭐⭐
+        try:
+            from services.comptabilite_service import generer_ecriture_annulation_vente
+            vente_orm = Vente.query.get(vente_id)
+            annulation_orm = AnnulationVente.query.filter_by(vente_id=vente_id).order_by(AnnulationVente.id.desc()).first()
+            if vente_orm and vente_orm.ecriture_id:
+                ecriture_annul = generer_ecriture_annulation_vente(vente_orm, annulation_orm, user_nom=user_name)
+                if ecriture_annul:
+                    print(f"🧾 Écriture de contre-passation #{ecriture_annul.id} générée pour l'annulation de la vente #{vente_id}")
+        except Exception as e:
+            print(f"⚠️ Erreur génération écriture d'annulation (vente #{vente_id} conservée annulée): {e}")
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        try:
+            from services.journal_service import JournalService
+            JournalService.creer_mouvement(
+                structure_id=structure_id, categorie='annulation_vente',
+                description=f"Annulation vente #{vente_id} ({vente_type}) — {motif}",
+                montant=net_a_payer, type_montant='debit',
+                reference_type='vente', reference_id=vente_id,
+                utilisateur_nom=user_name,
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur journal d'activité (annulation vente #{vente_id}): {e}")
+
         return jsonify({
-            'success': True, 
+            'success': True,
             'message': f'Vente #{vente_id} annulee avec succes',
             'type': vente_type,
             'nouveau_solde': nouveau_solde
@@ -7857,13 +7956,39 @@ def api_add_depense():
                 (SELECT COALESCE(SUM(montant), 0) FROM recettes WHERE structure_id = %s AND (est_annulation IS NULL OR est_annulation = FALSE)) -
                 (SELECT COALESCE(SUM(montant), 0) FROM depenses WHERE structure_id = %s),
                 NOW())
-            ON CONFLICT (structure_id) DO UPDATE SET 
+            ON CONFLICT (structure_id) DO UPDATE SET
                 solde_actuel = EXCLUDED.solde_actuel,
                 date_mise_a_jour = NOW()
         """, (structure_id, structure_id, structure_id))
-        
-        return jsonify({'success': True, 'id': result[0]['id']})
-        
+
+        depense_id = result[0]['id']
+
+        # ⭐⭐⭐ COMPTABILISATION AUTOMATIQUE ⭐⭐⭐
+        try:
+            from services.comptabilite_service import generer_ecriture_depense
+            depense_orm = Depense.query.get(depense_id)
+            if depense_orm:
+                ecriture_dep = generer_ecriture_depense(depense_orm, user_nom=user_name)
+                if ecriture_dep:
+                    print(f"🧾 Écriture comptable #{ecriture_dep.id} générée pour la dépense #{depense_id}")
+        except Exception as e:
+            print(f"⚠️ Erreur génération écriture comptable (dépense #{depense_id} conservée): {e}")
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        try:
+            from services.journal_service import JournalService
+            JournalService.creer_mouvement(
+                structure_id=structure_id, categorie='depense_enregistree',
+                description=f"Dépense — {data.get('motif')}",
+                montant=montant, type_montant='debit',
+                reference_type='depense', reference_id=depense_id,
+                utilisateur_nom=user_name,
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur journal d'activité (dépense #{depense_id}): {e}")
+
+        return jsonify({'success': True, 'id': depense_id})
+
     except Exception as e:
         print(f"Erreur api_add_depense: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -7921,15 +8046,39 @@ def api_add_recette():
                  WHERE structure_id = %s AND (est_annulation IS NULL OR est_annulation = FALSE)) - 
                 (SELECT COALESCE(SUM(montant), 0) FROM depenses WHERE structure_id = %s), 
                 NOW())
-            ON CONFLICT (structure_id) DO UPDATE SET 
+            ON CONFLICT (structure_id) DO UPDATE SET
                 solde_actuel = EXCLUDED.solde_actuel,
                 date_mise_a_jour = NOW()
         """, (structure_id, structure_id, structure_id))
-        
+
         print(f"✅ Recette #{recette_id} ajoutée: {montant} FCFA ({source}) - {user_name}")
-        
+
+        # ⭐⭐⭐ COMPTABILISATION AUTOMATIQUE ⭐⭐⭐
+        try:
+            from services.comptabilite_service import generer_ecriture_recette_diverse
+            recette_orm = Recette.query.get(recette_id)
+            if recette_orm:
+                ecriture_rec = generer_ecriture_recette_diverse(recette_orm, user_nom=user_name)
+                if ecriture_rec:
+                    print(f"🧾 Écriture comptable #{ecriture_rec.id} générée pour la recette #{recette_id}")
+        except Exception as e:
+            print(f"⚠️ Erreur génération écriture comptable (recette #{recette_id} conservée): {e}")
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        try:
+            from services.journal_service import JournalService
+            JournalService.creer_mouvement(
+                structure_id=structure_id, categorie='recette_encaisee',
+                description=f"Recette — {source} — {description}",
+                montant=montant, type_montant='credit',
+                reference_type='recette', reference_id=recette_id,
+                utilisateur_nom=user_name,
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur journal d'activité (recette #{recette_id}): {e}")
+
         return jsonify({
-            'success': True, 
+            'success': True,
             'id': recette_id,
             'montant': montant,
             'source': source
@@ -8086,13 +8235,42 @@ def api_paiement_assurance(facture_id):
                 (SELECT COALESCE(SUM(montant), 0) FROM recettes WHERE structure_id = %s) -
                 (SELECT COALESCE(SUM(montant), 0) FROM depenses WHERE structure_id = %s),
                 NOW())
-            ON CONFLICT (structure_id) DO UPDATE SET 
+            ON CONFLICT (structure_id) DO UPDATE SET
                 solde_actuel = EXCLUDED.solde_actuel,
                 date_mise_a_jour = NOW()
         """, (structure_id, structure_id, structure_id))
-        
+
+        # ⭐⭐⭐ COMPTABILISATION AUTOMATIQUE : extinction de la créance assurance ⭐⭐⭐
+        try:
+            from services.comptabilite_service import generer_ecriture_remboursement_assurance
+            ecriture_ass = generer_ecriture_remboursement_assurance(
+                montant=montant,
+                assurance_nom=f.get('assurance'),
+                structure_id=structure_id,
+                reference=f"Facture assurance #{facture_id} - {f.get('patient_nom')}",
+                source_id=facture_id,
+                user_nom=session.get('user_name', 'Admin'),
+            )
+            if ecriture_ass:
+                print(f"🧾 Écriture comptable #{ecriture_ass.id} générée pour le remboursement assurance #{facture_id}")
+        except Exception as e:
+            print(f"⚠️ Erreur génération écriture comptable (remboursement assurance #{facture_id} conservé): {e}")
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        try:
+            from services.journal_service import JournalService
+            JournalService.creer_mouvement(
+                structure_id=structure_id, categorie='paiement_assurance',
+                description=f"Remboursement assurance {f.get('assurance')} — facture #{facture_id}",
+                montant=montant, type_montant='credit',
+                reference_type='facture_assurance', reference_id=facture_id,
+                utilisateur_nom=session.get('user_name', 'Admin'),
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur journal d'activité (remboursement assurance #{facture_id}): {e}")
+
         return jsonify({'success': True, 'message': 'Paiement enregistre'})
-        
+
     except Exception as e:
         print(f"Erreur: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -8125,7 +8303,7 @@ def generer_factures_assurance():
         
         # 🔥 RECUPERER LES VENTES AVEC LES DEUX ASSURANCES
         ventes = db.execute_query("""
-            SELECT 
+            SELECT
                 v.id,
                 v.patient_nom,
                 v.sous_total,
@@ -8137,12 +8315,14 @@ def generer_factures_assurance():
                 v.prise_en_charge,
                 v.prise_en_charge2,
                 v.assurances,
+                v.societe_assurance2,
                 p.type_assurance as assurance_principale,
-                p.assurance2_nom as assurance2_patient
+                p.assurance2_nom as assurance2_patient,
+                p.societe_assurance2 as patient_societe_assurance2
             FROM ventes v
             LEFT JOIN patients p ON v.patient_id = p.id
-            WHERE v.structure_id = %s 
-            AND v.date_vente >= %s 
+            WHERE v.structure_id = %s
+            AND v.date_vente >= %s
             AND v.date_vente <= %s
             AND (v.statut IS NULL OR v.statut != 'annulee')
             AND (
@@ -8158,31 +8338,38 @@ def generer_factures_assurance():
         if not ventes:
             return jsonify({'success': False, 'error': 'Aucune vente avec assurance pour cette periode'}), 400
         
-        factures_par_assurance = {}
-        
+        # 🔥 Regroupement par CLÉ = (assurance, société). La société n'est
+        # pertinente que pour l'assurance complémentaire (contrat groupe
+        # employeur) — la principale (AMU-CNSS/INAM) n'en a pas.
+        factures_par_cle = {}
+
         for v in ventes:
             if isinstance(v, dict):
                 # 🔥 Récupérer les infos des deux assurances
                 assurance_principale = v.get('assurance_principale') or v.get('assurance')
                 assurance2 = v.get('assurance2_nom') or v.get('assurance2_patient') or ''
-                
+                societe2 = v.get('societe_assurance2') or v.get('patient_societe_assurance2') or None
+
                 # 🔥 Convertir les Decimal en float
                 sous_total = float(v.get('sous_total') or 0)
                 prise_en_charge = float(v.get('prise_en_charge') or 0)
                 prise_en_charge2 = float(v.get('prise_en_charge2') or 0)
-                
+
                 # 🔥 SI L'ASSURANCE PRINCIPALE EST 'non_assure' OU NULL, ON L'IGNORE
                 if assurance_principale and assurance_principale != 'non_assure':
-                    if assurance_principale not in factures_par_assurance:
-                        factures_par_assurance[assurance_principale] = {
+                    cle = assurance_principale
+                    if cle not in factures_par_cle:
+                        factures_par_cle[cle] = {
+                            'assurance': assurance_principale,
+                            'societe': None,
                             'total': 0,
                             'ventes': [],
                             'type': 'principale'
                         }
-                    
+
                     if prise_en_charge > 0:
-                        factures_par_assurance[assurance_principale]['total'] += prise_en_charge
-                        factures_par_assurance[assurance_principale]['ventes'].append({
+                        factures_par_cle[cle]['total'] += prise_en_charge
+                        factures_par_cle[cle]['ventes'].append({
                             'id': v.get('id'),
                             'patient_nom': v.get('patient_nom'),
                             'montant_assurance': prise_en_charge,
@@ -8190,19 +8377,22 @@ def generer_factures_assurance():
                             'date_vente': str(v.get('date_vente')),
                             'type': 'principale'
                         })
-                
+
                 # 🔥 SI L'ASSURANCE COMPLÉMENTAIRE EXISTE
                 if assurance2 and assurance2 != '' and assurance2 != 'Aucune':
-                    if assurance2 not in factures_par_assurance:
-                        factures_par_assurance[assurance2] = {
+                    cle = f"{assurance2}||{societe2 or ''}"
+                    if cle not in factures_par_cle:
+                        factures_par_cle[cle] = {
+                            'assurance': assurance2,
+                            'societe': societe2,
                             'total': 0,
                             'ventes': [],
                             'type': 'complementaire'
                         }
-                    
+
                     if prise_en_charge2 > 0:
-                        factures_par_assurance[assurance2]['total'] += prise_en_charge2
-                        factures_par_assurance[assurance2]['ventes'].append({
+                        factures_par_cle[cle]['total'] += prise_en_charge2
+                        factures_par_cle[cle]['ventes'].append({
                             'id': v.get('id'),
                             'patient_nom': v.get('patient_nom'),
                             'montant_assurance': prise_en_charge2,
@@ -8210,48 +8400,55 @@ def generer_factures_assurance():
                             'date_vente': str(v.get('date_vente')),
                             'type': 'complementaire'
                         })
-        
-        print(f"Factures a generer: {len(factures_par_assurance)}")
-        
+
+        print(f"Factures a generer: {len(factures_par_cle)}")
+
         resultats = []
-        
-        for assurance, data_assurance in factures_par_assurance.items():
+
+        for cle, data_assurance in factures_par_cle.items():
             if data_assurance['total'] == 0:
                 continue
-            
-            # 🔥 VERIFIER SI UNE FACTURE EXISTE DEJA
+
+            assurance = data_assurance['assurance']
+            societe = data_assurance['societe']
+
+            # 🔥 VERIFIER SI UNE FACTURE EXISTE DEJA (assurance + société,
+            # NULL-safe : deux NULL sont considérés égaux ici)
             existing = db.execute_query("""
-                SELECT id, montant_rembourse 
-                FROM factures_assurance 
+                SELECT id, montant_rembourse
+                FROM factures_assurance
                 WHERE structure_id = %s AND mois_reference = %s AND assurance = %s
-            """, (structure_id, mois_reference, assurance))
-            
+                AND (societe = %s OR (societe IS NULL AND %s IS NULL))
+            """, (structure_id, mois_reference, assurance, societe, societe))
+
             if existing and len(existing) > 0:
                 facture_id = existing[0]['id']
                 deja_rembourse = float(existing[0]['montant_rembourse'] or 0)
                 nouveau_total = data_assurance['total']
                 type_assurance = data_assurance['type']
-                
+
                 if deja_rembourse >= nouveau_total:
                     nouveau_statut = 'payee'
                 elif deja_rembourse > 0:
                     nouveau_statut = 'partielle'
                 else:
                     nouveau_statut = 'en_attente'
-                
+
                 db.execute_query("""
-                    UPDATE factures_assurance 
-                    SET montant_total = %s, 
+                    UPDATE factures_assurance
+                    SET montant_total = %s,
                         details = %s,
                         statut = %s,
                         type_assurance = %s,
+                        societe = %s,
                         updated_at = NOW()
                     WHERE id = %s
-                """, (nouveau_total, json.dumps(data_assurance['ventes']), nouveau_statut, type_assurance, facture_id))
-                
+                """, (nouveau_total, json.dumps(data_assurance['ventes']), nouveau_statut, type_assurance, societe, facture_id))
+
                 resultats.append({
-                    'assurance': assurance, 
-                    'montant': nouveau_total, 
+                    'assurance': assurance,
+                    'societe': societe,
+                    'montant': nouveau_total,
                     'statut': 'mise_a_jour',
                     'reste': nouveau_total - deja_rembourse,
                     'type': type_assurance
@@ -8259,31 +8456,33 @@ def generer_factures_assurance():
             else:
                 result = db.execute_query("""
                     INSERT INTO factures_assurance (
-                        structure_id, 
-                        mois_reference, 
-                        assurance, 
-                        montant_total, 
+                        structure_id,
+                        mois_reference,
+                        assurance,
+                        montant_total,
                         details,
                         type_assurance,
+                        societe,
                         created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                     RETURNING id
-                """, (structure_id, mois_reference, assurance, data_assurance['total'], json.dumps(data_assurance['ventes']), data_assurance['type']))
-                
+                """, (structure_id, mois_reference, assurance, data_assurance['total'], json.dumps(data_assurance['ventes']), data_assurance['type'], societe))
+
                 resultats.append({
-                    'assurance': assurance, 
-                    'montant': data_assurance['total'], 
-                    'statut': 'nouvelle', 
+                    'assurance': assurance,
+                    'societe': societe,
+                    'montant': data_assurance['total'],
+                    'statut': 'nouvelle',
                     'id': result[0]['id'],
                     'type': data_assurance['type']
                 })
-        
+
         return jsonify({
-            'success': True, 
-            'factures': resultats, 
+            'success': True,
+            'factures': resultats,
             'total_ventes': len(ventes),
-            'total_factures': len(factures_par_assurance)
+            'total_factures': len(factures_par_cle)
         })
         
     except Exception as e:
@@ -8301,20 +8500,21 @@ def api_get_factures_assurance():
         
         # 🔥 AJOUTER LA COLONNE type_assurance
         query = """
-            SELECT 
-                id, 
-                structure_id, 
-                mois_reference, 
-                assurance, 
-                montant_total, 
-                montant_rembourse, 
-                statut, 
+            SELECT
+                id,
+                structure_id,
+                mois_reference,
+                assurance,
+                montant_total,
+                montant_rembourse,
+                statut,
                 details,
                 type_assurance,
                 created_at,
                 date_remboursement,
-                updated_at
-            FROM factures_assurance 
+                updated_at,
+                societe
+            FROM factures_assurance
             WHERE structure_id = %s
         """
         params = [structure_id]
@@ -8342,6 +8542,7 @@ def api_get_factures_assurance():
                     'id': f.get('id'),
                     'mois_reference': f.get('mois_reference'),
                     'assurance': assurance_name,
+                    'societe': f.get('societe'),
                     'type_assurance': type_assurance,
                     'type_label': type_label,
                     'montant_total': float(f.get('montant_total', 0)),
@@ -8526,17 +8727,46 @@ def payer_facture_assurance(facture_id):
                 (SELECT COALESCE(SUM(montant), 0) FROM recettes WHERE structure_id = %s) -
                 (SELECT COALESCE(SUM(montant), 0) FROM depenses WHERE structure_id = %s),
                 NOW())
-            ON CONFLICT (structure_id) DO UPDATE SET 
+            ON CONFLICT (structure_id) DO UPDATE SET
                 solde_actuel = EXCLUDED.solde_actuel,
                 date_mise_a_jour = NOW()
         """, (structure_id, structure_id, structure_id))
-        
+
+        # ⭐⭐⭐ COMPTABILISATION AUTOMATIQUE : extinction de la créance assurance ⭐⭐⭐
+        try:
+            from services.comptabilite_service import generer_ecriture_remboursement_assurance
+            ecriture_ass = generer_ecriture_remboursement_assurance(
+                montant=montant,
+                assurance_nom=assurance_name,
+                structure_id=structure_id,
+                reference=f"Facture assurance #{facture_id} - {f.get('mois_reference')}",
+                source_id=facture_id,
+                user_nom=session.get('user_name', 'Admin'),
+            )
+            if ecriture_ass:
+                print(f"🧾 Écriture comptable #{ecriture_ass.id} générée pour le remboursement assurance #{facture_id}")
+        except Exception as e:
+            print(f"⚠️ Erreur génération écriture comptable (remboursement assurance #{facture_id} conservé): {e}")
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        try:
+            from services.journal_service import JournalService
+            JournalService.creer_mouvement(
+                structure_id=structure_id, categorie='paiement_assurance',
+                description=f"Remboursement assurance {assurance_display} — {f.get('mois_reference')}",
+                montant=montant, type_montant='credit',
+                reference_type='facture_assurance', reference_id=facture_id,
+                utilisateur_nom=session.get('user_name', 'Admin'),
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur journal d'activité (remboursement assurance #{facture_id}): {e}")
+
         return jsonify({
-            'success': True, 
+            'success': True,
             'message': f'Remboursement de {montant} FCFA enregistre',
             'reste': total_facture - nouveau_rembourse
         })
-        
+
     except Exception as e:
         print(f"Erreur: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -9130,6 +9360,18 @@ def api_convertir_proforma():
         assurance2_nom = proforma.get('assurance2_nom', '')
         taux_assurance2 = float(proforma.get('taux_assurance2', 0))
 
+        # 🔥 Société souscriptrice de l'assurance complémentaire : la proforma
+        # ne porte pas ce champ (créée avant son existence éventuelle), on la
+        # relit donc depuis la fiche patient au moment de la conversion.
+        societe_assurance2 = None
+        if assurance2_nom:
+            pat_societe = db.execute_query(
+                "SELECT societe_assurance2 FROM patients WHERE id = %s AND structure_id = %s",
+                (proforma.get('patient_id'), structure_id)
+            )
+            if pat_societe:
+                societe_assurance2 = pat_societe[0].get('societe_assurance2')
+
         # 🔥🔥🔥 RECALCULER LES TOTAUX AVEC PBR 🔥🔥🔥
         sous_total = 0
         pbr_total_amu = 0
@@ -9245,13 +9487,13 @@ def api_convertir_proforma():
                 patient_id, patient_nom, structure_id, type, sous_total, 
                 prise_en_charge, net_a_payer, mode_paiement, taux_assurance,
                 date_vente, actes, produits, created_by_nom, statut,
-                assurance2_nom, taux_assurance2, prise_en_charge2,
+                assurance2_nom, taux_assurance2, societe_assurance2, prise_en_charge2,
                 montant_donne, rendu, reste_a_payer,
                 assurance_principale_active, proforma_id,
                 base_remboursement,
                 taux_aide, aide_hospitaliere
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s::jsonb, %s, 'validee', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s::jsonb, %s, 'validee', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             data.get('patient_id'),
@@ -9268,6 +9510,7 @@ def api_convertir_proforma():
             user_name,
             assurance2_nom if assurance2_active else '',
             taux_assurance2 if assurance2_active else 0,
+            societe_assurance2 if assurance2_active else None,
             prise_en_charge2,
             montant_donne,
             rendu,
@@ -9278,12 +9521,14 @@ def api_convertir_proforma():
             0,  # taux_aide
             0   # aide_hospitaliere
         ))
-        
+
         if not result or len(result) == 0:
             return jsonify({'success': False, 'error': 'Erreur insertion vente'}), 500
-        
+
         vente_id = result[0]['id']
         print(f"✅ Vente créée depuis proforma #{proforma_id} avec ID: {vente_id}")
+        if assurance2_active:
+            upsert_societe_assurance(structure_id, assurance2_nom, societe_assurance2)
         
         # Marquer la proforma comme convertie
         db.execute_query("""
@@ -9429,10 +9674,36 @@ def api_convertir_proforma():
             """, (structure_id, nouveau_solde))
             
             print(f"💰 Solde de caisse mis à jour: {nouveau_solde} FCFA")
-            
+
         except Exception as e:
             print(f"⚠️ Erreur mise à jour solde: {e}")
-        
+
+        # ⭐⭐⭐ COMPTABILISATION AUTOMATIQUE (écriture SYSCOHADA validée) ⭐⭐⭐
+        try:
+            from services.comptabilite_service import generer_ecriture_vente
+            vente_orm = Vente.query.get(vente_id)
+            if vente_orm:
+                ecriture = generer_ecriture_vente(vente_orm, user_nom=user_name)
+                if ecriture:
+                    print(f"🧾 Écriture comptable #{ecriture.id} générée pour la vente (proforma #{proforma_id}) #{vente_id}")
+        except Exception as e:
+            print(f"⚠️ Erreur génération écriture comptable (vente proforma #{vente_id} conservée): {e}")
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        try:
+            from services.journal_service import JournalService
+            categorie_journal = 'vente_pharmacie' if type_vente == 'pharmacie' else 'vente_actes'
+            JournalService.creer_mouvement(
+                structure_id=structure_id, categorie=categorie_journal,
+                description=f"Vente #{vente_id} depuis proforma #{proforma_id}",
+                montant=montant_effectif, type_montant='credit',
+                reference_type='vente', reference_id=vente_id,
+                patient_id=data.get('patient_id'), patient_nom=data.get('patient_nom', 'Patient'),
+                utilisateur_nom=user_name,
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur journal d'activité (vente proforma #{vente_id}): {e}")
+
         return jsonify({
             'success': True,
             'vente_id': vente_id,
@@ -9754,9 +10025,27 @@ def facture_detail(facture_id):
     if isinstance(f, dict):
         f['statut_label'] = statut_labels.get(f.get('statut'), f.get('statut'))
         f['statut_color'] = statut_colors.get(f.get('statut'), 'secondary')
-    
-    return render_template('factures/facture_detail.html', 
-                         facture=f, 
+
+        # Société souscriptrice de l'assurance complémentaire : reprise
+        # depuis la vente d'origine (source de vérité), sinon depuis la
+        # fiche patient si la vente ne l'a pas (facture antérieure à ce champ).
+        f['societe_assurance2'] = None
+        if f.get('vente_id'):
+            v_societe = db.execute_query(
+                "SELECT societe_assurance2 FROM ventes WHERE id = %s", (f.get('vente_id'),)
+            )
+            if v_societe:
+                f['societe_assurance2'] = v_societe[0].get('societe_assurance2')
+        if not f.get('societe_assurance2'):
+            p_societe = db.execute_query(
+                "SELECT societe_assurance2 FROM patients WHERE id = %s AND structure_id = %s",
+                (f.get('patient_id'), structure_id)
+            )
+            if p_societe:
+                f['societe_assurance2'] = p_societe[0].get('societe_assurance2')
+
+    return render_template('factures/facture_detail.html',
+                         facture=f,
                          paiements=paiements,
                          statut_labels=statut_labels,
                          statut_colors=statut_colors)
@@ -9817,7 +10106,24 @@ def facture_print(facture_id):
                 'mode': p[3] if len(p) > 3 else '',
                 'notes': p[4] if len(p) > 4 else ''
             })
-    
+
+    # Société souscriptrice de l'assurance complémentaire (voir facture_detail)
+    if isinstance(f, dict):
+        f['societe_assurance2'] = None
+        if f.get('vente_id'):
+            v_societe = db.execute_query(
+                "SELECT societe_assurance2 FROM ventes WHERE id = %s", (f.get('vente_id'),)
+            )
+            if v_societe:
+                f['societe_assurance2'] = v_societe[0].get('societe_assurance2')
+        if not f.get('societe_assurance2'):
+            p_societe = db.execute_query(
+                "SELECT societe_assurance2 FROM patients WHERE id = %s AND structure_id = %s",
+                (f.get('patient_id'), structure_id)
+            )
+            if p_societe:
+                f['societe_assurance2'] = p_societe[0].get('societe_assurance2')
+
     return render_template('factures/facture_print.html',
                          facture=f,
                          articles=articles,
@@ -9964,7 +10270,15 @@ def api_creer_facture_from_vente(vente_id):
                 articles = json.loads(v.get('produits')) if isinstance(v.get('produits'), str) else v.get('produits')
         
         net_a_payer = float(v.get('net_a_payer', 0))
-        
+
+        # ⭐ FIX : ne pas ignorer ce que le patient a déjà réglé au moment de
+        # la vente (montant_donne - rendu), sinon la dette est comptée deux
+        # fois (bug historique : montant_paye était toujours mis à 0 ici).
+        montant_deja_encaisse = float(v.get('montant_donne', 0) or 0) - float(v.get('rendu', 0) or 0)
+        montant_deja_encaisse = max(0.0, min(montant_deja_encaisse, net_a_payer))
+        reste_a_payer_initial = round(net_a_payer - montant_deja_encaisse, 2)
+        statut_initial = 'payee' if reste_a_payer_initial <= 0 else ('partielle' if montant_deja_encaisse > 0 else 'en_attente')
+
         # Créer la facture
         result = db.execute_query("""
             INSERT INTO factures (
@@ -9972,10 +10286,10 @@ def api_creer_facture_from_vente(vente_id):
                 numero_facture, date_emission, date_echeance,
                 sous_total, taux_assurance, prise_en_charge,
                 taux_assurance2, prise_en_charge2,
-                net_a_payer, montant_paye, reste_a_payer,
+                net_a_payer, montant_paye, reste_a_payer, statut,
                 articles, mode_paiement, notes, created_by
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             structure_id,
@@ -9991,8 +10305,9 @@ def api_creer_facture_from_vente(vente_id):
             float(v.get('taux_assurance2', 0)),
             float(v.get('prise_en_charge2', 0)),
             net_a_payer,
-            0,
-            net_a_payer,
+            montant_deja_encaisse,
+            reste_a_payer_initial,
+            statut_initial,
             json.dumps(articles, ensure_ascii=False),
             mode_paiement,
             data.get('notes', 'Facture issue de la vente #' + str(vente_id)),
@@ -10000,12 +10315,25 @@ def api_creer_facture_from_vente(vente_id):
         ))
         
         facture_id = result[0]['id']
-        
+
         # Mettre à jour le statut de la vente
         db.execute_query("""
             UPDATE ventes SET statut = 'facturee' WHERE id = %s
         """, (vente_id,))
-        
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        try:
+            from services.journal_service import JournalService
+            JournalService.creer_mouvement(
+                structure_id=structure_id, categorie='facture_emise',
+                description=f"Facture {numero_facture} émise (vente #{vente_id})",
+                montant=net_a_payer, type_montant='neutre',
+                reference_type='facture', reference_id=facture_id,
+                patient_nom=patient_nom, utilisateur_nom=user_name,
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur journal d'activité (facture #{facture_id}): {e}")
+
         return jsonify({
             'success': True,
             'facture_id': facture_id,
@@ -10234,11 +10562,37 @@ def api_enregistrer_paiement(facture_id):
                 (SELECT COALESCE(SUM(montant), 0) FROM recettes WHERE structure_id = %s AND (est_annulation IS NULL OR est_annulation = FALSE)) -
                 (SELECT COALESCE(SUM(montant), 0) FROM depenses WHERE structure_id = %s),
                 NOW())
-            ON CONFLICT (structure_id) DO UPDATE SET 
+            ON CONFLICT (structure_id) DO UPDATE SET
                 solde_actuel = EXCLUDED.solde_actuel,
                 date_mise_a_jour = NOW()
         """, (structure_id, structure_id, structure_id))
-        
+
+        # ⭐⭐⭐ COMPTABILISATION AUTOMATIQUE : la créance client redescend ⭐⭐⭐
+        try:
+            from services.comptabilite_service import generer_ecriture_paiement_facture
+            paiement_orm = PaiementFacture.query.get(paiement_id)
+            facture_orm = Facture.query.get(facture_id)
+            if paiement_orm and facture_orm:
+                ecriture_pai = generer_ecriture_paiement_facture(paiement_orm, facture_orm, user_nom=user_name)
+                if ecriture_pai:
+                    print(f"🧾 Écriture comptable #{ecriture_pai.id} générée pour le paiement #{paiement_id}")
+        except Exception as e:
+            print(f"⚠️ Erreur génération écriture comptable (paiement #{paiement_id} conservé): {e}")
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        try:
+            from services.journal_service import JournalService
+            JournalService.creer_mouvement(
+                structure_id=structure_id, categorie='paiement_facture',
+                description=f"Paiement facture #{f.get('numero_facture')} — {f.get('patient_nom')}",
+                montant=montant, type_montant='credit',
+                reference_type='facture', reference_id=facture_id,
+                patient_nom=f.get('patient_nom'),
+                utilisateur_nom=user_name,
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur journal d'activité (paiement facture #{facture_id}): {e}")
+
         return jsonify({
             'success': True,
             'paiement_id': paiement_id,
@@ -10275,15 +10629,43 @@ def api_annuler_facture(facture_id):
         if not facture:
             return jsonify({'success': False, 'error': 'Facture non trouvée'}), 404
         
+        f = facture[0]
+        reste_a_payer = float(f.get('reste_a_payer', 0) or 0)
+
         # Marquer comme annulée
         db.execute_query("""
-            UPDATE factures 
-            SET statut = 'annulee', 
+            UPDATE factures
+            SET statut = 'annulee',
                 notes = CONCAT(COALESCE(notes, ''), ' [ANNULEE - ', %s, ']'),
                 updated_at = NOW()
             WHERE id = %s
         """, (motif, facture_id))
-        
+
+        # ⭐⭐⭐ COMPTABILISATION AUTOMATIQUE : la créance restante est abandonnée ⭐⭐⭐
+        if reste_a_payer > 0:
+            try:
+                from services.comptabilite_service import generer_ecriture_annulation_facture
+                facture_orm = Facture.query.get(facture_id)
+                if facture_orm:
+                    ecriture_annul = generer_ecriture_annulation_facture(
+                        facture_orm, reste_a_payer, user_nom=session.get('user_name', 'Admin'))
+                    if ecriture_annul:
+                        print(f"🧾 Écriture d'annulation #{ecriture_annul.id} générée pour la facture #{facture_id}")
+            except Exception as e:
+                print(f"⚠️ Erreur génération écriture d'annulation (facture #{facture_id} conservée annulée): {e}")
+
+            try:
+                from services.journal_service import JournalService
+                JournalService.creer_mouvement(
+                    structure_id=structure_id, categorie='avoir_emis',
+                    description=f"Annulation facture {f.get('numero_facture')} — créance abandonnée ({motif})",
+                    montant=reste_a_payer, type_montant='debit',
+                    reference_type='facture', reference_id=facture_id,
+                    patient_nom=f.get('patient_nom'), utilisateur_nom=session.get('user_name', 'Admin'),
+                )
+            except Exception as e:
+                print(f"⚠️ Erreur journal d'activité (annulation facture #{facture_id}): {e}")
+
         return jsonify({'success': True, 'message': 'Facture annulée'})
         
     except Exception as e:
@@ -10486,7 +10868,20 @@ def api_creer_facture_automatique():
         print(f"   Montant payé: {montant_paye} FCFA")
         print(f"   Articles: {len(articles)}")
         print(f"   Base remboursement (PBR): {base_remboursement} FCFA")
-        
+
+        # ⭐ JOURNAL D'ACTIVITÉ
+        try:
+            from services.journal_service import JournalService
+            JournalService.creer_mouvement(
+                structure_id=structure_id, categorie='facture_emise',
+                description=f"Facture {numero_facture} émise automatiquement (vente #{vente_id}, reste {reste_a_payer} FCFA)",
+                montant=reste_a_payer, type_montant='neutre',
+                reference_type='facture', reference_id=facture_id,
+                patient_nom=patient_nom, utilisateur_nom=user_name,
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur journal d'activité (facture auto #{facture_id}): {e}")
+
         return jsonify({
             'success': True,
             'facture_id': facture_id,
@@ -11690,11 +12085,15 @@ def imprimer_ordonnances_patient(patient_id):
         flash('Aucune prescription en attente pour ce patient', 'warning')
         return redirect(url_for('prescriptions_recues'))
     
-    # Rediriger vers la première prescription avec le paramètre groupe
-    return redirect(url_for('imprimer_ordonnance', 
-                         prescription_id=prescriptions[0].get('id'),
-                         format=format_impression,
-                         groupe='true'))
+    # ⭐ Route corrigée : 'imprimer_ordonnance' n'a jamais existé (aucune
+    # route de ce nom, ni de paramètre prescription_id) — cette redirection
+    # plantait (BuildError) si jamais atteinte. Elle n'est en pratique liée
+    # nulle part dans l'UI (seules /medicaments et /actes le sont), donc
+    # aucune régression visible, mais autant rediriger vers une route qui
+    # existe réellement plutôt que de laisser un lien mort.
+    return redirect(url_for('imprimer_ordonnances_medicaments',
+                         patient_id=patient_id,
+                         format=format_impression))
 
 @app.route('/ordonnance/patient/<int:patient_id>/medicaments')
 @login_required

@@ -1,8 +1,12 @@
 # models.py - GHP
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, time, timedelta
+from utils.db_failover import FailoverSession
 # ⭐ Créer db pour les modèles
-db = SQLAlchemy()
+# session_options : voir utils/db_failover.py — route chaque requête vers
+# Neon ou le Postgres local selon l'état de la bascule (inactif si
+# DATABASE_URL_LOCAL n'est pas définie, donc aucun changement sur Render).
+db = SQLAlchemy(session_options={'class_': FailoverSession})
 
 # ============================================================
 # STRUCTURE
@@ -79,12 +83,35 @@ class Patient(db.Model):
     assurance2_nom = db.Column(db.String(100))
     taux_assurance2 = db.Column(db.Float, default=0)
     numero_assure2 = db.Column(db.String(50))
+    # Société souscriptrice de l'assurance complémentaire (ex: l'employeur qui
+    # a souscrit le contrat groupe auprès de GTA/SUNU/NSIA...)
+    societe_assurance2 = db.Column(db.String(150))
     personne_a_prevenir_nom = db.Column(db.String(100))
     personne_a_prevenir_telephone = db.Column(db.String(50))
     personne_a_prevenir_relation = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-   
+
+# ============================================================
+# SOCIÉTÉS SOUSCRIPTRICES D'ASSURANCE COMPLÉMENTAIRE
+# ============================================================
+# Une assurance complémentaire (GTA, SUNU, NSIA...) est en général souscrite
+# par un employeur pour ses salariés (contrat groupe). Cette table mémorise,
+# par structure et par assurance, les sociétés déjà saisies une première
+# fois, pour proposer ensuite un simple choix au lieu d'une re-saisie.
+class SocieteAssurance(db.Model):
+    __tablename__ = 'societes_assurance'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, db.ForeignKey('structures.id'), nullable=False)
+    assurance_nom = db.Column(db.String(100), nullable=False)
+    nom_societe = db.Column(db.String(150), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('structure_id', 'assurance_nom', 'nom_societe', name='uq_societe_assurance'),
+    )
+
 
 # ============================================================
 # STRUCTURE MAPPING (pour la synchronisation)
@@ -167,7 +194,22 @@ class Employe(db.Model):
     date_embauche = db.Column(db.Date, nullable=False)
     type_contrat = db.Column(db.String(50))
     salaire_base = db.Column(db.Numeric, default=0)
-    
+
+    # ⭐ Paramètres de paie individuels (modifiables par salarié — chaque
+    # agent peut déroger aux valeurs par défaut de ParametragePaie).
+    # secteur_paie détermine l'organisme de retraite (CNSS/privé ou
+    # CRT/public) et l'organisme AMU (AMU-CNSS ou AMU-INAM) appliqués.
+    secteur_paie = db.Column(db.String(10), default='prive')  # 'prive' | 'public'
+    personnes_a_charge = db.Column(db.Integer, default=0)     # 0 à 6 (déduction IRPP)
+    # Dérogations individuelles aux taux — NULL = utiliser le défaut de la
+    # structure (ParametragePaie) selon secteur_paie. Les taux AMU restent
+    # verrouillés (salarial <= moitié du taux global, patronal >= moitié)
+    # même en cas de dérogation individuelle — voir services/paie_service.py.
+    taux_retraite_salarial_override = db.Column(db.Numeric)
+    taux_retraite_patronal_override = db.Column(db.Numeric)
+    taux_amu_salarial_override = db.Column(db.Numeric)
+    taux_amu_patronal_override = db.Column(db.Numeric)
+
     # Urgence
     personne_a_prevenir = db.Column(db.String(200))
     telephone_prevenir = db.Column(db.String(20))
@@ -216,22 +258,37 @@ class Employe(db.Model):
         ).scalar() or 0
         return total_acquis - conges_pris
     
-    def get_solde_par_annee(self, annee):
-        """Retourne le solde de congés pour une année donnée"""
+    def get_solde_detail(self, annee):
+        """⭐ Source UNIQUE de calcul du solde de congés (jours acquis moins
+        congés + permissions pris sur l'année). Tout le reste (routes/rh.py
+        compris) doit passer par cette méthode — plus de logique dupliquée."""
         conges_pris = db.session.query(db.func.sum(Conge.nombre_jours)).filter(
             Conge.employe_id == self.id,
             db.extract('year', Conge.date_debut) == annee,
             Conge.statut.in_(['en_attente', 'approuve', 'termine'])
         ).scalar() or 0
-        
+
         permissions_pris = db.session.query(db.func.sum(Permission.nombre_jours)).filter(
             Permission.employe_id == self.id,
             db.extract('year', Permission.date_debut) == annee,
             Permission.statut.in_(['en_attente', 'approuve'])
         ).scalar() or 0
-        
+
+        total_annuel = self.conges_annuels or 30
         total_pris = conges_pris + permissions_pris
-        return 30 - total_pris
+        solde = max(0, total_annuel - total_pris)
+
+        return {
+            'solde': solde,
+            'pris': total_pris,
+            'conges_pris': conges_pris,
+            'permissions_pris': permissions_pris,
+            'total_annuel': total_annuel,
+        }
+
+    def get_solde_par_annee(self, annee):
+        """Retourne le solde de congés (nombre) pour une année donnée."""
+        return self.get_solde_detail(annee)['solde']
     
     def solde_conges_restant(self):
         """Calcule le solde de congés restant pour l'année en cours (incluant les permissions)"""
@@ -419,10 +476,13 @@ class Conge(db.Model):
 
 class Permission(db.Model):
     __tablename__ = 'permissions'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     employe_id = db.Column(db.Integer, db.ForeignKey('employes.id'), nullable=False)
-    
+    # ⭐ Cohérence multi-structure avec les autres tables RH (Employe, Conge,
+    # Service, DocumentRH) — backfillé depuis employe.structure_id.
+    structure_id = db.Column(db.Integer)
+
     type_permission = db.Column(db.String(20), default='heures')
     
     date_permission = db.Column(db.Date, nullable=True)
@@ -506,7 +566,16 @@ class CompteComptable(db.Model):
 
 class EcritureComptable(db.Model):
     __tablename__ = 'ecritures_comptables'
-    
+
+    # Journaux auxiliaires (journaux divisionnaires SYSCOHADA)
+    JOURNAUX = {
+        'VTE': "Journal des ventes",
+        'CAI': "Journal de caisse",
+        'BQ': "Journal de banque",
+        'ACH': "Journal des achats et charges",
+        'OD': "Journal des opérations diverses",
+    }
+
     id = db.Column(db.Integer, primary_key=True)
     structure_id = db.Column(db.Integer, nullable=False)
     date_ecriture = db.Column(db.Date, nullable=False)
@@ -524,10 +593,20 @@ class EcritureComptable(db.Model):
 
     cloturee = db.Column(db.Boolean, default=False)
     date_cloture = db.Column(db.DateTime)
-    
+
+    # ⭐ Automatisation (voir services/comptabilite_service.py)
+    journal_code = db.Column(db.String(10))          # VTE / CAI / BQ / ACH / OD
+    source_type = db.Column(db.String(50))           # 'vente', 'paiement_facture', ...
+    source_id = db.Column(db.Integer)                # id de l'objet source
+    generee_auto = db.Column(db.Boolean, default=False)
+    generation_erreur = db.Column(db.Text)            # renseigné si une génération auto a échoué
+
     lignes = db.relationship('LigneEcriture', backref='ecriture', lazy=True, cascade='all, delete-orphan')
     validations = db.relationship('ValidationComptable', backref='ecriture', lazy=True)
-    
+
+    def get_journal_label(self):
+        return self.JOURNAUX.get(self.journal_code, self.journal_code or '-')
+
     def est_equilibree(self):
         total_debit = sum(l.debit for l in self.lignes) or 0
         total_credit = sum(l.credit for l in self.lignes) or 0
@@ -621,9 +700,14 @@ class Cloture(db.Model):
 
 class ReleveBancaire(db.Model):
     __tablename__ = 'releves_bancaires'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     structure_id = db.Column(db.Integer, nullable=False)
+    # ⭐ Compte de trésorerie (classe 5) concerné par ce relevé — permet de
+    # gérer plusieurs comptes bancaires/caisses séparément. NULL = ancien
+    # relevé créé avant cette colonne, traité comme le compte "521 Banque"
+    # par défaut dans le code.
+    compte_id = db.Column(db.Integer, db.ForeignKey('comptes_comptables.id'), nullable=True)
     date_releve = db.Column(db.Date, nullable=False)
     solde_initial = db.Column(db.Numeric, default=0)
     solde_final = db.Column(db.Numeric, default=0)
@@ -652,6 +736,103 @@ class LigneReleve(db.Model):
     rapproche = db.Column(db.Boolean, default=False)
     ecriture_id = db.Column(db.Integer, db.ForeignKey('ecritures_comptables.id'), nullable=True)
     commentaire = db.Column(db.Text)
+
+
+# ============================================================
+# ANOMALIES COMPTABLES (génération automatique d'écritures en échec)
+# ============================================================
+
+class AnomalieComptable(db.Model):
+    __tablename__ = 'anomalies_comptables'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    source_type = db.Column(db.String(50))   # 'vente', 'paiement_facture', ...
+    source_id = db.Column(db.Integer)
+    message = db.Column(db.Text, nullable=False)
+    date_creation = db.Column(db.DateTime, default=datetime.utcnow)
+    resolu = db.Column(db.Boolean, default=False)
+    resolu_par = db.Column(db.String(100))
+    date_resolution = db.Column(db.DateTime)
+    commentaire = db.Column(db.Text)
+
+
+# ============================================================
+# IMMOBILISATIONS & AMORTISSEMENTS
+# ============================================================
+
+class Immobilisation(db.Model):
+    __tablename__ = 'immobilisations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    designation = db.Column(db.String(255), nullable=False)
+    categorie = db.Column(db.String(100))
+    compte_immo_numero = db.Column(db.String(20), nullable=False)   # ex: 2183
+    compte_amort_numero = db.Column(db.String(20), nullable=False)  # ex: 2818
+    date_acquisition = db.Column(db.Date, nullable=False)
+    valeur_acquisition = db.Column(db.Numeric, nullable=False, default=0)
+    valeur_residuelle = db.Column(db.Numeric, default=0)
+    duree_annees = db.Column(db.Integer, nullable=False, default=5)
+    statut = db.Column(db.String(20), default='en_service')  # en_service, cede, reforme
+    date_cession = db.Column(db.Date)
+    valeur_cession = db.Column(db.Numeric)
+    cumul_amorti = db.Column(db.Numeric, default=0)
+    mode_paiement = db.Column(db.String(50), default='especes')
+    ecriture_acquisition_id = db.Column(db.Integer)
+    created_by = db.Column(db.String(100))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    dotations = db.relationship('DotationAmortissement', backref='immobilisation', lazy=True)
+
+    def valeur_nette_comptable(self):
+        return float(self.valeur_acquisition or 0) - float(self.cumul_amorti or 0)
+
+    def base_amortissable(self):
+        return float(self.valeur_acquisition or 0) - float(self.valeur_residuelle or 0)
+
+    def dotation_annuelle_theorique(self):
+        if not self.duree_annees:
+            return 0
+        return self.base_amortissable() / self.duree_annees
+
+
+class DotationAmortissement(db.Model):
+    __tablename__ = 'dotations_amortissement'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    immobilisation_id = db.Column(db.Integer, db.ForeignKey('immobilisations.id'), nullable=False)
+    annee = db.Column(db.Integer, nullable=False)
+    montant = db.Column(db.Numeric, nullable=False)
+    date_generation = db.Column(db.DateTime, default=datetime.utcnow)
+    ecriture_id = db.Column(db.Integer)
+    created_by = db.Column(db.String(100))
+
+
+# ============================================================
+# PROVISIONS POUR CRÉANCES DOUTEUSES
+# ============================================================
+
+class ProvisionCreance(db.Model):
+    __tablename__ = 'provisions_creances'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    facture_id = db.Column(db.Integer)
+    patient_id = db.Column(db.Integer)
+    patient_nom = db.Column(db.String(255))
+    montant_creance = db.Column(db.Numeric, nullable=False)
+    taux_provision = db.Column(db.Numeric, nullable=False, default=50)
+    montant_provisionne = db.Column(db.Numeric, nullable=False)
+    statut = db.Column(db.String(20), default='active')  # active, reprise, perte
+    ecriture_provision_id = db.Column(db.Integer)
+    ecriture_reprise_id = db.Column(db.Integer)
+    date_creation = db.Column(db.DateTime, default=datetime.utcnow)
+    date_cloture = db.Column(db.DateTime)
+    created_by = db.Column(db.String(100))
+    commentaire = db.Column(db.Text)
+
 
 # models.py - Modèle Vente EXACT (correspond à ta base)
 
@@ -685,6 +866,10 @@ class Vente(db.Model):
     taux_assurance2 = db.Column(db.Float, default=0)
     prise_en_charge2 = db.Column(db.Float, default=0)
     numero_assure2 = db.Column(db.String(50))
+    # Société souscriptrice de l'assurance complémentaire, capturée au moment
+    # de la vente (même logique que assurance2_nom/taux_assurance2 : un
+    # instantané, pas une référence vivante vers le patient).
+    societe_assurance2 = db.Column(db.String(150))
     montant_donne = db.Column(db.Float, default=0)
     rendu = db.Column(db.Float, default=0)
     reste_a_payer = db.Column(db.Float, default=0)
@@ -1416,6 +1601,10 @@ class FactureAssurance(db.Model):
     date_remboursement = db.Column(db.Date)
     details = db.Column(db.JSON)
     type_assurance = db.Column(db.String(50), default='principale')
+    # Société souscriptrice (assurance complémentaire uniquement) : permet de
+    # générer une facture distincte par société sous une même compagnie
+    # (ex: GTA/SOTOCO et GTA/TOGOCEL séparément).
+    societe = db.Column(db.String(150))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -1824,7 +2013,13 @@ class JournalMouvement(db.Model):
             'depense_enregistree': 'Dépense enregistrée',
             'proforma_cree': 'Proforma créé',
             'rendez_vous_pris': 'Rendez-vous pris',
-            'consultation_terminee': 'Consultation terminée'
+            'consultation_terminee': 'Consultation terminée',
+            'ecriture_generee': 'Écriture comptable générée',
+            'salaire_paye': 'Salaire payé',
+            'employe_ajoute': 'Employé ajouté',
+            'conge_approuve': 'Congé approuvé',
+            'permission_approuvee': 'Permission approuvée',
+            'cloture_exercice': "Clôture d'exercice",
         }
         return labels.get(self.categorie, self.categorie)
     
@@ -1843,3 +2038,325 @@ class JournalMouvement(db.Model):
             return f"- {abs(float(self.montant)):,.0f} F"
         else:
             return f"{float(self.montant):,.0f} F"
+
+
+# ============================================================
+# PAIE (bulletin de paie — Togo, agents publics et privés)
+# ============================================================
+# ⚠️ Les taux par défaut ci-dessous (ParametragePaie) sont des valeurs
+# indicatives, éditables dans l'écran "Paramètres de paie". À faire
+# valider par votre comptable / la DGI avant la première paie réelle —
+# la législation sociale et fiscale togolaise évolue.
+#
+# Deux profils sont gérés (secteur_paie sur Employe) :
+#   - Privé : retraite CNSS, assurance maladie AMU-CNSS
+#   - Public : retraite CRT, assurance maladie AMU-INAM
+# L'AMU est réglementée par le décret n°2023-096/PR du 4 octobre 2023 :
+# taux global de 10% de la rémunération, réparti au plus à moitié pour le
+# salarié et au moins à moitié pour l'employeur — ce verrou (amu_taux_global/2)
+# s'applique quel que soit le profil, et même en cas de dérogation
+# individuelle par salarié (voir services/paie_service.py).
+
+class ParametragePaie(db.Model):
+    __tablename__ = 'parametrage_paie'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False, unique=True)
+
+    # --- Secteur privé : retraite CNSS ---
+    taux_cnss_salarial = db.Column(db.Numeric, default=4.0)      # % de l'assiette (salaire brut)
+    taux_cnss_patronal = db.Column(db.Numeric, default=17.5)
+    plafond_cnss = db.Column(db.Numeric, default=0)              # FCFA/mois, 0 = pas de plafond
+
+    # --- Secteur public : retraite CRT (assiette = salaire de base / traitement indiciaire) ---
+    taux_crt_salarial = db.Column(db.Numeric, default=7.0)
+    taux_crt_patronal = db.Column(db.Numeric, default=20.0)
+    plafond_crt = db.Column(db.Numeric, default=0)
+
+    # --- AMU (commun aux deux secteurs, assiette = salaire brut) ---
+    amu_taux_global = db.Column(db.Numeric, default=10.0)         # décret n°2023-096/PR
+    taux_amu_salarial_defaut = db.Column(db.Numeric, default=5.0)   # verrouillé <= amu_taux_global/2
+    taux_amu_patronal_defaut = db.Column(db.Numeric, default=5.0)   # verrouillé >= amu_taux_global/2
+
+    # --- Formation professionnelle (privé — taux à confirmer, désactivé par défaut) ---
+    taux_formation_pro = db.Column(db.Numeric, default=0)
+
+    # Barème IRPP progressif ANNUEL : liste de {min, max, taux} en JSON,
+    # éditable. Le calcul mensuel annualise la base imposable (x12), applique
+    # le barème, puis divise l'impôt obtenu par 12.
+    tranches_irpp = db.Column(db.JSON, default=lambda: [
+        {'min': 0, 'max': 900000, 'taux': 0},
+        {'min': 900000, 'max': 3000000, 'taux': 3},
+        {'min': 3000000, 'max': 4000000, 'taux': 10},
+        {'min': 4000000, 'max': 6000000, 'taux': 15},
+        {'min': 6000000, 'max': 10000000, 'taux': 25},
+        {'min': 10000000, 'max': None, 'taux': 35},
+    ])
+    abattement_taux = db.Column(db.Numeric, default=28.0)                 # % sur le brut imposable
+    abattement_plafond_annuel = db.Column(db.Numeric, default=10000000)   # FCFA/an
+    deduction_personne_charge = db.Column(db.Numeric, default=10000)      # FCFA/mois/personne
+    max_personnes_charge = db.Column(db.Integer, default=6)
+
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = db.Column(db.String(100))
+
+    @classmethod
+    def get_ou_creer(cls, structure_id):
+        """Retourne le paramétrage de la structure, en le créant avec les
+        valeurs par défaut (à vérifier) s'il n'existe pas encore."""
+        param = cls.query.filter_by(structure_id=structure_id).first()
+        if not param:
+            param = cls(structure_id=structure_id)
+            db.session.add(param)
+            db.session.commit()
+        return param
+
+
+class Paie(db.Model):
+    __tablename__ = 'paies'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    employe_id = db.Column(db.Integer, db.ForeignKey('employes.id'), nullable=False)
+
+    annee = db.Column(db.Integer, nullable=False)
+    mois = db.Column(db.Integer, nullable=False)  # 1-12
+
+    # Instantané du profil appliqué (utile même si les paramètres/l'employé
+    # changent ensuite — le bulletin déjà généré reste cohérent avec lui-même)
+    secteur = db.Column(db.String(10))              # 'prive' | 'public'
+    organisme_retraite = db.Column(db.String(10))   # 'CNSS' | 'CRT'
+    organisme_amu = db.Column(db.String(20))         # 'AMU-CNSS' | 'AMU-INAM'
+
+    salaire_base = db.Column(db.Numeric, default=0)
+    primes = db.Column(db.Numeric, default=0)
+    indemnites = db.Column(db.Numeric, default=0)
+    salaire_brut = db.Column(db.Numeric, default=0)
+
+    taux_retraite_salarial = db.Column(db.Numeric, default=0)
+    taux_retraite_patronal = db.Column(db.Numeric, default=0)
+    retraite_salarial = db.Column(db.Numeric, default=0)
+    retraite_patronal = db.Column(db.Numeric, default=0)
+
+    taux_amu_salarial = db.Column(db.Numeric, default=0)
+    taux_amu_patronal = db.Column(db.Numeric, default=0)
+    amu_salarial = db.Column(db.Numeric, default=0)
+    amu_patronal = db.Column(db.Numeric, default=0)
+
+    formation_pro = db.Column(db.Numeric, default=0)   # charge patronale uniquement
+
+    salaire_brut_imposable = db.Column(db.Numeric, default=0)   # brut - cotisations sociales salariales
+    personnes_a_charge = db.Column(db.Integer, default=0)
+    abattement = db.Column(db.Numeric, default=0)
+    deduction_charges_familiales = db.Column(db.Numeric, default=0)
+    revenu_net_imposable = db.Column(db.Numeric, default=0)     # base mensuelle après abattement + charges
+    irpp = db.Column(db.Numeric, default=0)
+
+    prets_deduction = db.Column(db.Numeric, default=0)
+    acomptes_deduction = db.Column(db.Numeric, default=0)
+    autres_retenues = db.Column(db.JSON, default=list)           # [{libelle, montant}]
+    autres_retenues_total = db.Column(db.Numeric, default=0)
+
+    total_retenues = db.Column(db.Numeric, default=0)              # retraite+AMU sal. + IRPP + prêts/acomptes/autres
+    total_charges_patronales = db.Column(db.Numeric, default=0)    # retraite+AMU patronal + formation pro
+    net_a_payer = db.Column(db.Numeric, default=0)
+
+    statut = db.Column(db.String(20), default='brouillon')  # brouillon, valide, payee
+    mode_paiement = db.Column(db.String(50), default='especes')
+    date_paiement = db.Column(db.Date)
+
+    depense_id = db.Column(db.Integer)
+    ecriture_id = db.Column(db.Integer)
+
+    created_by = db.Column(db.String(100))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    employe = db.relationship('Employe', backref='paies', lazy=True)
+
+    def get_statut_label(self):
+        return {'brouillon': 'Brouillon', 'valide': 'Validée', 'payee': 'Payée'}.get(self.statut, self.statut)
+
+    def get_periode_label(self):
+        mois_noms = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+        return f"{mois_noms[self.mois]} {self.annee}"
+
+
+# ============================================================================
+# BASCULE HORS-LIGNE — synchronisation base locale <-> Neon (voir utils/db_failover.py)
+# __bind_key__ = 'local' : ces 2 tables ne vivent QUE sur Postgres local,
+# jamais sur Neon (Neon n'a pas ce bind). Elles ne sont donc jamais écrasées
+# par un rapatriement (pg_restore) des données de Neon vers le local.
+# ============================================================================
+
+class SyncState(db.Model):
+    """État courant de la bascule (une seule ligne, id=1)."""
+    __tablename__ = 'sync_state'
+    __bind_key__ = 'local'
+
+    id = db.Column(db.Integer, primary_key=True)
+    mode = db.Column(db.String(10), default='online')  # 'online' (Neon) | 'offline' (local)
+    derniere_bascule_offline = db.Column(db.DateTime)
+    dernier_sync_reussi = db.Column(db.DateTime)
+    derniere_erreur_sync = db.Column(db.Text)
+    derniere_erreur_sync_at = db.Column(db.DateTime)
+    dernier_sync_sheets = db.Column(db.DateTime)  # dernier rafraîchissement du miroir Google Sheets
+
+    @classmethod
+    def get_ou_creer(cls):
+        etat = cls.query.get(1)
+        if not etat:
+            etat = cls(id=1, mode='online')
+            db.session.add(etat)
+            db.session.commit()
+        return etat
+
+
+class SyncChangelog(db.Model):
+    """Journal des écritures faites en local pendant une coupure Neon,
+    à rejouer vers Neon dès que la connexion revient."""
+    __tablename__ = 'sync_changelog'
+    __bind_key__ = 'local'
+
+    id = db.Column(db.Integer, primary_key=True)
+    table_name = db.Column(db.String(100), nullable=False)
+    operation = db.Column(db.String(10), nullable=False)  # insert | update | delete
+    pk_value = db.Column(db.Integer, nullable=False)
+    payload = db.Column(db.JSON)  # snapshot complet de la ligne (insert/update) ; null pour delete
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    synced = db.Column(db.Boolean, default=False)
+    synced_at = db.Column(db.DateTime)
+
+
+class SheetsMirror(db.Model):
+    """Miroir local, en LECTURE SEULE, de certaines feuilles Google Sheets
+    (actes, produits/médicaments, users, lunettes — par structure — et la
+    feuille globale 'structures'). Permet à l'appli (y compris la connexion)
+    de continuer à fonctionner quand Google Sheets est injoignable.
+    Alimenté par utils/sheets_mirror.py — ne jamais modifier à la main,
+    ce n'est pas la source de vérité (contrairement à sync_changelog qui,
+    lui, part du local vers Neon)."""
+    __tablename__ = 'sheets_mirror'
+    __bind_key__ = 'local'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    sheet_type = db.Column(db.String(30), nullable=False)  # actes | produits | users | lunettes | structures
+    row_key = db.Column(db.String(50), nullable=False)     # colonne "ID" de la feuille
+    data = db.Column(db.JSON, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('structure_id', 'sheet_type', 'row_key', name='uq_sheets_mirror_row'),
+    )
+
+
+# ============================================================================
+# POINTAGE — badgeage par empreinte digitale (WebAuthn / Windows Hello)
+# ============================================================================
+
+class EmpreinteEmploye(db.Model):
+    """Une empreinte (credential WebAuthn) enregistrée pour un employé.
+    Un employé peut en avoir plusieurs (ex: enregistrée sur deux postes)."""
+    __tablename__ = 'empreintes_employes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    employe_id = db.Column(db.Integer, db.ForeignKey('employes.id'), nullable=False)
+
+    credential_id = db.Column(db.Text, nullable=False, unique=True)  # base64, identifiant WebAuthn
+    public_key = db.Column(db.Text, nullable=False)                  # base64, clé publique COSE
+    sign_count = db.Column(db.Integer, default=0)                    # anti-clonage (doit toujours augmenter)
+
+    libelle_appareil = db.Column(db.String(100))   # ex: "PC accueil"
+    actif = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    derniere_utilisation = db.Column(db.DateTime)
+
+    employe = db.relationship('Employe', backref='empreintes')
+
+
+class ParametragePointage(db.Model):
+    """Règles de pointage par structure (horaires, tolérance, jours travaillés)."""
+    __tablename__ = 'parametrage_pointage'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False, unique=True)
+
+    heure_debut = db.Column(db.Time, default=lambda: time(8, 0))
+    heure_fin = db.Column(db.Time, default=lambda: time(17, 0))
+    tolerance_retard_minutes = db.Column(db.Integer, default=10)
+    # Jours travaillés : 0=lundi ... 6=dimanche (convention Python date.weekday())
+    jours_travailles = db.Column(db.JSON, default=lambda: [0, 1, 2, 3, 4, 5])
+
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @classmethod
+    def get_ou_creer(cls, structure_id):
+        param = cls.query.filter_by(structure_id=structure_id).first()
+        if not param:
+            param = cls(structure_id=structure_id)
+            db.session.add(param)
+            db.session.commit()
+        return param
+
+
+class Pointage(db.Model):
+    """Un pointage = une ligne par employé et par jour (arrivée + départ)."""
+    __tablename__ = 'pointages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    employe_id = db.Column(db.Integer, db.ForeignKey('employes.id'), nullable=False)
+    date_jour = db.Column(db.Date, nullable=False)
+
+    heure_arrivee = db.Column(db.Time)
+    methode_arrivee = db.Column(db.String(20))    # 'empreinte' | 'visage' | 'manuel'
+    statut_arrivee = db.Column(db.String(20))     # 'a_l_heure' | 'retard'
+    retard_minutes = db.Column(db.Integer, default=0)
+
+    heure_depart = db.Column(db.Time)
+    methode_depart = db.Column(db.String(20))
+    depart_anticipe = db.Column(db.Boolean, default=False)
+
+    duree_travaillee_minutes = db.Column(db.Integer)
+    commentaire = db.Column(db.Text)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    employe = db.relationship('Employe', backref='pointages')
+
+    __table_args__ = (
+        db.UniqueConstraint('employe_id', 'date_jour', name='uq_pointage_employe_jour'),
+    )
+
+    def get_statut_label(self):
+        if not self.heure_arrivee:
+            return 'Absent'
+        if self.statut_arrivee == 'retard':
+            return f"Retard ({self.retard_minutes} min)"
+        return 'À l\'heure'
+
+
+class VisageEmploye(db.Model):
+    """Un visage (descripteur facial à 128 dimensions, calculé par
+    face-api.js dans le navigateur — la photo elle-même ne quitte jamais
+    l'appareil, seul le descripteur mathématique est envoyé) enregistré
+    pour un employé. Reconnaissance par webcam standard, complémentaire au
+    pointage par empreinte (WebAuthn) — pas de matériel Windows Hello requis."""
+    __tablename__ = 'visages_employes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    employe_id = db.Column(db.Integer, db.ForeignKey('employes.id'), nullable=False)
+
+    descripteur = db.Column(db.JSON, nullable=False)  # liste de 128 nombres flottants
+
+    libelle = db.Column(db.String(100))
+    actif = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    derniere_utilisation = db.Column(db.DateTime)
+
+    employe = db.relationship('Employe', backref='visages')

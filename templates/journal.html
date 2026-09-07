@@ -60,6 +60,30 @@
         max-height: 70vh;
         overflow-y: auto;
     }
+
+    /* ⭐ Impression : voir aussi les règles globales dans base.html
+       (.no-print masque déjà .sidebar/.btn/boutons). Ici on masque en
+       plus les filtres/pagination (sans intérêt sur papier) et on affiche
+       une zone dédiée avec TOUS les résultats filtrés (pas seulement la
+       page affichée à l'écran) + un en-tête imprimable. */
+    .print-only { display: none; }
+    @media print {
+        .print-only { display: block !important; }
+        .filtres-bar-card, #statsCards { display: none !important; }
+        .print-header {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 14px;
+        }
+        .print-header h4 { margin: 0; }
+        .print-header .meta { text-align: right; font-size: 12px; color: #444; }
+        .print-kpis { display: flex; gap: 14px; margin-bottom: 14px; }
+        .print-kpis div { flex: 1; border: 1px solid #ccc; border-radius: 6px; padding: 8px 10px; }
+        .print-kpis .label { font-size: 10px; text-transform: uppercase; color: #666; }
+        .print-kpis .valeur { font-size: 15px; font-weight: 700; }
+        table.print-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        table.print-table th, table.print-table td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
+        table.print-table th { background: #eee; }
+    }
 </style>
 {% endblock %}
 
@@ -72,7 +96,7 @@
             <button class="btn btn-outline-secondary btn-sm" onclick="exporterCSV()">
                 <i class="fas fa-file-excel me-1"></i> Exporter CSV
             </button>
-            <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+            <button class="btn btn-outline-secondary btn-sm" onclick="imprimerJournal()" id="btnImprimer">
                 <i class="fas fa-print me-1"></i> Imprimer
             </button>
         </div>
@@ -119,7 +143,7 @@
     </div>
 
     <!-- Filtres -->
-    <div class="card shadow-sm mb-3">
+    <div class="card shadow-sm mb-3 filtres-bar-card">
         <div class="card-body">
             <div class="filtres-bar">
                 <div>
@@ -157,8 +181,42 @@
         </div>
     </div>
 
+    <!-- Zone d'impression : en-tête + KPI + tableau COMPLET (pas seulement
+         la page à l'écran), générée par imprimerJournal() juste avant print() -->
+    <div class="print-only" id="zoneImpression">
+        <div class="print-header">
+            <div>
+                <h4>{{ session.get('structure_nom') or 'Structure' }}</h4>
+                <div>Journal des mouvements</div>
+            </div>
+            <div class="meta">
+                <div id="printPeriode">Période : -</div>
+                <div>Édité le <span id="printDateEdition"></span></div>
+            </div>
+        </div>
+        <div class="print-kpis">
+            <div><div class="label">Mouvements</div><div class="valeur" id="printStatTotal">0</div></div>
+            <div><div class="label">Crédits</div><div class="valeur" id="printStatCredits">0 F</div></div>
+            <div><div class="label">Débits</div><div class="valeur" id="printStatDebits">0 F</div></div>
+            <div><div class="label">Solde</div><div class="valeur" id="printStatSolde">0 F</div></div>
+        </div>
+        <table class="print-table">
+            <thead>
+                <tr>
+                    <th>Date/Heure</th>
+                    <th>Catégorie</th>
+                    <th>Description</th>
+                    <th>Patient</th>
+                    <th>Utilisateur</th>
+                    <th>Montant</th>
+                </tr>
+            </thead>
+            <tbody id="printMouvementsList"></tbody>
+        </table>
+    </div>
+
     <!-- Liste -->
-    <div class="card shadow-sm">
+    <div class="card shadow-sm no-print">
         <div class="card-header bg-light d-flex justify-content-between align-items-center">
             <span><i class="fas fa-list me-2"></i> Mouvements</span>
             <span class="badge bg-secondary" id="totalCount">0</span>
@@ -412,6 +470,80 @@ function exporterCSV() {
     url += 'search=' + encodeURIComponent(search);
     
     window.open(url, '_blank');
+}
+
+// ============================================================
+// IMPRIMER (en-tête + TOUS les résultats filtrés, pas seulement la page)
+// ============================================================
+
+function imprimerJournal() {
+    var categorie = document.getElementById('filtreCategorie').value;
+    var dateDebut = document.getElementById('filtreDateDebut').value;
+    var dateFin = document.getElementById('filtreDateFin').value;
+    var search = document.getElementById('filtreSearch').value;
+    var btn = document.getElementById('btnImprimer');
+
+    var url = '/journal/api/liste?';
+    url += 'categorie=' + categorie + '&';
+    url += 'date_debut=' + dateDebut + '&';
+    url += 'date_fin=' + dateFin + '&';
+    url += 'search=' + encodeURIComponent(search) + '&';
+    url += 'limit=5000&offset=0';
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Préparation...';
+
+    fetch(url)
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (!data.success) { throw new Error('Echec du chargement'); }
+
+            var libelleCategorie = document.getElementById('filtreCategorie').selectedOptions[0].textContent;
+            document.getElementById('printPeriode').textContent =
+                'Catégorie : ' + libelleCategorie + ' — du ' + formaterDateFr(dateDebut) + ' au ' + formaterDateFr(dateFin) +
+                (search ? ' — recherche : "' + search + '"' : '');
+            document.getElementById('printDateEdition').textContent = new Date().toLocaleString('fr-FR');
+
+            var s = data.stats || {};
+            document.getElementById('printStatTotal').textContent = s.total || 0;
+            document.getElementById('printStatCredits').textContent = (s.credits || 0).toLocaleString() + ' F';
+            document.getElementById('printStatDebits').textContent = (s.debits || 0).toLocaleString() + ' F';
+            document.getElementById('printStatSolde').textContent = (s.solde || 0).toLocaleString() + ' F';
+
+            var tbody = document.getElementById('printMouvementsList');
+            if (!data.data || data.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Aucun mouvement</td></tr>';
+            } else {
+                var html = '';
+                data.data.forEach(function(m) {
+                    html += '<tr>';
+                    html += '<td>' + m.date_affichage + '</td>';
+                    html += '<td>' + m.categorie_label + '</td>';
+                    html += '<td>' + (m.description || '-') + '</td>';
+                    html += '<td>' + (m.patient_nom || '-') + '</td>';
+                    html += '<td>' + (m.utilisateur_nom || '-') + '</td>';
+                    html += '<td>' + m.montant_affichage + '</td>';
+                    html += '</tr>';
+                });
+                tbody.innerHTML = html;
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-print me-1"></i> Imprimer';
+            window.print();
+        })
+        .catch(function(error) {
+            console.error('Erreur:', error);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-print me-1"></i> Imprimer';
+            alert("Impossible de préparer l'impression.");
+        });
+}
+
+function formaterDateFr(iso) {
+    if (!iso) return '-';
+    var p = iso.split('-');
+    return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : iso;
 }
 
 // ============================================================
