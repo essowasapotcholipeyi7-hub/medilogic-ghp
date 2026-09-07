@@ -6,7 +6,7 @@ import json
 import traceback
 
 from models import (db, Employe, Service, Conge, Permission, DocumentRH, SignatureRH,
-                     Paie, ParametragePaie, EmpreinteEmploye, ParametragePointage, Pointage)
+                     Paie, ParametragePaie, EmpreinteEmploye, ParametragePointage, Pointage, VisageEmploye)
 
 rh_bp = Blueprint('rh', __name__, url_prefix='/rh')
 
@@ -1936,6 +1936,76 @@ def api_verifier_pointage(structure_id):
 
     try:
         resultat = verifier_pointage(request, structure_id, data.get('credential'), challenge)
+        return jsonify({'success': True, 'data': resultat})
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f"Echec de la vérification : {e}"}), 400
+
+
+# ---- Pointage par reconnaissance faciale (webcam standard) ----
+
+@rh_bp.route('/api/visages', methods=['GET'])
+@require_structure
+def api_liste_visages(structure_id):
+    employes = Employe.query.filter_by(structure_id=structure_id, statut='Actif').order_by(Employe.nom).all()
+    return jsonify({
+        'success': True,
+        'data': [{
+            'employe_id': e.id,
+            'employe_nom': f"{e.prenom or ''} {e.nom}".strip(),
+            'visages': [{
+                'id': v.id,
+                'libelle': v.libelle,
+                'created_at': v.created_at.strftime('%d/%m/%Y'),
+                'derniere_utilisation': v.derniere_utilisation.strftime('%d/%m/%Y %H:%M') if v.derniere_utilisation else None,
+            } for v in e.visages if v.actif],
+        } for e in employes],
+    })
+
+
+@rh_bp.route('/api/visages/<int:visage_id>', methods=['DELETE'])
+@require_structure
+def api_supprimer_visage(structure_id, visage_id):
+    visage = VisageEmploye.query.filter_by(id=visage_id, structure_id=structure_id).first()
+    if not visage:
+        return jsonify({'success': False, 'message': 'Visage introuvable'}), 404
+    visage.actif = False
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@rh_bp.route('/api/visages/enregistrer', methods=['POST'])
+@require_structure
+def api_enregistrer_visage(structure_id):
+    from services.pointage_service import enregistrer_visage
+
+    data = request.get_json(force=True) or {}
+    employe = Employe.query.filter_by(id=data.get('employe_id'), structure_id=structure_id).first()
+    if not employe:
+        return jsonify({'success': False, 'message': 'Employé introuvable'}), 404
+
+    try:
+        enregistrer_visage(employe, data.get('descripteur'), libelle=data.get('libelle'))
+        return jsonify({'success': True, 'message': 'Visage enregistré avec succès.'})
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f"Echec de l'enregistrement : {e}"}), 400
+
+
+@rh_bp.route('/api/pointage/facial/verifier', methods=['POST'])
+@require_structure
+def api_verifier_pointage_facial(structure_id):
+    from services.pointage_service import identifier_par_visage
+
+    data = request.get_json(force=True) or {}
+    try:
+        resultat = identifier_par_visage(structure_id, data.get('descripteur'))
         return jsonify({'success': True, 'data': resultat})
     except ValueError as e:
         db.session.rollback()

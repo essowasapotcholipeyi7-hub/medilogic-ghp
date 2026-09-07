@@ -2312,7 +2312,7 @@ class Pointage(db.Model):
     date_jour = db.Column(db.Date, nullable=False)
 
     heure_arrivee = db.Column(db.Time)
-    methode_arrivee = db.Column(db.String(20))    # 'empreinte' | 'manuel'
+    methode_arrivee = db.Column(db.String(20))    # 'empreinte' | 'visage' | 'manuel'
     statut_arrivee = db.Column(db.String(20))     # 'a_l_heure' | 'retard'
     retard_minutes = db.Column(db.Integer, default=0)
 
@@ -2338,3 +2338,25 @@ class Pointage(db.Model):
         if self.statut_arrivee == 'retard':
             return f"Retard ({self.retard_minutes} min)"
         return 'À l\'heure'
+
+
+class VisageEmploye(db.Model):
+    """Un visage (descripteur facial à 128 dimensions, calculé par
+    face-api.js dans le navigateur — la photo elle-même ne quitte jamais
+    l'appareil, seul le descripteur mathématique est envoyé) enregistré
+    pour un employé. Reconnaissance par webcam standard, complémentaire au
+    pointage par empreinte (WebAuthn) — pas de matériel Windows Hello requis."""
+    __tablename__ = 'visages_employes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    employe_id = db.Column(db.Integer, db.ForeignKey('employes.id'), nullable=False)
+
+    descripteur = db.Column(db.JSON, nullable=False)  # liste de 128 nombres flottants
+
+    libelle = db.Column(db.String(100))
+    actif = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    derniere_utilisation = db.Column(db.DateTime)
+
+    employe = db.relationship('Employe', backref='visages')

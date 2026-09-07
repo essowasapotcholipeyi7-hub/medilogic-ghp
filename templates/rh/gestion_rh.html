@@ -307,9 +307,10 @@
 
                             <div class="alert alert-info small" id="alertePointageContexte">
                                 <i class="fas fa-circle-info me-1"></i>
-                                Le pointage par empreinte n'est utilisable par le navigateur que sur
-                                <code>http://localhost:&lt;port&gt;</code> ou en HTTPS — pas sur une adresse
-                                IP locale en http:// simple (règle de sécurité imposée par les navigateurs).
+                                Le pointage par empreinte <strong>et</strong> par visage (caméra) ne sont
+                                utilisables par le navigateur que sur <code>http://localhost:&lt;port&gt;</code>
+                                ou en HTTPS — pas sur une adresse IP locale en http:// simple (règle de
+                                sécurité imposée par les navigateurs, pour l'empreinte comme pour la caméra).
                             </div>
 
                             <div class="row g-3 mb-4">
@@ -370,8 +371,8 @@
                                 </div>
                             </div>
 
-                            <div class="row g-3 mb-4">
-                                <div class="col-lg-7">
+                            <div class="row g-3 mb-3">
+                                <div class="col-12">
                                     <div class="card border-0 shadow-sm h-100">
                                         <div class="card-header bg-light d-flex justify-content-between align-items-center">
                                             <span><i class="fas fa-list-check me-2"></i>Pointages du jour</span>
@@ -395,9 +396,11 @@
                                         </div>
                                     </div>
                                 </div>
+                            </div>
 
+                            <div class="row g-3 mb-4">
                                 <!-- Empreintes enregistrées -->
-                                <div class="col-lg-5">
+                                <div class="col-lg-6">
                                     <div class="card border-0 shadow-sm h-100">
                                         <div class="card-header bg-light">
                                             <i class="fas fa-id-card me-2"></i>Empreintes enregistrées
@@ -409,7 +412,35 @@
                                                     <i class="fas fa-fingerprint me-1"></i> Enregistrer une empreinte
                                                 </button>
                                             </div>
-                                            <div id="listeEmpreintes" style="max-height:260px; overflow-y:auto;">
+                                            <div id="listeEmpreintes" style="max-height:220px; overflow-y:auto;">
+                                                <p class="text-muted small">Chargement...</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Visages enregistrés (reconnaissance faciale, webcam standard) -->
+                                <div class="col-lg-6">
+                                    <div class="card border-0 shadow-sm h-100">
+                                        <div class="card-header bg-light">
+                                            <i class="fas fa-camera-retro me-2"></i>Visages enregistrés
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="input-group input-group-sm mb-2">
+                                                <select class="form-select" id="selectEmployeVisage"></select>
+                                                <button class="btn btn-success" onclick="ouvrirCaptureVisage()">
+                                                    <i class="fas fa-camera me-1"></i> Enregistrer un visage
+                                                </button>
+                                            </div>
+                                            <div id="zoneCaptureVisage" style="display:none;" class="text-center mb-2 p-2 bg-light rounded">
+                                                <video id="videoEnrolementVisage" autoplay muted playsinline style="width:100%; max-width:280px; border-radius:8px; transform:scaleX(-1);"></video>
+                                                <div class="mt-2">
+                                                    <button class="btn btn-sm btn-primary" onclick="capturerVisage()"><i class="fas fa-check"></i> Capturer</button>
+                                                    <button class="btn btn-sm btn-outline-secondary" onclick="fermerCaptureVisage()">Annuler</button>
+                                                </div>
+                                                <div class="small text-muted mt-1" id="statutCaptureVisage"></div>
+                                            </div>
+                                            <div id="listeVisages" style="max-height:220px; overflow-y:auto;">
                                                 <p class="text-muted small">Chargement...</p>
                                             </div>
                                         </div>
@@ -2380,6 +2411,7 @@ function chargerToutesLesDonnees() {
     chargerDashboard();
     chargerParametragePointage();
     chargerListeEmpreintes();
+    chargerListeVisages();
 
     donneesChargees = true;
 }
@@ -2614,6 +2646,140 @@ function chargerResumePointage() {
         .catch(err => console.error('Erreur chargement résumé pointage:', err));
 }
 
+// ============================================================
+// POINTAGE PAR VISAGE (webcam standard, face-api.js)
+// ============================================================
+
+const MODELES_VISAGE_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+let modelesVisageCharges = false;
+let fluxCameraEnrolement = null;
+
+async function chargerModelesVisage() {
+    if (modelesVisageCharges) return true;
+    if (typeof faceapi === 'undefined') return false;
+    try {
+        await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri(MODELES_VISAGE_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODELES_VISAGE_URL),
+            faceapi.nets.faceRecognitionNet.loadFromUri(MODELES_VISAGE_URL),
+        ]);
+        modelesVisageCharges = true;
+        return true;
+    } catch (err) {
+        console.error('Erreur chargement modèles reconnaissance faciale:', err);
+        return false;
+    }
+}
+
+function chargerListeVisages() {
+    fetch('/rh/api/visages')
+        .then(r => r.json())
+        .then(d => {
+            if (!d.success) return;
+
+            const select = document.getElementById('selectEmployeVisage');
+            select.innerHTML = d.data.map(e => `<option value="${e.employe_id}">${e.employe_nom}</option>`).join('');
+
+            const zone = document.getElementById('listeVisages');
+            const avecVisages = d.data.filter(e => e.visages.length > 0);
+            if (avecVisages.length === 0) {
+                zone.innerHTML = '<p class="text-muted small">Aucun visage enregistré pour le moment.</p>';
+                return;
+            }
+            zone.innerHTML = avecVisages.map(e => `
+                <div class="mb-2 pb-2 border-bottom">
+                    <div class="fw-bold small">${e.employe_nom}</div>
+                    ${e.visages.map(v => `
+                        <div class="d-flex justify-content-between align-items-center small text-muted">
+                            <span><i class="fas fa-camera-retro me-1"></i>${v.libelle || 'Visage'} — depuis le ${v.created_at}</span>
+                            <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="supprimerVisage(${v.id})" title="Révoquer">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>`).join('')}
+                </div>`).join('');
+        })
+        .catch(err => console.error('Erreur chargement visages:', err));
+}
+
+function supprimerVisage(visageId) {
+    if (!confirm("Révoquer ce visage ? L'employé ne pourra plus pointer avec, jusqu'à un nouvel enregistrement.")) return;
+    fetch('/rh/api/visages/' + visageId, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(d => { if (d.success) chargerListeVisages(); else alert('Erreur : ' + d.message); });
+}
+
+async function ouvrirCaptureVisage() {
+    const employeId = document.getElementById('selectEmployeVisage').value;
+    if (!employeId) { alert('Sélectionnez un employé.'); return; }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Caméra non disponible sur ce poste/navigateur (nécessite http://localhost ou HTTPS).");
+        return;
+    }
+
+    const zone = document.getElementById('zoneCaptureVisage');
+    const statut = document.getElementById('statutCaptureVisage');
+    zone.style.display = '';
+    statut.textContent = 'Chargement des modèles de reconnaissance...';
+
+    const ok = await chargerModelesVisage();
+    if (!ok) {
+        statut.textContent = "Échec du chargement des modèles (vérifiez la connexion internet).";
+        return;
+    }
+
+    try {
+        fluxCameraEnrolement = await navigator.mediaDevices.getUserMedia({video: {width: 320, height: 240}});
+        const video = document.getElementById('videoEnrolementVisage');
+        video.srcObject = fluxCameraEnrolement;
+        statut.textContent = 'Positionnez le visage bien en face, puis cliquez sur Capturer.';
+    } catch (err) {
+        console.error(err);
+        statut.textContent = "Impossible d'accéder à la caméra : " + (err.message || err);
+    }
+}
+
+function fermerCaptureVisage() {
+    if (fluxCameraEnrolement) {
+        fluxCameraEnrolement.getTracks().forEach(t => t.stop());
+        fluxCameraEnrolement = null;
+    }
+    document.getElementById('zoneCaptureVisage').style.display = 'none';
+}
+
+async function capturerVisage() {
+    const employeId = document.getElementById('selectEmployeVisage').value;
+    const video = document.getElementById('videoEnrolementVisage');
+    const statut = document.getElementById('statutCaptureVisage');
+
+    statut.textContent = 'Analyse du visage...';
+    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks().withFaceDescriptor();
+
+    if (!detection) {
+        statut.textContent = "Aucun visage détecté — repositionnez-vous et réessayez.";
+        return;
+    }
+
+    const libelle = prompt("Nom de cet enregistrement (ex : lumière du matin)", "Visage principal") || 'Visage principal';
+
+    fetch('/rh/api/visages/enregistrer', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({employe_id: parseInt(employeId), descripteur: Array.from(detection.descriptor), libelle})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            alert('Visage enregistré avec succès.');
+            fermerCaptureVisage();
+            chargerListeVisages();
+        } else {
+            statut.textContent = 'Échec : ' + d.message;
+        }
+    })
+    .catch(err => { statut.textContent = 'Erreur réseau : ' + err; });
+}
+
 // ⭐ Rafraîchir sur demande
 function rafraichirTout() {
     const btn = event?.target?.closest('button');
@@ -2653,4 +2819,9 @@ function rafraichirTout() {
      dans les deux formats (base64url <-> ArrayBuffer) attendus par les
      navigateurs, en accord avec la librairie Python webauthn côté serveur. -->
 <script src="https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@10.0.0/dist/bundle/index.umd.min.js"></script>
+<!-- Pointage par visage : détection + calcul du descripteur facial (128
+     nombres) entièrement dans le navigateur, via une webcam standard — la
+     photo elle-même ne quitte jamais l'appareil. Modèles chargés à la
+     demande (pas au chargement de la page) par chargerModelesVisage(). -->
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 {% endblock %}

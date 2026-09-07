@@ -19,9 +19,18 @@ Deux cérémonies :
     qui identifie l'employé À PARTIR de l'empreinte (pas de saisie
     préalable) et enregistre arrivée ou départ selon ce qui manque pour
     la journée en cours.
+
+Complément : pointage par reconnaissance FACIALE (voir plus bas,
+enregistrer_visage()/identifier_par_visage()) — utile quand le poste n'a
+pas de capteur d'empreinte/Windows Hello compatible, juste une webcam
+standard. La détection/le calcul du visage se font entièrement dans le
+navigateur (face-api.js) : la photo ne quitte jamais l'appareil, seul un
+descripteur mathématique (128 nombres) est envoyé au serveur, comparé par
+distance euclidienne aux descripteurs déjà enregistrés de la structure.
 """
 
 import base64
+import math
 from datetime import datetime, date
 
 import webauthn
@@ -32,7 +41,7 @@ from webauthn.helpers.structs import (
     UserVerificationRequirement,
 )
 
-from models import db, Employe, EmpreinteEmploye, ParametragePointage, Pointage
+from models import db, Employe, EmpreinteEmploye, ParametragePointage, Pointage, VisageEmploye
 
 RP_NAME = "Medilogic — Pointage"
 
@@ -295,3 +304,74 @@ def resume_periode(structure_id, date_debut, date_fin, employe_id=None):
             'heures_travaillees': round(minutes_totales / 60, 1),
         })
     return resultats
+
+
+# ----------------------------------------------------------------------
+# Pointage par reconnaissance FACIALE (webcam standard, sans WebAuthn)
+# ----------------------------------------------------------------------
+# Seuil de distance euclidienne entre deux descripteurs face-api.js en
+# dessous duquel on considère qu'il s'agit de la même personne. La
+# documentation face-api.js recommande ~0.6 comme limite haute ; on prend
+# plus strict pour réduire le risque de faux positifs sur un pointage
+# (mieux vaut demander à réessayer qu'identifier le mauvais employé).
+SEUIL_DISTANCE_VISAGE = 0.5
+
+
+def _distance_euclidienne(a, b):
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+
+
+def _valider_descripteur(descripteur):
+    if not isinstance(descripteur, list) or len(descripteur) != 128 or \
+       not all(isinstance(x, (int, float)) for x in descripteur):
+        raise ValueError("Descripteur facial invalide (attendu : 128 nombres).")
+
+
+def enregistrer_visage(employe, descripteur, libelle=None):
+    """Enregistre un nouveau visage de référence pour un employé."""
+    _valider_descripteur(descripteur)
+    visage = VisageEmploye(
+        structure_id=employe.structure_id,
+        employe_id=employe.id,
+        descripteur=descripteur,
+        libelle=libelle or 'Visage enregistré',
+    )
+    db.session.add(visage)
+    db.session.commit()
+    return visage
+
+
+def identifier_par_visage(structure_id, descripteur):
+    """Compare le descripteur reçu à tous les visages enregistrés de la
+    structure (employés actifs uniquement), retient le plus proche sous le
+    seuil, et enregistre le pointage (même logique arrivée/départ que pour
+    l'empreinte). Lève ValueError avec un message utilisateur sinon."""
+    _valider_descripteur(descripteur)
+
+    visages = (
+        VisageEmploye.query
+        .join(Employe, Employe.id == VisageEmploye.employe_id)
+        .filter(VisageEmploye.structure_id == structure_id,
+                VisageEmploye.actif == True,  # noqa: E712
+                Employe.statut == 'Actif')
+        .all()
+    )
+    if not visages:
+        raise ValueError("Aucun visage enregistré pour cette structure.")
+
+    meilleur, meilleure_distance = None, None
+    for v in visages:
+        d = _distance_euclidienne(descripteur, v.descripteur)
+        if meilleure_distance is None or d < meilleure_distance:
+            meilleure_distance, meilleur = d, v
+
+    if meilleur is None or meilleure_distance > SEUIL_DISTANCE_VISAGE:
+        raise ValueError("Visage non reconnu. Rapprochez-vous de la caméra et réessayez.")
+
+    meilleur.derniere_utilisation = datetime.utcnow()
+    employe = Employe.query.get(meilleur.employe_id)
+    resultat = enregistrer_pointage(employe, methode='visage')
+    db.session.commit()
+    resultat['employe_nom'] = f"{employe.prenom or ''} {employe.nom}".strip()
+    resultat['distance'] = round(meilleure_distance, 3)
+    return resultat

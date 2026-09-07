@@ -407,3 +407,19 @@ CREATE TABLE IF NOT EXISTS pointages (
     CONSTRAINT uq_pointage_employe_jour UNIQUE (employe_id, date_jour)
 );
 -- ----------------------------------------------------------
+
+
+-- ----------------------------------------------------------
+-- 12) Pointage par reconnaissance faciale (complément à l'empreinte)
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS visages_employes (
+    id SERIAL PRIMARY KEY,
+    structure_id INTEGER NOT NULL,
+    employe_id INTEGER NOT NULL REFERENCES employes(id),
+    descripteur JSON NOT NULL,
+    libelle VARCHAR(100),
+    actif BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    derniere_utilisation TIMESTAMP
+);
+-- ----------------------------------------------------------
