@@ -954,7 +954,7 @@ def generer_journal(structure_id, date_debut, date_fin, journal_code=None):
         AND (:date_debut IS NULL OR e.date_ecriture >= :date_debut)
         AND (:date_fin IS NULL OR e.date_ecriture <= :date_fin)
         AND (:journal_code IS NULL OR e.journal_code = :journal_code)
-        ORDER BY e.date_ecriture
+        ORDER BY e.date_ecriture DESC, e.id DESC
     """), {
         'structure_id': structure_id,
         'date_debut': date_debut_obj.strftime('%Y-%m-%d') if date_debut_obj else None,

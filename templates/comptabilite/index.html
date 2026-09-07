@@ -2886,22 +2886,31 @@ function afficherRapport(data, type) {
         `;
     } else if (type === 'grand_livre') {
         thead.innerHTML = '<th>Date</th><th>Compte</th><th>Libellé</th><th>Débit</th><th>Crédit</th><th>Solde</th>';
+        // ⭐ Le solde cumulé n'a de sens que calculé chronologiquement (du plus
+        // ancien vers le plus récent — c'est l'ordre renvoyé par le serveur,
+        // trié par compte). On garde ce calcul dans cet ordre, mais on
+        // n'affiche les lignes qu'ensuite, dans l'ordre inverse (plus récent
+        // en haut), pour respecter la même convention que le reste de
+        // l'onglet Journal & Rapports sans fausser le solde affiché sur
+        // chaque ligne.
         let solde_cumul = 0;
+        const lignesHtml = [];
         data.forEach(item => {
             const debit = item.debit || 0;
             const credit = item.credit || 0;
             solde_cumul += debit - credit;
             totalDebit += debit;
             totalCredit += credit;
-            html += `<tr>
+            lignesHtml.push(`<tr>
                 <td>${item.date || ''}</td>
                 <td>${item.compte_numero || ''} - ${item.compte_nom || ''}</td>
                 <td>${item.libelle || ''}</td>
                 <td class="text-end">${debit > 0 ? debit.toLocaleString() + ' F' : '-'}</td>
                 <td class="text-end">${credit > 0 ? credit.toLocaleString() + ' F' : '-'}</td>
                 <td class="text-end fw-bold">${solde_cumul.toLocaleString()} F</td>
-            </tr>`;
+            </tr>`);
         });
+        html = lignesHtml.reverse().join('');
         const soldeFinal = totalDebit - totalCredit;
         tfoot.innerHTML = `
             <tr class="fw-bold">
