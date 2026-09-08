@@ -8291,37 +8291,46 @@ def api_paiement_assurance(facture_id):
         structure_id = session.get('structure_id')
         montant = float(data.get('montant', 0))
         date_remboursement = data.get('date_remboursement')
-        
+
+        # ⭐ Pièces justificatives obligatoires (traçabilité de l'encaissement)
+        numero_reference_versement = (data.get('numero_reference_versement') or '').strip()
+        date_versement = data.get('date_versement')
+        if not numero_reference_versement or not date_versement:
+            return jsonify({'success': False, 'error': "Le numéro de référence du versement et la date de versement sont obligatoires pour tracer l'encaissement."}), 400
+
         # Recuperer la facture
         facture = db.execute_query("""
-            SELECT * FROM factures_assurance 
+            SELECT * FROM factures_assurance
             WHERE id = %s AND structure_id = %s
         """, (facture_id, structure_id))
-        
+
         if not facture:
             return jsonify({'success': False, 'error': 'Facture non trouvee'}), 404
-        
+
         f = facture[0]
         deja_rembourse = float(f.get('montant_rembourse', 0))
         nouveau_rembourse = deja_rembourse + montant
         total_facture = float(f.get('montant_facture', 0))
-        
+
         if nouveau_rembourse > total_facture:
             return jsonify({'success': False, 'error': 'Montant depasse le solde restant'}), 400
-        
+
         if nouveau_rembourse >= total_facture:
             statut = 'payee'
         else:
             statut = 'partielle'
-        
+
         # Mettre a jour la facture
         db.execute_query("""
-            UPDATE factures_assurance 
+            UPDATE factures_assurance
             SET montant_rembourse = %s,
                 statut = %s,
-                date_remboursement = %s
+                date_remboursement = %s,
+                numero_reference_versement = %s,
+                date_versement = %s
             WHERE id = %s AND structure_id = %s
-        """, (nouveau_rembourse, statut, date_remboursement, facture_id, structure_id))
+        """, (nouveau_rembourse, statut, date_remboursement,
+              numero_reference_versement, date_versement, facture_id, structure_id))
         
         # Ajouter a la caisse (recette)
         db.execute_query("""
@@ -8351,6 +8360,8 @@ def api_paiement_assurance(facture_id):
                 reference=f"Facture assurance #{facture_id} - {f.get('patient_nom')}",
                 source_id=facture_id,
                 user_nom=session.get('user_name', 'Admin'),
+                numero_reference_versement=numero_reference_versement,
+                date_versement=date_versement,
             )
             if ecriture_ass:
                 print(f"🧾 Écriture comptable #{ecriture_ass.id} générée pour le remboursement assurance #{facture_id}")
@@ -8614,7 +8625,9 @@ def api_get_factures_assurance():
                 created_at,
                 date_remboursement,
                 updated_at,
-                societe
+                societe,
+                numero_reference_versement,
+                date_versement
             FROM factures_assurance
             WHERE structure_id = %s
         """
@@ -8652,7 +8665,9 @@ def api_get_factures_assurance():
                     'details': f.get('details', []),
                     'created_at': str(f.get('created_at')) if f.get('created_at') else None,
                     'date_remboursement': str(f.get('date_remboursement')) if f.get('date_remboursement') else None,
-                    'updated_at': str(f.get('updated_at')) if f.get('updated_at') else None
+                    'updated_at': str(f.get('updated_at')) if f.get('updated_at') else None,
+                    'numero_reference_versement': f.get('numero_reference_versement'),
+                    'date_versement': str(f.get('date_versement')) if f.get('date_versement') else None
                 })
             else:
                 # Format tuple
@@ -8668,7 +8683,10 @@ def api_get_factures_assurance():
                     'details': f[7] if len(f) > 7 else [],
                     'created_at': str(f[9]) if len(f) > 9 and f[9] else None,
                     'date_remboursement': str(f[10]) if len(f) > 10 and f[10] else None,
-                    'updated_at': str(f[11]) if len(f) > 11 and f[11] else None
+                    'updated_at': str(f[11]) if len(f) > 11 and f[11] else None,
+                    'societe': f[12] if len(f) > 12 else None,
+                    'numero_reference_versement': f[13] if len(f) > 13 else None,
+                    'date_versement': str(f[14]) if len(f) > 14 and f[14] else None
                 })
         
         return jsonify(result)
@@ -8765,41 +8783,52 @@ def payer_facture_assurance(facture_id):
         data = request.json
         structure_id = session.get('structure_id')
         montant = float(data.get('montant', 0))
-        
+
         if montant <= 0:
             return jsonify({'success': False, 'error': 'Montant invalide'}), 400
-        
+
+        # ⭐ Pièces justificatives obligatoires (traçabilité de l'encaissement) :
+        # numéro de référence du virement/versement + sa date. Légitime pour
+        # pouvoir rapprocher chaque encaissement d'assurance avec le relevé
+        # bancaire — demandé explicitement pour la comptabilité.
+        numero_reference_versement = (data.get('numero_reference_versement') or '').strip()
+        date_versement = data.get('date_versement')
+        if not numero_reference_versement or not date_versement:
+            return jsonify({'success': False, 'error': "Le numéro de référence du versement et la date de versement sont obligatoires pour tracer l'encaissement."}), 400
+
         # Recuperer la facture
         facture = db.execute_query("""
-            SELECT * FROM factures_assurance 
+            SELECT * FROM factures_assurance
             WHERE id = %s AND structure_id = %s
         """, (facture_id, structure_id))
-        
+
         if not facture or len(facture) == 0:
             return jsonify({'success': False, 'error': 'Facture non trouvee'}), 404
-        
+
         f = facture[0]
         deja_rembourse = float(f.get('montant_rembourse', 0))
         total_facture = float(f.get('montant_total', 0))
-        
+
         if montant > (total_facture - deja_rembourse):
             return jsonify({'success': False, 'error': f'Montant depasse le solde restant'}), 400
-        
+
         nouveau_rembourse = deja_rembourse + montant
-        
+
         if nouveau_rembourse >= total_facture:
             statut = 'payee'
         else:
             statut = 'partielle'
-        
+
         # 1. Mettre a jour la facture
         db.execute_query("""
-            UPDATE factures_assurance 
-            SET montant_rembourse = %s, 
+            UPDATE factures_assurance
+            SET montant_rembourse = %s,
                 statut = %s,
-                date_remboursement = NOW()
+                date_remboursement = NOW(),
+                numero_reference_versement = %s,
+                date_versement = %s
             WHERE id = %s
-        """, (nouveau_rembourse, statut, facture_id))
+        """, (nouveau_rembourse, statut, numero_reference_versement, date_versement, facture_id))
         
         # 2. Ajouter le remboursement dans les recettes (CAISSE)
         assurance_name = f.get('assurance')
@@ -8843,6 +8872,8 @@ def payer_facture_assurance(facture_id):
                 reference=f"Facture assurance #{facture_id} - {f.get('mois_reference')}",
                 source_id=facture_id,
                 user_nom=session.get('user_name', 'Admin'),
+                numero_reference_versement=numero_reference_versement,
+                date_versement=date_versement,
             )
             if ecriture_ass:
                 print(f"🧾 Écriture comptable #{ecriture_ass.id} générée pour le remboursement assurance #{facture_id}")

@@ -1601,6 +1601,12 @@ class FactureAssurance(db.Model):
     statut = db.Column(db.String(50), default='en_attente')
     date_facture = db.Column(db.Date, default=db.func.current_date())
     date_remboursement = db.Column(db.Date)
+    # ⭐ Pièces justificatives du dernier versement encaissé (traçabilité) :
+    # numéro de référence du virement/versement + sa date, saisis obligatoirement
+    # à l'encaissement (voir /api/assurances/factures/<id>/payer) et affichés
+    # en comptabilité (liste des factures assurance + détail de l'écriture).
+    numero_reference_versement = db.Column(db.String(100))
+    date_versement = db.Column(db.Date)
     details = db.Column(db.JSON)
     type_assurance = db.Column(db.String(50), default='principale')
     # Société souscriptrice (assurance complémentaire uniquement) : permet de
