@@ -1810,7 +1810,18 @@ class ProtocoleMedical(db.Model):
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
+    # ⭐ Origine miroir (synchronisation depuis gestion_patients — voir
+    # /api/protocoles/sync-externe) : NULL pour tout document 100% natif GHP,
+    # renseigné uniquement pour les catégories synchronisables (protocole_soins,
+    # ordonnance_type, bulletin_examen). Un index unique partiel sur
+    # (structure_id, source_app, source_model, source_id) garantit qu'un
+    # upsert répété ne crée jamais de doublon.
+    source_app = db.Column(db.String(30))       # 'gestion_patients'
+    source_model = db.Column(db.String(30))     # 'ProtocoleSoins' | 'OrdonnanceType' | 'ExamenType'
+    source_id = db.Column(db.Integer)           # id de la ligne source dans gestion_patients
+    source_synced_at = db.Column(db.DateTime)
+
     # Relations
     structure = db.relationship('Structure', backref='protocoles')
     auteur = db.relationship('Utilisateur', backref='protocoles')
@@ -1840,7 +1851,11 @@ class ProtocoleMedical(db.Model):
             'etapes': self.etapes or [],
             'duree': self.duree,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'source_app': self.source_app,
+            'source_model': self.source_model,
+            'source_id': self.source_id,
+            'est_synchronise': bool(self.source_app),
         }
     
     def get_categorie_label(self):

@@ -11622,6 +11622,102 @@ def api_receive_prescriptions():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/protocoles/sync-externe', methods=['POST'])
+def api_sync_protocole_externe():
+    """
+    Reçoit, en miroir, les protocoles de soins / ordonnances-types /
+    bulletins d'examen-types créés côté gestion_patients (source réelle,
+    utilisée dans le vrai parcours de soins) — voir _pousser_protocole_ghp()
+    dans gestion_patients/app.py. Un seul endpoint générique pour les 3
+    modèles source, comme /api/prescriptions gère médicaments et actes via
+    un seul champ `type_prescription`.
+
+    Upsert idempotent sur (structure_id, source_app, source_model, source_id)
+    — jamais de doublon sur un retry (index unique partiel côté DB). Une
+    catégorie hors des 3 synchronisables est refusée : une source externe ne
+    doit jamais pouvoir créer/modifier un document 100% natif GHP
+    (protocole_patient, fiche_information, protocole_infirmier).
+    """
+    token = request.args.get('token')
+    if not token:
+        return jsonify({'success': False, 'error': 'Token manquant'}), 401
+
+    mapping = StructureMapping.query.filter_by(api_key=token, actif=True).first()
+    if not mapping:
+        return jsonify({'success': False, 'error': 'Token invalide'}), 401
+
+    try:
+        from models import ProtocoleMedical
+        from services.protocoles_service import ProtocolesService
+
+        data = request.json or {}
+        categorie = data.get('categorie')
+        if categorie not in ('protocole_soins', 'ordonnance_type', 'bulletin_examen'):
+            return jsonify({'success': False, 'error': 'Catégorie non synchronisable'}), 400
+
+        source_app = data.get('source_app') or 'gestion_patients'
+        source_model = data.get('source_model')
+        source_id = data.get('source_id')
+        if not source_model or not source_id:
+            return jsonify({'success': False, 'error': 'source_model/source_id manquants'}), 400
+
+        action = data.get('action', 'upsert')
+        structure_id = mapping.local_structure_id
+
+        existant = ProtocoleMedical.query.filter_by(
+            structure_id=structure_id, source_app=source_app,
+            source_model=source_model, source_id=source_id,
+        ).first()
+
+        if action == 'archive':
+            if existant and existant.statut != 'archive':
+                ProtocolesService.modifier(
+                    existant.id, structure_id, {'statut': 'archive'},
+                    utilisateur_nom=data.get('auteur_nom') or 'Sync gestion_patients',
+                )
+            return jsonify({'success': True, 'message': 'Archivé' if existant else 'Rien à archiver'})
+
+        payload = {
+            'categorie': categorie,
+            'titre': data.get('titre') or 'Sans titre',
+            'description': data.get('description', ''),
+            'contenu': data.get('contenu') or '',
+            'medicaments': data.get('medicaments') or [],
+            'examens': data.get('examens') or [],
+            'statut': 'publie' if data.get('actif', True) else 'archive',
+        }
+
+        if existant:
+            succes, resultat = ProtocolesService.modifier(
+                existant.id, structure_id, payload,
+                utilisateur_nom=data.get('auteur_nom') or 'Sync gestion_patients',
+            )
+            protocole_id = existant.id
+        else:
+            succes, resultat = ProtocolesService.creer(
+                payload, structure_id,
+                utilisateur_nom=data.get('auteur_nom') or 'Sync gestion_patients',
+            )
+            protocole_id = resultat.get('id') if succes else None
+            if succes and protocole_id:
+                p = ProtocoleMedical.query.get(protocole_id)
+                p.source_app = source_app
+                p.source_model = source_model
+                p.source_id = source_id
+                p.source_synced_at = datetime.utcnow()
+                db.session.commit()
+
+        if not succes:
+            return jsonify({'success': False, 'error': resultat.get('error', 'Erreur inconnue')}), 500
+
+        return jsonify({'success': True, 'protocole_id': protocole_id})
+
+    except Exception as e:
+        print(f"❌ Erreur sync protocole: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/prescriptions-recues')
 @login_required
 def prescriptions_recues():

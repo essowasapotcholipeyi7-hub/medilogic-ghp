@@ -423,3 +423,28 @@ CREATE TABLE IF NOT EXISTS visages_employes (
     derniere_utilisation TIMESTAMP
 );
 -- ----------------------------------------------------------
+
+
+-- ----------------------------------------------------------
+-- 13) Pièces justificatives du remboursement assurance (traçabilité)
+-- ----------------------------------------------------------
+ALTER TABLE factures_assurance
+    ADD COLUMN IF NOT EXISTS numero_reference_versement VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS date_versement DATE;
+-- ----------------------------------------------------------
+
+
+-- ----------------------------------------------------------
+-- 14) Miroir protocoles/ordonnances-types/examens-types synchronisés
+--     depuis gestion_patients (voir /api/protocoles/sync-externe)
+-- ----------------------------------------------------------
+ALTER TABLE protocoles_medicaux
+    ADD COLUMN IF NOT EXISTS source_app VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS source_model VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS source_id INTEGER,
+    ADD COLUMN IF NOT EXISTS source_synced_at TIMESTAMP;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_protocoles_medicaux_source
+    ON protocoles_medicaux (structure_id, source_app, source_model, source_id)
+    WHERE source_app IS NOT NULL;
+-- ----------------------------------------------------------
