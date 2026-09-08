@@ -11254,15 +11254,18 @@ def delivrer_prescription(id):
     Marquer une prescription comme délivrée (Pharmacie)
     """
     structure_id = session.get('structure_id')
-    
+
     if not structure_id:
         return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
-    
+
     try:
-        # ⭐ Vérifier que la prescription existe et est en attente
+        # ⭐ EN_ATTENTE (jamais touchée) ou AU_PANIER (déjà ajoutée au
+        # panier avant la vente — l'état réel une fois la vente terminée,
+        # voir finaliserPanier() -> pharma_vente) : les deux sont "pas
+        # encore délivrée".
         prescription = db.execute_query("""
-            SELECT * FROM prescriptions_recues 
-            WHERE id = %s AND structure_id = %s AND statut = 'EN_ATTENTE'
+            SELECT * FROM prescriptions_recues
+            WHERE id = %s AND structure_id = %s AND statut IN ('EN_ATTENTE', 'AU_PANIER')
         """, (id, structure_id))
         
         if not prescription:
@@ -11294,18 +11297,22 @@ def facturer_prescription(id):
         return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
     
     try:
-        # ⭐ Vérifier que la prescription existe et est en attente
+        # ⭐ Vérifier que la prescription existe et n'est pas déjà facturée.
+        # EN_ATTENTE (jamais touchée) ET AU_PANIER (ajoutée au panier avant
+        # la vente — l'état réel une fois la vente terminée, voir
+        # finaliserPanier() -> actes_vente) sont tous deux "pas encore
+        # facturés" légitimes ici.
         prescription = db.execute_query("""
-            SELECT * FROM prescriptions_recues 
-            WHERE id = %s AND structure_id = %s AND statut = 'EN_ATTENTE'
+            SELECT * FROM prescriptions_recues
+            WHERE id = %s AND structure_id = %s AND statut IN ('EN_ATTENTE', 'AU_PANIER')
         """, (id, structure_id))
-        
+
         if not prescription:
             return jsonify({'success': False, 'message': 'Prescription non trouvée ou déjà traitée'}), 404
-        
+
         # ⭐ Mettre à jour le statut
         db.execute_query("""
-            UPDATE prescriptions_recues 
+            UPDATE prescriptions_recues
             SET statut = 'FACTURE', facture_le = %s
             WHERE id = %s AND structure_id = %s
         """, (datetime.now().isoformat(), id, structure_id))

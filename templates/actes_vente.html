@@ -1929,7 +1929,19 @@ function finaliserVente() {
         if(data.success) {
             panier = [];
             afficherPanier();
-            
+
+            // ⭐ FIX : si cette vente vient d'un "Finaliser le panier" depuis
+            // Prescriptions reçues (prescription_ids dans l'URL), marquer
+            // ces prescriptions comme facturées — sinon elles restent
+            // affichées indéfiniment "Au panier" alors qu'elles ont bien
+            // été vendues (vécu en test).
+            const prescriptionIdsUrl = new URLSearchParams(window.location.search).get('prescription_ids');
+            if (prescriptionIdsUrl) {
+                prescriptionIdsUrl.split(',').filter(id => id).forEach(id => {
+                    fetch(`/api/prescriptions/${id}/facturer`, { method: 'POST' }).catch(() => {});
+                });
+            }
+
             if (resteAPayer > 0) {
                 const dateEcheance = new Date();
                 dateEcheance.setDate(dateEcheance.getDate() + 7);
