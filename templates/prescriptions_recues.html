@@ -268,6 +268,17 @@
                                             {% else %}
                                                 <span class="badge bg-danger me-1" title="Absent du catalogue de cette structure — le patient devra l'obtenir ailleurs">●</span>
                                             {% endif %}
+                                            {# ⭐ Onglet global (étape 6 du plan) : cette table réunit déjà
+                                               3 sources (acte prescrit / acte posé / hospitalisation) dans le
+                                               même flux "Vendre" — un badge de type évite que la caissière
+                                               confonde une hospitalisation avec un simple acte. #}
+                                            {% if p.type_prescription == 'acte_pose' %}
+                                                <span class="badge bg-info text-dark me-1" title="Acte réalisé par un infirmier/médecin (onglet Actes posés)">Acte posé</span>
+                                            {% elif p.type_prescription == 'hospitalisation' %}
+                                                <span class="badge bg-dark me-1" title="Facturation d'un séjour d'hospitalisation">Hospitalisation</span>
+                                            {% else %}
+                                                <span class="badge bg-primary me-1" title="Acte prescrit en consultation">Acte prescrit</span>
+                                            {% endif %}
                                             <strong>{{ p.medicament }}</strong>
                                         </td>
                                         <td class="text-end fw-bold">{{ (p.prix_total or 0)|int|format_currency }}</td>
@@ -792,6 +803,19 @@ function finaliserPanier() {
 // ============================================
 // VOIR DÉTAILS
 // ============================================
+function libelleTypePrescription(type) {
+    const labels = {
+        'medicament': 'Médicament',
+        'pharma': 'Médicament',
+        'pharmacie': 'Médicament',
+        'acte': 'Acte prescrit',
+        'actes': 'Acte prescrit',
+        'acte_pose': 'Acte posé',
+        'hospitalisation': 'Hospitalisation'
+    };
+    return labels[type] || type;
+}
+
 function voirDetails(id) {
     prescriptionIdActuel = id;
     
@@ -813,7 +837,7 @@ function voirDetails(id) {
                                 <span class="badge ${p.article_trouve ? 'bg-success' : 'bg-danger'} me-1">●</span>
                                 <strong>${p.medicament}</strong>
                             </p>
-                            <p class="text-muted small">Type: ${p.type}</p>
+                            <p class="text-muted small">Type: ${libelleTypePrescription(p.type)}</p>
                             ${!p.article_trouve ? '<p class="text-danger small mb-0"><i class="fas fa-triangle-exclamation me-1"></i>Absent du catalogue de cette structure — le patient devra l\'obtenir ailleurs.</p>' : ''}
                         </div>
                     </div>
