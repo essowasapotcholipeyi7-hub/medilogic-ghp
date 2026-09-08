@@ -145,7 +145,14 @@
                                             {# ⭐ TRIER les items par date de prescription (plus récent en premier) #}
                                             {% for p in items|sort(attribute='date_prescription', reverse=True) %}
                                             <tr id="presc-row-{{ p.id }}" data-type="pharma" data-patient="{{ patient_id }}" data-patient-nom="{{ patient_nom }}" data-patient-prenom="{{ patient_prenom }}">
-                                                <td><strong>{{ p.medicament }}</strong></td>
+                                                <td>
+                                                    {% if p.article_trouve %}
+                                                        <span class="badge bg-success me-1" title="Disponible dans le catalogue de la structure">●</span>
+                                                    {% else %}
+                                                        <span class="badge bg-danger me-1" title="Absent du catalogue de cette structure — le patient devra l'obtenir ailleurs">●</span>
+                                                    {% endif %}
+                                                    <strong>{{ p.medicament }}</strong>
+                                                </td>
                                                 <td>{{ p.dosage or '-' }}</td>
                                                 <td>{{ p.quantite or '1' }}</td>
                                                 <td class="text-end">{{ (p.prix_unitaire or 0)|int|format_currency }}</td>
@@ -255,7 +262,14 @@
                                     {# ⭐ TRIER les items par date de prescription (plus récent en premier) #}
                                     {% for p in items|sort(attribute='date_prescription', reverse=True) %}
                                     <tr id="presc-row-{{ p.id }}" data-type="actes" data-patient="{{ patient_id }}" data-patient-nom="{{ patient_nom }}" data-patient-prenom="{{ patient_prenom }}">
-                                        <td><strong>{{ p.medicament }}</strong></td>
+                                        <td>
+                                            {% if p.article_trouve %}
+                                                <span class="badge bg-success me-1" title="Disponible dans le catalogue de la structure">●</span>
+                                            {% else %}
+                                                <span class="badge bg-danger me-1" title="Absent du catalogue de cette structure — le patient devra l'obtenir ailleurs">●</span>
+                                            {% endif %}
+                                            <strong>{{ p.medicament }}</strong>
+                                        </td>
                                         <td class="text-end fw-bold">{{ (p.prix_total or 0)|int|format_currency }}</td>
                                         <td>{{ p.prescripteur or '-' }}</td>
                                         <td>{{ p.date_prescription.strftime('%d/%m/%Y') if p.date_prescription else '-' }}</td>
@@ -795,8 +809,12 @@ function voirDetails(id) {
                         </div>
                         <div class="col-md-6">
                             <h6><i class="fas fa-prescription me-2"></i>Prescription</h6>
-                            <p><strong>${p.medicament}</strong></p>
+                            <p>
+                                <span class="badge ${p.article_trouve ? 'bg-success' : 'bg-danger'} me-1">●</span>
+                                <strong>${p.medicament}</strong>
+                            </p>
                             <p class="text-muted small">Type: ${p.type}</p>
+                            ${!p.article_trouve ? '<p class="text-danger small mb-0"><i class="fas fa-triangle-exclamation me-1"></i>Absent du catalogue de cette structure — le patient devra l\'obtenir ailleurs.</p>' : ''}
                         </div>
                     </div>
                     <hr>

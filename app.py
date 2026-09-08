@@ -21,7 +21,7 @@ from routes.protocoles_routes import protocoles_bp
 from routes.journal_routes import journal_bp
 import secrets
 import random
-from datetime import datetime, timedelta 
+from datetime import datetime, timedelta
 
 
 
@@ -33,7 +33,7 @@ from services.rendez_vous_service import RendezVousService
 from services.rappels_service import RappelsService
 
 
-# ========== DÉTECTION ENVIRONNEMENTt ==========
+# ========== DÉTECTION ENVIRONNEMENT ==========
 IS_PRODUCTION = os.environ.get('RENDER') == 'true' or os.environ.get('PRODUCTION') == 'true'
 
 if IS_PRODUCTION:
@@ -4416,18 +4416,20 @@ def api_check_conflit():
     except ValueError:
         return jsonify({'success': False, 'error': 'Format de date invalide'}), 400
     
-    conflit = RendezVousService.verifier_conflit(
-        medecin_id=medecin_id,
-        date=date_obj,
-        heure=heure,
-        duree=duree
-    )
-    
-    return jsonify({
-        'success': True,
-        'disponible': conflit is None,
-        'conflit': conflit.to_dict() if conflit else None
-    })
+    try:
+        conflit = RendezVousService.verifier_conflit(
+            medecin_id=medecin_id,
+            date=date_obj,
+            heure=heure,
+            duree=duree
+        )
+        return jsonify({
+            'success': True,
+            'disponible': conflit is None,
+            'conflit': conflit.to_dict() if conflit else None
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/rendez_vous/api/disponibilites/<int:medecin_id>', methods=['GET'])
@@ -11163,6 +11165,51 @@ def notify_consultation_app(patient_id, structure_id):
         print(f"❌ Erreur webhook: {e}")
         return False
 
+@app.route('/api/actes/disponibles', methods=['GET'])
+def api_actes_disponibles():
+    """
+    API token (comme /api/medicamentos) pour récupérer le catalogue
+    d'actes d'une structure — utilisée par gestion_patients pour la
+    recherche d'actes posés (onglet "Actes posés"), afin de matcher
+    contre le VRAI catalogue de la structure plutôt qu'une copie locale
+    qui pourrait diverger.
+
+    ⭐ Construit le nom de la feuille directement (struct_<id>_actes) au
+    lieu de passer par sheets_helper.set_structure()/structure_prefix
+    (état partagé entre requêtes concurrentes) — cette route n'a pas de
+    session (appel cross-app par token), donc pas question de dépendre
+    d'un état posé par une AUTRE requête en cours.
+    """
+    token = request.args.get('token')
+    if not token:
+        return jsonify({'error': 'Token manquant'}), 401
+
+    mapping = StructureMapping.query.filter_by(api_key=token, actif=True).first()
+    if not mapping:
+        return jsonify({'error': 'Token invalide'}), 401
+
+    try:
+        structure_id = mapping.source_structure_id
+        sheet_name = f"struct_{structure_id}_actes"
+        try:
+            worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+            actes = worksheet.get_all_records()
+        except Exception:
+            actes = sheets_helper.get_all_records('actes', use_prefix=False)
+
+        result = []
+        for a in actes:
+            nom = a.get('nom') or ''
+            if nom:
+                result.append({'nom': nom})
+        result.sort(key=lambda x: x['nom'])
+
+        return jsonify({'success': True, 'actes': result, 'total': len(result)})
+    except Exception as e:
+        print(f"❌ Erreur /api/actes/disponibles: {e}")
+        return jsonify({'success': False, 'actes': [], 'error': str(e)}), 500
+
+
 @app.route('/api/medicamentos', methods=['GET'])
 def api_medicamentos():
     """
@@ -11209,15 +11256,18 @@ def delivrer_prescription(id):
     Marquer une prescription comme délivrée (Pharmacie)
     """
     structure_id = session.get('structure_id')
-    
+
     if not structure_id:
         return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
-    
+
     try:
-        # ⭐ Vérifier que la prescription existe et est en attente
+        # ⭐ EN_ATTENTE (jamais touchée) ou AU_PANIER (déjà ajoutée au
+        # panier avant la vente — l'état réel une fois la vente terminée,
+        # voir finaliserPanier() -> pharma_vente) : les deux sont "pas
+        # encore délivrée".
         prescription = db.execute_query("""
-            SELECT * FROM prescriptions_recues 
-            WHERE id = %s AND structure_id = %s AND statut = 'EN_ATTENTE'
+            SELECT * FROM prescriptions_recues
+            WHERE id = %s AND structure_id = %s AND statut IN ('EN_ATTENTE', 'AU_PANIER')
         """, (id, structure_id))
         
         if not prescription:
@@ -11249,18 +11299,22 @@ def facturer_prescription(id):
         return jsonify({'success': False, 'message': 'Structure non trouvée'}), 401
     
     try:
-        # ⭐ Vérifier que la prescription existe et est en attente
+        # ⭐ Vérifier que la prescription existe et n'est pas déjà facturée.
+        # EN_ATTENTE (jamais touchée) ET AU_PANIER (ajoutée au panier avant
+        # la vente — l'état réel une fois la vente terminée, voir
+        # finaliserPanier() -> actes_vente) sont tous deux "pas encore
+        # facturés" légitimes ici.
         prescription = db.execute_query("""
-            SELECT * FROM prescriptions_recues 
-            WHERE id = %s AND structure_id = %s AND statut = 'EN_ATTENTE'
+            SELECT * FROM prescriptions_recues
+            WHERE id = %s AND structure_id = %s AND statut IN ('EN_ATTENTE', 'AU_PANIER')
         """, (id, structure_id))
-        
+
         if not prescription:
             return jsonify({'success': False, 'message': 'Prescription non trouvée ou déjà traitée'}), 404
-        
+
         # ⭐ Mettre à jour le statut
         db.execute_query("""
-            UPDATE prescriptions_recues 
+            UPDATE prescriptions_recues
             SET statut = 'FACTURE', facture_le = %s
             WHERE id = %s AND structure_id = %s
         """, (datetime.now().isoformat(), id, structure_id))
@@ -11305,11 +11359,29 @@ def api_receive_prescriptions():
         for p in prescriptions:
             # ⭐ Détecter le type de prescription
             type_presc = p.get('type_prescription') or 'medicament'
-            
+
+            # ⭐ Éviter les doublons : si cette prescription (même source_id,
+            # même structure, même type) a déjà été reçue, on ne la
+            # réinsère pas — sans ça, un rattrapage du scheduler (toutes
+            # les 5 min) qui retombe sur une prescription déjà envoyée
+            # créerait une 2e ligne identique dans prescriptions_recues.
+            # Le type est inclus dans la comparaison car gestion_patients a
+            # PLUSIEURS sources (Prescription, ActePose...) dont les ID sont
+            # des séquences indépendantes qui recommencent chacune à 1 — un
+            # acte posé #1 et une prescription #1 partagent donc le même
+            # source_id sans être la même chose (vécu en test : ça écrasait
+            # silencieusement l'un des deux avant ce fix).
+            deja_recue = db.execute_query("""
+                SELECT id FROM prescriptions_recues
+                WHERE source_id = %s AND structure_id = %s AND type_prescription = %s
+            """, (p.get('id'), structure_id, type_presc))
+            if deja_recue:
+                continue
+
             # ⭐ Récupérer le nom du patient depuis la prescription
             patient_nom = p.get('patient_nom') or ''
             patient_prenom = p.get('patient_prenom') or ''
-            
+
             # ⭐ Pour les actes, le nom est dans 'medicament' ou 'acte_nom'
             medicament = p.get('medicament') or p.get('acte_nom') or ''
             
@@ -11467,20 +11539,29 @@ def prescriptions_recues():
             
             prix_unitaire = 0
             pbr = 0
-            
+            # ⭐ Indépendant du prix : un article trouvé à 0 F (prix pas
+            # encore renseigné) reste "trouvé" — seul un article ABSENT du
+            # catalogue de la structure doit ressortir en rouge (= la
+            # structure ne le propose pas, le patient devra l'obtenir
+            # ailleurs).
+            article_trouve = False
+
             if type_presc == 'medicament':
                 if nom_clean in produits_dict:
+                    article_trouve = True
                     prix_unitaire = produits_dict[nom_clean]['prix']
                     pbr = produits_dict[nom_clean]['pbr']
             else:
                 if nom_clean in actes_dict:
+                    article_trouve = True
                     prix_unitaire = actes_dict[nom_clean]['prix']
                     pbr = actes_dict[nom_clean]['pbr']
-            
+
             quantite = int(p.get('quantite', 1))
             p['prix_unitaire'] = prix_unitaire
             p['pbr'] = pbr
             p['prix_total'] = prix_unitaire * quantite
+            p['article_trouve'] = article_trouve
             
             # ⭐ Utiliser les noms déjà stockés
             p['patient_nom'] = p.get('patient_nom', 'Patient inconnu')
@@ -11576,12 +11657,8 @@ def prescription_details(id):
                 
                 if not found:
                     print(f"❌ Produit non trouvé: '{nom_recherche}'")
-                    return jsonify({
-                        'success': False,
-                        'message': f'Produit non trouvé: "{nom_recherche}"',
-                        'type': type_presc
-                    }), 404
-            
+                    match_info = "❌ Absent du catalogue de cette structure"
+
         else:  # acte
             prix_info = sheets_helper.get_prix_acte(structure_id, nom_recherche)
             
@@ -11606,12 +11683,8 @@ def prescription_details(id):
                 
                 if not found:
                     print(f"❌ Acte non trouvé: '{nom_recherche}'")
-                    return jsonify({
-                        'success': False,
-                        'message': f'Acte non trouvé: "{nom_recherche}"',
-                        'type': type_presc
-                    }), 404
-        
+                    match_info = "❌ Absent du catalogue de cette structure"
+
         quantite = int(p.get('quantite', 1))
         prix_total = prix_unitaire * quantite
         
@@ -11630,7 +11703,8 @@ def prescription_details(id):
                 'date_prescription': p.get('date_prescription'),
                 'prescripteur': p.get('prescripteur') or '',
                 'statut': p.get('statut') or 'EN_ATTENTE',
-                'match_info': match_info
+                'match_info': match_info,
+                'article_trouve': found
             }
         })
         
