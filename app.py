@@ -4121,6 +4121,105 @@ def api_creer_rendez_vous():
         }), 400
 
 
+@app.route('/api/rendez-vous/creer-externe', methods=['POST'])
+def api_creer_rendez_vous_externe():
+    """
+    API token (comme /api/prescriptions) : reçoit une demande de RDV poussée
+    depuis gestion_patients (consultation avec suivi programmé), sans passer
+    par une saisie manuelle à l'accueil.
+
+    Contrairement à /rendez_vous/api/creer (session-based), le patient et le
+    médecin ne sont pas des ID GHP connus côté appelant — on les retrouve par
+    nom, comme pour la réception des prescriptions (/api/prescriptions).
+    """
+    token = request.args.get('token')
+    if not token:
+        return jsonify({'success': False, 'error': 'Token manquant'}), 401
+
+    mapping = StructureMapping.query.filter_by(api_key=token, actif=True).first()
+    if not mapping:
+        return jsonify({'success': False, 'error': 'Token invalide'}), 401
+
+    data = request.json or {}
+    structure_id = mapping.local_structure_id
+
+    patient_nom = (data.get('patient_nom') or '').strip()
+    patient_prenom = (data.get('patient_prenom') or '').strip()
+    medecin_nom = (data.get('medecin_nom') or '').strip()
+    date_str = data.get('date')
+    heure = data.get('heure') or '08:00'
+    motif = (data.get('motif') or 'Suivi programmé').strip()
+    notes = data.get('notes') or ''
+    source_id = data.get('source_id')
+
+    if not patient_nom or not date_str:
+        return jsonify({'success': False, 'error': 'patient_nom et date sont obligatoires'}), 400
+
+    # ⭐ Dédoublonnage : si ce même suivi (source_id) a déjà été poussé, on ne
+    # recrée pas un doublon (une consultation peut être resauvegardée
+    # plusieurs fois avec la même date de suivi).
+    marqueur = f"[gestion_patients:consultation:{source_id}]"
+    if source_id and RendezVous.query.filter(
+        RendezVous.structure_id == structure_id,
+        RendezVous.notes.like(f"%{marqueur}%")
+    ).first():
+        return jsonify({'success': True, 'message': 'Déjà poussé précédemment', 'deja_existant': True})
+
+    patient = Patient.query.filter(
+        Patient.structure_id == structure_id,
+        db.func.lower(Patient.nom) == patient_nom.lower(),
+        db.func.lower(Patient.prenom) == patient_prenom.lower()
+    ).first()
+    if not patient:
+        return jsonify({'success': False, 'error': 'patient_introuvable'}), 404
+
+    def _tokens_nom(s):
+        # ⭐ Certaines structures saisissent "Dr" DANS le champ nom lui-même
+        # (ex. Medecin.nom = "Dr GASTON") plutôt que dans le champ titre
+        # dédié — une comparaison par sous-chaîne littérale échoue alors
+        # ("dr gaston" n'est ni un sous-mot de "gaston koffi" ni l'inverse).
+        # On compare par ensembles de mots (hors titres), plus robuste.
+        titres = {'dr', 'pr', 'docteur', 'professeur'}
+        return {
+            mot.strip('.').lower()
+            for mot in (s or '').split()
+            if mot.strip('.').lower() not in titres and mot.strip('.')
+        }
+
+    medecin = None
+    if medecin_nom:
+        medecin_tokens = _tokens_nom(medecin_nom)
+        for m in Medecin.query.filter_by(structure_id=structure_id, actif=True).all():
+            m_tokens = _tokens_nom(m.nom) | _tokens_nom(m.prenom)
+            if medecin_tokens & m_tokens:
+                medecin = m
+                break
+
+    if not medecin:
+        return jsonify({
+            'success': False,
+            'error': 'medecin_introuvable',
+            'message': f"Médecin \"{medecin_nom}\" non retrouvé dans le catalogue GHP de cette structure — le rendez-vous n'a pas pu être créé automatiquement, à programmer manuellement."
+        }), 404
+
+    succes, resultat = RendezVousService.creer_rendez_vous(
+        data={
+            'patient_id': patient.id,
+            'medecin_id': medecin.id,
+            'date': date_str,
+            'heure': heure,
+            'motif': motif,
+            'notes': f"{notes}\n{marqueur}".strip() if notes else marqueur
+        },
+        structure_id=structure_id,
+        utilisateur_nom='gestion_patients (auto)'
+    )
+
+    if succes:
+        return jsonify({'success': True, 'data': resultat})
+    return jsonify({'success': False, 'error': resultat.get('error', 'Erreur lors de la création')}), 400
+
+
 @app.route('/rendez_vous/api/<int:rdv_id>/confirmer', methods=['POST'])
 @login_required
 def api_confirmer_rendez_vous(rdv_id):
