@@ -11754,14 +11754,23 @@ def prescription_ajouter_panier(id):
     
     try:
         # ⭐ Récupérer la prescription
+        # On accepte aussi AU_PANIER (pas seulement EN_ATTENTE) : une ligne
+        # peut rester bloquée à AU_PANIER si une session précédente l'a
+        # ajoutée sans jamais finaliser/vider (onglet fermé, session
+        # expirée...) — le rafraîchissement client-side de cette page
+        # réaffiche alors cette ligne comme "En attente" (car elle n'est
+        # dans AUCUN panier de session active), et un clic "Ajouter au
+        # panier" échouait avec "non trouvée ou déjà traitée" alors que
+        # rien ne semblait anormal à l'écran. Réajouter la "récupère" pour
+        # la session courante au lieu de bloquer.
         prescription = db.execute_query("""
-            SELECT * FROM prescriptions_recues 
-            WHERE id = %s AND structure_id = %s AND statut = 'EN_ATTENTE'
+            SELECT * FROM prescriptions_recues
+            WHERE id = %s AND structure_id = %s AND statut IN ('EN_ATTENTE', 'AU_PANIER')
         """, (id, structure_id))
-        
+
         if not prescription:
             return jsonify({'success': False, 'message': 'Prescription non trouvée ou déjà traitée'}), 404
-        
+
         p = prescription[0]
         
         # ⭐ Récupérer le prix depuis Sheets
@@ -11798,6 +11807,7 @@ def prescription_ajouter_panier(id):
             'quantite': quantite,
             'prix_unitaire': prix_unitaire,
             'prix_total': prix_total,
+            'patient_id': p.get('patient_id'),
             'patient_nom': p.get('patient_nom') or '',
             'patient_prenom': p.get('patient_prenom') or ''
         })
