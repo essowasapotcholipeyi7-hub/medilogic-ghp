@@ -1602,7 +1602,7 @@ def actes_vente():
                         SELECT * FROM prescriptions_recues
                         WHERE id = ANY(:ids)
                         AND structure_id = :structure_id
-                        AND type_prescription IN ('acte', 'actes')
+                        AND type_prescription IN ('acte', 'actes', 'acte_pose', 'hospitalisation')
                     """),
                     {"ids": ids_list, "structure_id": structure_id}
                 )
@@ -11201,7 +11201,20 @@ def api_actes_disponibles():
         for a in actes:
             nom = a.get('nom') or ''
             if nom:
-                result.append({'nom': nom})
+                # ⭐ prix/pbr inclus (en plus du nom) — utilisé par
+                # gestion_patients pour afficher un aperçu tarifaire avant
+                # envoi (ex. clôture d'hospitalisation), sans dupliquer le
+                # catalogue. Champs additifs, ignorés par les appelants qui
+                # ne s'intéressent qu'au nom (recherche d'actes posés).
+                try:
+                    prix = float(a.get('prix') or 0)
+                except (TypeError, ValueError):
+                    prix = 0
+                try:
+                    pbr = float(a.get('pbr') or 0)
+                except (TypeError, ValueError):
+                    pbr = 0
+                result.append({'nom': nom, 'prix': prix, 'pbr': pbr})
         result.sort(key=lambda x: x['nom'])
 
         return jsonify({'success': True, 'actes': result, 'total': len(result)})
@@ -11536,7 +11549,18 @@ def prescriptions_recues():
             type_presc = p.get('type_prescription') or 'medicament'
             nom_recherche = p.get('medicament') or ''
             nom_clean = nom_recherche.lower().strip()
-            
+
+            # ⭐ Le template groupe par patient_id (Jinja groupby → sorted()) :
+            # si 2+ lignes ont patient_id=NULL (patient non retrouvé côté
+            # GHP par nom/prénom exact), Python plante avec "'<' not
+            # supported between instances of 'NoneType' and 'NoneType'" et
+            # la page entière part en 500 — plus AUCUNE prescription
+            # visible, y compris celles d'autres patients bien identifiés.
+            # On neutralise avec un entier négatif regroupant les
+            # "non identifiés" plutôt que de laisser None.
+            if p.get('patient_id') is None:
+                p['patient_id'] = -1
+
             prix_unitaire = 0
             pbr = 0
             # ⭐ Indépendant du prix : un article trouvé à 0 F (prix pas
@@ -11730,14 +11754,23 @@ def prescription_ajouter_panier(id):
     
     try:
         # ⭐ Récupérer la prescription
+        # On accepte aussi AU_PANIER (pas seulement EN_ATTENTE) : une ligne
+        # peut rester bloquée à AU_PANIER si une session précédente l'a
+        # ajoutée sans jamais finaliser/vider (onglet fermé, session
+        # expirée...) — le rafraîchissement client-side de cette page
+        # réaffiche alors cette ligne comme "En attente" (car elle n'est
+        # dans AUCUN panier de session active), et un clic "Ajouter au
+        # panier" échouait avec "non trouvée ou déjà traitée" alors que
+        # rien ne semblait anormal à l'écran. Réajouter la "récupère" pour
+        # la session courante au lieu de bloquer.
         prescription = db.execute_query("""
-            SELECT * FROM prescriptions_recues 
-            WHERE id = %s AND structure_id = %s AND statut = 'EN_ATTENTE'
+            SELECT * FROM prescriptions_recues
+            WHERE id = %s AND structure_id = %s AND statut IN ('EN_ATTENTE', 'AU_PANIER')
         """, (id, structure_id))
-        
+
         if not prescription:
             return jsonify({'success': False, 'message': 'Prescription non trouvée ou déjà traitée'}), 404
-        
+
         p = prescription[0]
         
         # ⭐ Récupérer le prix depuis Sheets
@@ -11774,6 +11807,7 @@ def prescription_ajouter_panier(id):
             'quantite': quantite,
             'prix_unitaire': prix_unitaire,
             'prix_total': prix_total,
+            'patient_id': p.get('patient_id'),
             'patient_nom': p.get('patient_nom') or '',
             'patient_prenom': p.get('patient_prenom') or ''
         })
