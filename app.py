@@ -4416,13 +4416,16 @@ def api_check_conflit():
     except ValueError:
         return jsonify({'success': False, 'error': 'Format de date invalide'}), 400
     
-    conflit = RendezVousService.verifier_conflit(
-        medecin_id=medecin_id,
-        date=date_obj,
-        heure=heure,
-        duree=duree
-    )
-    
+    try:
+        conflit = RendezVousService.verifier_conflit(
+            medecin_id=medecin_id,
+            date=date_obj,
+            heure=heure,
+            duree=duree
+        )
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
     return jsonify({
         'success': True,
         'disponible': conflit is None,

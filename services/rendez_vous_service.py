@@ -131,12 +131,14 @@ class RendezVousService:
         rendez_vous = query.all()
         
         # Convertir l'heure en minutes
-        h, m = map(int, heure.split(':'))
+        # (split(':')[:2] car certains rendez-vous existants ont été
+        #  enregistrés avec les secondes, ex. "08:00:00")
+        h, m = map(int, heure.split(':')[:2])
         debut = h * 60 + m
         fin = debut + duree
-        
+
         for rdv in rendez_vous:
-            h2, m2 = map(int, rdv.heure_rendez_vous.split(':'))
+            h2, m2 = map(int, rdv.heure_rendez_vous.split(':')[:2])
             rdv_debut = h2 * 60 + m2
             rdv_fin = rdv_debut + (rdv.duree or cls.DUREE_DEFAUT)
             
