@@ -4231,7 +4231,7 @@ def api_confirmer_rendez_vous(rdv_id):
         structure_id=structure_id,
         utilisateur_nom=session.get('user_nom', 'Systeme')
     )
-    
+
     if succes:
         return jsonify({
             'success': True,
@@ -4318,7 +4318,7 @@ def api_liste_patients():
     structure_id = session.get('structure_id')
     
     patients = Patient.query.filter_by(structure_id=structure_id).order_by(Patient.nom).all()
-    
+
     result = []
     for p in patients:
         result.append({
@@ -4837,7 +4837,6 @@ def api_add_rendez_vous():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
-
 
 
 
