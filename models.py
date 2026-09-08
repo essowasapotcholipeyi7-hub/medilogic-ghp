@@ -1097,9 +1097,11 @@ class RendezVous(db.Model):
         # Calculer automatiquement la date de fin
         if self.date_rendez_vous and self.heure_rendez_vous and self.duree:
             from datetime import datetime, timedelta
+            # [:5] car certains rendez-vous ont été enregistrés avec les
+            # secondes (ex. "08:00:00") — on ne garde que HH:MM
             date_heure = datetime.combine(
                 self.date_rendez_vous,
-                datetime.strptime(self.heure_rendez_vous, '%H:%M').time()
+                datetime.strptime(self.heure_rendez_vous[:5], '%H:%M').time()
             )
             self.date_fin = date_heure + timedelta(minutes=self.duree)
     
@@ -1134,7 +1136,7 @@ class RendezVous(db.Model):
         from datetime import datetime
         date_heure = datetime.combine(
             self.date_rendez_vous,
-            datetime.strptime(self.heure_rendez_vous, '%H:%M').time()
+            datetime.strptime(self.heure_rendez_vous[:5], '%H:%M').time()
         )
         return date_heure < datetime.now()
     

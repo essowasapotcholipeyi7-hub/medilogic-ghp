@@ -4423,14 +4423,13 @@ def api_check_conflit():
             heure=heure,
             duree=duree
         )
+        return jsonify({
+            'success': True,
+            'disponible': conflit is None,
+            'conflit': conflit.to_dict() if conflit else None
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
-
-    return jsonify({
-        'success': True,
-        'disponible': conflit is None,
-        'conflit': conflit.to_dict() if conflit else None
-    })
 
 
 @app.route('/rendez_vous/api/disponibilites/<int:medecin_id>', methods=['GET'])
