@@ -1611,22 +1611,46 @@ def api_patient_rendez_vous(id):
     try:
         structure_id = session.get('structure_id')
         # Même COALESCE que get_medecin_consultations() (app.py) — la table
-        # rendez_vous a deux paires de colonnes date/heure selon le flux de
-        # création utilisé, voir le commentaire à cet endroit.
-        rdvs = db.execute_query("""
-            SELECT
-                r.id,
-                TO_CHAR(COALESCE(r.date_rendez_vous, r.date_rdv), 'DD/MM/YYYY') as date_rdv,
-                COALESCE(r.heure_rendez_vous, TO_CHAR(r.heure_rdv, 'HH24:MI')) as heure_rdv,
-                COALESCE(r.motif, '') as motif,
-                COALESCE(r.statut, 'programme') as statut,
-                m.titre as medecin_titre, m.nom as medecin_nom, m.prenom as medecin_prenom
-            FROM rendez_vous r
-            LEFT JOIN medecins m ON m.id = r.medecin_id
-            WHERE r.patient_id = %s AND r.structure_id = %s
-            ORDER BY COALESCE(r.date_rendez_vous, r.date_rdv) DESC,
-                     COALESCE(r.heure_rendez_vous, TO_CHAR(r.heure_rdv, 'HH24:MI')) DESC
-        """, (id, structure_id))
+        # rendez_vous a, sur GHP, deux paires de colonnes date/heure selon
+        # le flux de création utilisé (voir le commentaire à cet endroit).
+        # 🔥 Mais BIASA (Neon séparé) n'a JAMAIS eu ces colonnes historiques
+        # date_rdv/heure_rdv — divergence de schéma découverte en testant
+        # ce endpoint. On tente la version complète, et on retombe sur les
+        # colonnes actuelles seules si elles n'existent pas (au lieu de
+        # planter sur BIASA) ; db.execute_query fait déjà un rollback
+        # avant de relancer l'exception, la 2e requête part donc sur une
+        # transaction propre.
+        try:
+            rdvs = db.execute_query("""
+                SELECT
+                    r.id,
+                    TO_CHAR(COALESCE(r.date_rendez_vous, r.date_rdv), 'DD/MM/YYYY') as date_rdv,
+                    COALESCE(r.heure_rendez_vous, TO_CHAR(r.heure_rdv, 'HH24:MI')) as heure_rdv,
+                    COALESCE(r.motif, '') as motif,
+                    COALESCE(r.statut, 'programme') as statut,
+                    m.titre as medecin_titre, m.nom as medecin_nom, m.prenom as medecin_prenom
+                FROM rendez_vous r
+                LEFT JOIN medecins m ON m.id = r.medecin_id
+                WHERE r.patient_id = %s AND r.structure_id = %s
+                ORDER BY COALESCE(r.date_rendez_vous, r.date_rdv) DESC,
+                         COALESCE(r.heure_rendez_vous, TO_CHAR(r.heure_rdv, 'HH24:MI')) DESC
+            """, (id, structure_id))
+        except Exception as e:
+            if 'date_rdv' not in str(e) and 'heure_rdv' not in str(e):
+                raise
+            rdvs = db.execute_query("""
+                SELECT
+                    r.id,
+                    TO_CHAR(r.date_rendez_vous, 'DD/MM/YYYY') as date_rdv,
+                    r.heure_rendez_vous as heure_rdv,
+                    COALESCE(r.motif, '') as motif,
+                    COALESCE(r.statut, 'programme') as statut,
+                    m.titre as medecin_titre, m.nom as medecin_nom, m.prenom as medecin_prenom
+                FROM rendez_vous r
+                LEFT JOIN medecins m ON m.id = r.medecin_id
+                WHERE r.patient_id = %s AND r.structure_id = %s
+                ORDER BY r.date_rendez_vous DESC, r.heure_rendez_vous DESC
+            """, (id, structure_id))
 
         resultat = []
         for r in rdvs:
