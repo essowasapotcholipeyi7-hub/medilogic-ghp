@@ -105,7 +105,9 @@
             display: flex;
             align-items: center;
             justify-content: flex-start;
-            margin-left: 16px;
+            /* ⭐ Écart avec "SI <acronyme>" — patron : "le logo et le nom de
+               la structure est trop proche de SI". */
+            margin-left: 40px;
         }
         
         .structure-brand {
@@ -1911,9 +1913,20 @@
              affiché tel quel, non cliquable (changement réservé à
              l'admin de la structure). Page de connexion (pas de session) :
              marque d'origine inchangée. -->
-        {% if session.user_id %}
-        <a class="navbar-brand" href="{{ url_for('dashboard') }}"
-           {% if session.is_admin %}onclick="event.preventDefault(); ouvrirEditionAcronyme();" style="cursor: pointer;" title="Cliquer pour modifier l'acronyme affiché"{% endif %}>
+        {% if session.user_id and session.is_admin %}
+        <!-- ⭐ href="javascript:void(0)" plutôt que l'URL réelle + preventDefault
+             — patron : "quand on clique sur SI ça écrit navigation en
+             cours ça ne finit pas". Avec preventDefault(), un clic dont
+             le JS n'a pas encore fini de s'attacher (page lente à
+             charger) déclenchait quand même la vraie navigation vers
+             /dashboard avant que preventDefault() n'ait une chance de
+             s'exécuter. javascript:void(0) ne peut naviguer nulle part,
+             quoi qu'il arrive côté JS. -->
+        <a class="navbar-brand" href="javascript:void(0)" onclick="ouvrirEditionAcronyme();" style="cursor: pointer;" title="Cliquer pour modifier l'acronyme affiché">
+            <span style="color: #0E9D67;">SI</span> <span id="siAcronymeTexte" style="color: #0056a7;">{{ structure_acronyme }}</span>
+        </a>
+        {% elif session.user_id %}
+        <a class="navbar-brand" href="{{ url_for('dashboard') }}">
             <span style="color: #0E9D67;">SI</span> <span id="siAcronymeTexte" style="color: #0056a7;">{{ structure_acronyme }}</span>
         </a>
         {% else %}
