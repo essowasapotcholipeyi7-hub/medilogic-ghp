@@ -94,18 +94,26 @@ def api_creer_protocole():
     structure_id = session.get('structure_id')
     data = request.json
 
-    # Récupérer le nom depuis la session ou Google Sheets
-    utilisateur_nom = session.get('user_nom')
+    # ⭐ FIX : la clé de session posée à la connexion est 'user_name'
+    # (voir app.py), pas 'user_nom' — cette dernière n'existait jamais,
+    # donc CHAQUE création passait par le repli Google Sheets ci-dessous,
+    # lui-même exposé à un état partagé entre requêtes concurrentes
+    # (voir sheets_helper.get_user_by_id) : un protocole pouvait ainsi
+    # être attribué au nom d'un AUTRE utilisateur — patron vécu : "je me
+    # connecté sous un nom et fait un protocole... ça prend le nom d'une
+    # autre personne".
+    utilisateur_nom = session.get('user_name')
     if not utilisateur_nom or utilisateur_nom == 'Systeme':
         user_id = session.get('user_id')
         if user_id:
-            # Essayer de récupérer depuis Google Sheets
+            # Repli Google Sheets (compte créé avant que la session ne
+            # porte déjà 'user_name', cas normalement rarissime désormais)
             utilisateur_nom = sheets_helper.get_user_by_id(user_id, structure_id)
             if utilisateur_nom:
-                session['user_nom'] = utilisateur_nom
-    
+                session['user_name'] = utilisateur_nom
+
     if not utilisateur_nom:
-        utilisateur_nom = 'Systeme'  # ← CORRIGÉ : guillemet fermant ajouté
+        utilisateur_nom = 'Systeme'
     
     # 🔥 LOG POUR VOIR CE QUI EST ENVOYE
     print("=== DONNEES RECUES ===")
@@ -160,14 +168,15 @@ def api_modifier_protocole(protocole_id):
     structure_id = session.get('structure_id')
     data = request.json
     
-    # Récupérer le nom depuis la session ou Google Sheets
-    utilisateur_nom = session.get('user_nom')
+    # ⭐ FIX : même correctif que api_creer_protocole ci-dessus — 'user_name'
+    # est la vraie clé de session, pas 'user_nom'.
+    utilisateur_nom = session.get('user_name')
     if not utilisateur_nom or utilisateur_nom == 'Systeme':
         user_id = session.get('user_id')
         if user_id:
             utilisateur_nom = sheets_helper.get_user_by_id(user_id, structure_id)
             if utilisateur_nom:
-                session['user_nom'] = utilisateur_nom
+                session['user_name'] = utilisateur_nom
     
     if not utilisateur_nom:
         utilisateur_nom = 'Systeme'
@@ -206,9 +215,9 @@ def api_changer_statut(protocole_id):
         protocole_id=protocole_id,
         structure_id=structure_id,
         nouveau_statut=nouveau_statut,
-        utilisateur_nom=session.get('user_nom', 'Systeme')
+        utilisateur_nom=session.get('user_name', 'Systeme')  # ⭐ FIX : voir api_creer_protocole
     )
-    
+
     if succes:
         return jsonify({'success': True, 'data': resultat})
     else:
@@ -227,7 +236,7 @@ def api_dupliquer_protocole(protocole_id):
     succes, resultat = ProtocolesService.dupliquer(
         protocole_id=protocole_id,
         structure_id=structure_id,
-        utilisateur_nom=session.get('user_nom', 'Systeme')
+        utilisateur_nom=session.get('user_name', 'Systeme')  # ⭐ FIX : voir api_creer_protocole
     )
     
     if succes:
@@ -248,7 +257,7 @@ def api_supprimer_protocole(protocole_id):
     succes, resultat = ProtocolesService.supprimer(
         protocole_id=protocole_id,
         structure_id=structure_id,
-        utilisateur_nom=session.get('user_nom', 'Systeme')
+        utilisateur_nom=session.get('user_name', 'Systeme')  # ⭐ FIX : voir api_creer_protocole
     )
     
     if succes:

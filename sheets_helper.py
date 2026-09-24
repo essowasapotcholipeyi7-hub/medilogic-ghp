@@ -289,10 +289,22 @@ class SheetsHelper:
         print("🧹 Cache des prix vidé")
 
     def get_user_by_id(self, user_id, structure_id):
-        """Récupère un utilisateur par son ID depuis Google Sheets"""
+        """Récupère un utilisateur par son ID depuis Google Sheets.
+        ⭐ Construit le nom de la feuille directement depuis `structure_id`
+        (paramètre explicite) plutôt que via get_all_records('users',
+        use_prefix=True), qui dépend de self.structure_prefix — état
+        PARTAGÉ sur l'instance unique sheets_helper, qui peut avoir
+        changé entre-temps si une requête concurrente pour une AUTRE
+        structure l'a modifié (même risque déjà documenté/corrigé pour
+        /api/actes/disponibles, voir app.py). Sans ce correctif, le nom
+        retourné pouvait être celui d'un utilisateur d'une autre
+        structure partageant le même ID — patron vécu : "je me connecté
+        sous un nom et fait un protocole... ça prend le nom d'une autre
+        personne"."""
         try:
-            records = self.get_all_records('users', use_prefix=True)
-            
+            sheet_name = f"struct_{structure_id}_users"
+            records = self.get_all_records(sheet_name, use_prefix=False)
+
             for record in records:
                 if str(record.get('ID')) == str(user_id):
                     nom = record.get('nom', '')
