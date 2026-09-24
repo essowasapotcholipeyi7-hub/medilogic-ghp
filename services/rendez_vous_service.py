@@ -21,8 +21,20 @@ class RendezVousService:
     # get_rendez_vous_liste). 'archive' n'est pas un statut : c'est
     # justement les rendez-vous mis à la fourrière, quel que soit leur
     # statut réel.
+    #
+    # ⭐ 'actifs' et 'depasses' partagent les MÊMES statuts (programme/
+    # confirme/reporte) — un rendez-vous "programmé" dont la date est
+    # passée reste "programmé" en base (personne ne l'a marqué
+    # terminé/absent/annulé), donc `statut` seul ne suffit pas à le sortir
+    # de la liste active. Patron vécu : "nous sommes le 24/09/2026 mais
+    # dans la liste il y a des rdv dont les dates sont antérieures... ça
+    # doit aller dans rendez dépassé, ça ne doit plus s'afficher dans la
+    # liste active" — d'où le filtre de DATE supplémentaire (voir
+    # get_rendez_vous_liste), sur le même principe que
+    # RendezVous.est_depasse() déjà existant sur le modèle.
     VUES_STATUTS = {
         'actifs': ['programme', 'confirme', 'reporte'],
+        'depasses': ['programme', 'confirme', 'reporte'],
         'termines': ['termine', 'absent'],
         'annules': ['annule'],
         'tous': None,
@@ -119,6 +131,14 @@ class RendezVousService:
             statuts_vue = cls.VUES_STATUTS.get(vue, cls.VUES_STATUTS[cls.VUE_DEFAUT])
             if statuts_vue:
                 query = query.filter(RendezVous.statut.in_(statuts_vue))
+            # ⭐ 'actifs' et 'depasses' partagent les mêmes statuts — c'est
+            # la DATE qui les sépare : un programme/confirme/reporte dont
+            # la date est déjà passée n'a plus sa place dans "Actifs",
+            # même si personne ne l'a marqué terminé/absent/annulé.
+            if vue == 'actifs':
+                query = query.filter(RendezVous.date_rendez_vous >= date.today())
+            elif vue == 'depasses':
+                query = query.filter(RendezVous.date_rendez_vous < date.today())
 
         if date_debut:
             query = query.filter(RendezVous.date_rendez_vous >= date_debut)

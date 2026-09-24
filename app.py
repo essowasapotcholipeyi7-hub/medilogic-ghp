@@ -5788,7 +5788,11 @@ def rendez_vous():
     non_archives = db.or_(RendezVous.archive.is_(False), RendezVous.archive.is_(None))
     vue_compteurs = {
         'actifs': RendezVous.query.filter_by(structure_id=structure_id).filter(non_archives).filter(
-            RendezVous.statut.in_(RendezVousService.VUES_STATUTS['actifs'])).count(),
+            RendezVous.statut.in_(RendezVousService.VUES_STATUTS['actifs'])).filter(
+            RendezVous.date_rendez_vous >= today).count(),
+        'depasses': RendezVous.query.filter_by(structure_id=structure_id).filter(non_archives).filter(
+            RendezVous.statut.in_(RendezVousService.VUES_STATUTS['depasses'])).filter(
+            RendezVous.date_rendez_vous < today).count(),
         'termines': RendezVous.query.filter_by(structure_id=structure_id).filter(non_archives).filter(
             RendezVous.statut.in_(RendezVousService.VUES_STATUTS['termines'])).count(),
         'annules': RendezVous.query.filter_by(structure_id=structure_id).filter(non_archives).filter(

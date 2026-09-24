@@ -230,13 +230,19 @@ body.modal-open {
          défaut ; Terminés et Annulés à part ; Archivés = mis à la
          fourrière quel que soit leur statut réel. Remplace l'ancien menu
          déroulant "Statut" (mêmes valeurs, regroupées en onglets). -->
+    <!-- ⭐ Onglet "Dépassés" séparé de "Actifs" : un rendez-vous
+         programmé/confirmé/reporté dont la DATE est déjà passée n'a plus
+         sa place dans la liste active, même si personne ne l'a marqué
+         terminé/absent/annulé — patron : "nous sommes aujourdui le
+         24/09/2026 mais dans la liste il y a des rdv dont les dates sont
+         anterieurs à ceci... ça doit aller dans rendez depasser". -->
     <ul class="nav nav-pills mb-3">
-        {% for v, label, icone in [('actifs','Actifs','fa-calendar-check'), ('termines','Terminés','fa-flag-checkered'), ('annules','Annulés','fa-ban'), ('archive','Archivés','fa-box-archive')] %}
+        {% for v, label, icone in [('actifs','Actifs','fa-calendar-check'), ('depasses','Dépassés','fa-triangle-exclamation'), ('termines','Terminés','fa-flag-checkered'), ('annules','Annulés','fa-ban'), ('archive','Archivés','fa-box-archive')] %}
         <li class="nav-item">
-            <a class="nav-link {% if vue == v %}active{% endif %}"
+            <a class="nav-link {% if vue == v %}active{% endif %} {% if v == 'depasses' and vue_compteurs[v] > 0 %}text-danger{% endif %}"
                href="{{ url_for('rendez_vous', vue=v, periode=periode, date_debut=date_debut, date_fin=date_fin, medecin_id=medecin_id) }}">
                 <i class="fas {{ icone }} me-1"></i>{{ label }}
-                <span class="badge {% if vue == v %}bg-light text-dark{% else %}bg-secondary{% endif %} ms-1">{{ vue_compteurs[v] }}</span>
+                <span class="badge {% if vue == v %}bg-light text-dark{% elif v == 'depasses' and vue_compteurs[v] > 0 %}bg-danger{% else %}bg-secondary{% endif %} ms-1">{{ vue_compteurs[v] }}</span>
             </a>
         </li>
         {% endfor %}
