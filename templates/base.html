@@ -1517,13 +1517,23 @@
    SIDEBAR - VERSION COMPLÈTE
    ============================================ */
 
+/* ⭐ FIX : top/height ancrés sur --navbar-height (déjà calculée en JS
+   pour .top-nav, voir ajusterHauteurNavbar) plutôt que top:0/height:100vh
+   — .navbar est position:sticky, donc reste DANS le flux normal et
+   pousse .app-wrapper (et donc cette sidebar sticky) de sa propre
+   hauteur avant de commencer. Résultat : le bas de la sidebar débordait
+   de exactement navbar_height sous le viewport initial, et il fallait
+   scroller la PAGE (pas juste le menu) de ce montant pour que la fin de
+   son scroll interne devienne atteignable — patron : "quand on ne
+   scroll pas pour toucher le fond de cet onglet le menu latéral ne
+   scroll pas jusqu'a sa fin". Même correctif sur .main-content plus bas. */
 .sidebar {
     width: 260px;
     background: linear-gradient(180deg, #0A3D5C 0%, #082B41 100%);
     color: white;
-    height: 100vh;
+    height: calc(100vh - var(--navbar-height, 72px));
     position: sticky;
-    top: 0;
+    top: var(--navbar-height, 72px);
     display: flex;
     flex-direction: column;
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1600,6 +1610,10 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding: 16px 0 20px 0;
+    /* ⭐ Une fois arrivé en bas du menu, la molette ne doit plus faire
+       défiler la page derrière (scroll chaining) — le menu doit se
+       sentir complètement indépendant du contenu principal. */
+    overscroll-behavior: contain;
 }
 
 /* ===== CATÉGORIES ===== */
@@ -1799,13 +1813,17 @@
 }
 
 /* ===== CONTENU PRINCIPAL ===== */
+/* ⭐ FIX : max-height ancrée sur --navbar-height, même raison que
+   .sidebar ci-dessus (.navbar sticky pousse .app-wrapper de sa propre
+   hauteur dans le flux) — sinon les tout derniers pixels d'un onglet
+   long restaient eux aussi inaccessibles sans un scroll de page en trop. */
 .main-content {
     flex: 1;
     min-width: 0;
     padding: 20px 25px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     overflow-y: auto;
-    max-height: 100vh;
+    max-height: calc(100vh - var(--navbar-height, 72px));
 }
 
 
