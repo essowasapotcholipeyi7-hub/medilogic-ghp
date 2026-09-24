@@ -5731,7 +5731,17 @@ def rendez_vous():
     date_fin_str = request.args.get('date_fin')
     statut = request.args.get('statut', 'tous')
     medecin_id = request.args.get('medecin_id', type=int)
-    
+
+    # ⭐ REFONTE : onglets Actifs/Terminés/Annulés/Archivés (patron : "les
+    # annulés à part, terminer juste les actif visible... possibilité de
+    # mettre une programmation à la fourrière") — Actifs par défaut, plus
+    # une recherche patient temps réel (paramètre q). Voir
+    # RendezVousService.VUES_STATUTS pour le détail des statuts par onglet.
+    vue = request.args.get('vue', RendezVousService.VUE_DEFAUT)
+    if vue not in RendezVousService.VUES_STATUTS and vue != 'archive':
+        vue = RendezVousService.VUE_DEFAUT
+    recherche_patient = request.args.get('q', '').strip()
+
     today = date.today()
     date_debut = None
     date_fin = None
@@ -5767,13 +5777,29 @@ def rendez_vous():
         date_debut=date_debut,
         date_fin=date_fin,
         statut=statut if statut != 'tous' else None,
-        medecin_id=medecin_id
+        medecin_id=medecin_id,
+        vue=vue,
+        recherche_patient=recherche_patient or None
     )
-    
+
+    # ⭐ Compteurs par onglet, pour les badges de la barre d'onglets —
+    # indépendants des filtres période/médecin/recherche en cours (sinon
+    # les badges changeraient de sens selon le filtre déjà appliqué).
+    non_archives = db.or_(RendezVous.archive.is_(False), RendezVous.archive.is_(None))
+    vue_compteurs = {
+        'actifs': RendezVous.query.filter_by(structure_id=structure_id).filter(non_archives).filter(
+            RendezVous.statut.in_(RendezVousService.VUES_STATUTS['actifs'])).count(),
+        'termines': RendezVous.query.filter_by(structure_id=structure_id).filter(non_archives).filter(
+            RendezVous.statut.in_(RendezVousService.VUES_STATUTS['termines'])).count(),
+        'annules': RendezVous.query.filter_by(structure_id=structure_id).filter(non_archives).filter(
+            RendezVous.statut.in_(RendezVousService.VUES_STATUTS['annules'])).count(),
+        'archive': RendezVous.query.filter_by(structure_id=structure_id).filter(RendezVous.archive.is_(True)).count(),
+    }
+
     # Récupérer les médecins et patients
     medecins = Medecin.query.filter_by(structure_id=structure_id, actif=True).all()
     patients = Patient.query.filter_by(structure_id=structure_id).order_by(Patient.nom).all()
-    
+
     return render_template(
         'rendez_vous.html',
         rendez_vous=rendez_vous,
@@ -5785,7 +5811,10 @@ def rendez_vous():
         statut=statut,
         medecin_id=medecin_id,
         total=total,
-        today=today.isoformat()
+        today=today.isoformat(),
+        vue=vue,
+        recherche_patient=recherche_patient,
+        vue_compteurs=vue_compteurs
     )
 
 
@@ -6081,6 +6110,29 @@ def api_annuler_rendez_vous(rdv_id):
             'success': False,
             'error': resultat.get('error', 'Erreur lors de l\'annulation')
         }), 400
+
+
+@app.route('/rendez_vous/api/<int:rdv_id>/archiver', methods=['POST'])
+@login_required
+def api_archiver_rendez_vous(rdv_id):
+    """API: Met un rendez-vous à la fourrière (masqué de la vue par
+    défaut, statut inchangé) — voir RendezVousService.archiver_rendez_vous."""
+    structure_id = session.get('structure_id')
+    succes, resultat = RendezVousService.archiver_rendez_vous(rdv_id, structure_id)
+    if succes:
+        return jsonify({'success': True, 'message': resultat.get('message')})
+    return jsonify({'success': False, 'error': resultat.get('error', 'Erreur')}), 400
+
+
+@app.route('/rendez_vous/api/<int:rdv_id>/desarchiver', methods=['POST'])
+@login_required
+def api_desarchiver_rendez_vous(rdv_id):
+    """API: Retire un rendez-vous de la fourrière."""
+    structure_id = session.get('structure_id')
+    succes, resultat = RendezVousService.desarchiver_rendez_vous(rdv_id, structure_id)
+    if succes:
+        return jsonify({'success': True, 'message': resultat.get('message')})
+    return jsonify({'success': False, 'error': resultat.get('error', 'Erreur')}), 400
 
 
 @app.route('/rendez_vous/api/reporter', methods=['POST'])
@@ -14050,17 +14102,53 @@ def api_recettes_source():
 # ROUTES PROFORMA AVEC DOUBLE ASSURANCE
 # ============================================
 
+# ⭐ REFONTE : onglets En attente/Historique/Archivées (patron : "on va
+# ranger les factures proforma converti en vente reste dans historique...
+# par defaut les proforma en attantes seulement visibles directement...
+# donne aussi la possibilité qu'on mette une proforma meme en attante à
+# la fouriere"). `archive` est orthogonal à `statut` : une proforma
+# archivée garde son statut réel, elle est juste masquée des onglets En
+# attente/Historique (voir onglet Archivées) — même mécanisme que
+# rendez_vous (RendezVousService.VUES_STATUTS/archiver_rendez_vous).
+PROFORMA_VUES_STATUTS = {
+    'attente': ['en_attente', 'accepte'],
+    'historique': ['converti_en_vente', 'refuse', 'expire'],
+}
+
+
 @app.route('/proformas')
 @login_required
 def proformas():
     """Liste des proformas de la structure"""
     structure_id = session.get('structure_id')
-    
-    # Récupérer toutes les proformas avec les données d'assurance
-    proformas = db.execute_query("""
-        SELECT 
+
+    vue = request.args.get('vue', 'attente')
+    if vue not in PROFORMA_VUES_STATUTS and vue != 'archive':
+        vue = 'attente'
+
+    where_clauses = ["p.structure_id = %s"]
+    params = [structure_id]
+
+    if vue == 'archive':
+        where_clauses.append("p.archive IS TRUE")
+    else:
+        where_clauses.append("(p.archive IS NOT TRUE)")
+        statuts_vue = PROFORMA_VUES_STATUTS[vue]
+        where_clauses.append("p.statut IN %s")
+        params.append(tuple(statuts_vue))
+
+    # ⭐ Pas de recherche patient côté serveur ici : la barre de recherche
+    # existante (filtrerProformas(), JS) filtre déjà en temps réel les
+    # lignes déjà rendues — désormais correctement limitées à l'onglet
+    # actif (attente/historique/archive) grâce au filtre ci-dessus, ce qui
+    # suffit à satisfaire la recherche "en temps réel dans l'historique"
+    # sans dupliquer la logique côté serveur.
+
+    # Récupérer les proformas de l'onglet actif, avec les données d'assurance
+    proformas = db.execute_query(f"""
+        SELECT
             p.*,
-            CASE 
+            CASE
                 WHEN p.statut = 'en_attente' THEN 'En attente'
                 WHEN p.statut = 'accepte' THEN 'Acceptée'
                 WHEN p.statut = 'refuse' THEN 'Refusée'
@@ -14069,13 +14157,15 @@ def proformas():
                 ELSE p.statut
             END as statut_label
         FROM proformas p
-        WHERE p.structure_id = %s
+        WHERE {' AND '.join(where_clauses)}
         ORDER BY p.created_at DESC
-    """, (structure_id,))
-    
-    # Statistiques
+    """, tuple(params))
+
+    # Statistiques (portent sur TOUTE la structure, indépendamment de
+    # l'onglet affiché — sinon les chiffres du bandeau changeraient de
+    # sens selon l'onglet en cours)
     stats = db.execute_query("""
-        SELECT 
+        SELECT
             COUNT(*) as total,
             COUNT(CASE WHEN statut = 'en_attente' THEN 1 END) as en_attente,
             COUNT(CASE WHEN statut = 'accepte' THEN 1 END) as acceptees,
@@ -14084,22 +14174,75 @@ def proformas():
         FROM proformas
         WHERE structure_id = %s
     """, (structure_id,))
-    
+
     stats = stats[0] if stats else {'total': 0, 'en_attente': 0, 'acceptees': 0, 'converties': 0, 'total_montant': 0}
-    
+
+    # ⭐ Compteurs par onglet pour les badges de la barre d'onglets —
+    # toujours sur l'ensemble de la structure, non affectés par la
+    # recherche patient en cours.
+    vue_compteurs_rows = db.execute_query("""
+        SELECT
+            COUNT(CASE WHEN (archive IS NOT TRUE) AND statut IN ('en_attente','accepte') THEN 1 END) as attente,
+            COUNT(CASE WHEN (archive IS NOT TRUE) AND statut IN ('converti_en_vente','refuse','expire') THEN 1 END) as historique,
+            COUNT(CASE WHEN archive IS TRUE THEN 1 END) as archive
+        FROM proformas
+        WHERE structure_id = %s
+    """, (structure_id,))
+    vue_compteurs = vue_compteurs_rows[0] if vue_compteurs_rows else {'attente': 0, 'historique': 0, 'archive': 0}
+
     # Récupérer les actes et produits depuis Google Sheets
     actes = sheets_helper.get_all_records('actes')
     produits = sheets_helper.get_all_records('produits')
-    
+
     # Filtrer par structure
     actes_filtres = [a for a in actes if str(a.get('structure_id')) == str(structure_id)]
     produits_filtres = [p for p in produits if str(p.get('structure_id')) == str(structure_id)]
-    
-    return render_template('proformas/proformas.html', 
+
+    return render_template('proformas/proformas.html',
                          proformas=proformas,
                          stats=stats,
                          actes=actes_filtres,
-                         produits=produits_filtres)
+                         produits=produits_filtres,
+                         vue=vue,
+                         vue_compteurs=vue_compteurs)
+
+
+@app.route('/api/proformas/<int:proforma_id>/archiver', methods=['POST'])
+@login_required
+def api_archiver_proforma(proforma_id):
+    """Met une proforma à la fourrière — masquée des onglets En attente/
+    Historique sans toucher à son statut réel (patron : "donne aussi la
+    possibilité qu'on mette une proforma meme en attante à la fouriere")."""
+    structure_id = session.get('structure_id')
+    check = db.execute_query(
+        "SELECT id FROM proformas WHERE id = %s AND structure_id = %s", (proforma_id, structure_id)
+    )
+    if not check:
+        return jsonify({'success': False, 'error': 'Proforma non trouvée'}), 404
+
+    db.execute_query(
+        "UPDATE proformas SET archive = TRUE, archived_at = NOW() WHERE id = %s AND structure_id = %s",
+        (proforma_id, structure_id)
+    )
+    return jsonify({'success': True, 'message': 'Proforma archivée'})
+
+
+@app.route('/api/proformas/<int:proforma_id>/desarchiver', methods=['POST'])
+@login_required
+def api_desarchiver_proforma(proforma_id):
+    """Retire une proforma de la fourrière."""
+    structure_id = session.get('structure_id')
+    check = db.execute_query(
+        "SELECT id FROM proformas WHERE id = %s AND structure_id = %s", (proforma_id, structure_id)
+    )
+    if not check:
+        return jsonify({'success': False, 'error': 'Proforma non trouvée'}), 404
+
+    db.execute_query(
+        "UPDATE proformas SET archive = FALSE, archived_at = NULL WHERE id = %s AND structure_id = %s",
+        (proforma_id, structure_id)
+    )
+    return jsonify({'success': True, 'message': 'Proforma désarchivée'})
 
 
 @app.route('/api/proformas', methods=['POST'])

@@ -224,6 +224,24 @@ body.modal-open {
         </div>
     </div>
 
+    <!-- ⭐ ONGLETS - REFONTE : "les annulés à part, terminer juste les actif
+         visible... possibilité de mettre une programmation à la fourrière
+         pour libérer l'espace" — Actifs (programmé/confirmé/reporté) par
+         défaut ; Terminés et Annulés à part ; Archivés = mis à la
+         fourrière quel que soit leur statut réel. Remplace l'ancien menu
+         déroulant "Statut" (mêmes valeurs, regroupées en onglets). -->
+    <ul class="nav nav-pills mb-3">
+        {% for v, label, icone in [('actifs','Actifs','fa-calendar-check'), ('termines','Terminés','fa-flag-checkered'), ('annules','Annulés','fa-ban'), ('archive','Archivés','fa-box-archive')] %}
+        <li class="nav-item">
+            <a class="nav-link {% if vue == v %}active{% endif %}"
+               href="{{ url_for('rendez_vous', vue=v, periode=periode, date_debut=date_debut, date_fin=date_fin, medecin_id=medecin_id) }}">
+                <i class="fas {{ icone }} me-1"></i>{{ label }}
+                <span class="badge {% if vue == v %}bg-light text-dark{% else %}bg-secondary{% endif %} ms-1">{{ vue_compteurs[v] }}</span>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+
     <!-- Filtres -->
     <div class="card shadow-sm mb-4">
         <div class="card-header bg-light">
@@ -231,6 +249,7 @@ body.modal-open {
         </div>
         <div class="card-body">
             <form id="filtreForm" method="GET" action="{{ url_for('rendez_vous') }}">
+                <input type="hidden" name="vue" value="{{ vue }}">
                 <div class="row g-3">
                     <div class="col-md-3">
                         <label class="form-label small fw-bold">Période</label>
@@ -242,7 +261,7 @@ body.modal-open {
                             <option value="personnalise" {% if periode == 'personnalise' %}selected{% endif %}>Personnalisé</option>
                         </select>
                     </div>
-                    
+
                     <div class="col-md-3" id="periodePersonnalisee" style="{% if periode != 'personnalise' %}display:none;{% endif %}">
                         <label class="form-label small fw-bold">Du</label>
                         <div class="d-flex gap-2">
@@ -250,19 +269,7 @@ body.modal-open {
                             <input type="date" id="dateFin" name="date_fin" class="form-control form-control-sm" value="{{ date_fin or '' }}">
                         </div>
                     </div>
-                    
-                    <div class="col-md-2">
-                        <label class="form-label small fw-bold">Statut</label>
-                        <select name="statut" class="form-select form-select-sm" onchange="this.form.submit()">
-                            <option value="tous" {% if statut == 'tous' %}selected{% endif %}>Tous</option>
-                            <option value="programme" {% if statut == 'programme' %}selected{% endif %}>Programmé</option>
-                            <option value="confirme" {% if statut == 'confirme' %}selected{% endif %}>Confirmé</option>
-                            <option value="termine" {% if statut == 'termine' %}selected{% endif %}>Terminé</option>
-                            <option value="annule" {% if statut == 'annule' %}selected{% endif %}>Annulé</option>
-                            <option value="reporte" {% if statut == 'reporte' %}selected{% endif %}>Reporté</option>
-                        </select>
-                    </div>
-                    
+
                     <div class="col-md-2">
                         <label class="form-label small fw-bold">Médecin</label>
                         <select name="medecin_id" class="form-select form-select-sm" onchange="this.form.submit()">
@@ -274,7 +281,13 @@ body.modal-open {
                             {% endfor %}
                         </select>
                     </div>
-                    
+
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold">Patient</label>
+                        <input type="text" name="q" id="filtreRecherchePatient" class="form-control form-control-sm"
+                               placeholder="Rechercher..." value="{{ recherche_patient or '' }}" autocomplete="off">
+                    </div>
+
                     <div class="col-md-2 d-flex align-items-end">
                         <button type="submit" class="btn btn-primary btn-sm w-100">
                             <i class="fas fa-search me-1"></i> Appliquer
@@ -469,6 +482,18 @@ body.modal-open {
                                     <button class="btn btn-primary" onclick="imprimerReçu({{ rdv.id }})" title="Imprimer">
                                         <i class="fas fa-print"></i>
                                     </button>
+                                    <!-- ⭐ Mise à la fourrière : masque un rendez-vous de la vue par
+                                         défaut sans toucher à son statut, pour "libérer l'espace pour
+                                         les nouveaux programmes" sans avoir à l'annuler. -->
+                                    {% if rdv.archive %}
+                                    <button class="btn btn-outline-primary" onclick="desarchiverRendezVous({{ rdv.id }})" title="Retirer de la fourrière">
+                                        <i class="fas fa-box-open"></i>
+                                    </button>
+                                    {% else %}
+                                    <button class="btn btn-outline-dark" onclick="archiverRendezVous({{ rdv.id }})" title="Mettre à la fourrière">
+                                        <i class="fas fa-box-archive"></i>
+                                    </button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -533,6 +558,23 @@ body.modal-open {
 // ============================================================
 
 let currentRdvId = null;
+
+// ============================================================
+// ⭐ RECHERCHE PATIENT (filtre de liste) — soumet le formulaire de
+// filtres après une courte pause de frappe, plutôt qu'un bouton, pour
+// un effet "temps réel" sans recharger à chaque touche.
+// ============================================================
+(function() {
+    const champ = document.getElementById('filtreRecherchePatient');
+    if (!champ) return;
+    let timeoutRecherche = null;
+    champ.addEventListener('input', function() {
+        clearTimeout(timeoutRecherche);
+        timeoutRecherche = setTimeout(function() {
+            document.getElementById('filtreForm').submit();
+        }, 600);
+    });
+})();
 
 // ============================================================
 // INITIALISATION
@@ -889,6 +931,43 @@ function annulerRendezVous(id) {
             showToast('Erreur: ' + data.error, 'danger');
         }
     });
+}
+
+// ============================================================
+// MISE À LA FOURRIÈRE (archive) — masque un rendez-vous de la vue par
+// défaut sans changer son statut, pour libérer l'espace pour les
+// nouveaux programmes.
+// ============================================================
+function archiverRendezVous(id) {
+    if (!confirm('Mettre ce rendez-vous à la fourrière ? Il ne sera plus visible dans les onglets Actifs/Terminés/Annulés, mais reste consultable dans l\'onglet Archivés.')) return;
+
+    showLoader('Archivage...');
+    fetch(`/rendez_vous/api/${id}/archiver`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            hideLoader();
+            if (data.success) {
+                showToast('Rendez-vous archivé !', 'success');
+                location.reload();
+            } else {
+                showToast('Erreur: ' + data.error, 'danger');
+            }
+        });
+}
+
+function desarchiverRendezVous(id) {
+    showLoader('Restauration...');
+    fetch(`/rendez_vous/api/${id}/desarchiver`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            hideLoader();
+            if (data.success) {
+                showToast('Rendez-vous restauré !', 'success');
+                location.reload();
+            } else {
+                showToast('Erreur: ' + data.error, 'danger');
+            }
+        });
 }
 
 // ============================================================

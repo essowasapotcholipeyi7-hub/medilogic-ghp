@@ -1295,7 +1295,15 @@ class RendezVous(db.Model):
     created_by_nom = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
+    # ⭐ Mise à la fourrière — retire un rendez-vous de la vue par défaut
+    # (même "programmé") sans changer son statut, pour libérer l'espace
+    # visuel pour les nouveaux rendez-vous sans avoir à l'annuler. Orthogonal
+    # à `statut` : un rendez-vous archivé garde son statut réel, il est
+    # juste masqué des onglets Actifs/Terminés/Annulés (voir onglet Archivés).
+    archive = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+
     # Relations
     structure = db.relationship('Structure', backref='rendez_vous')
     patient = db.relationship('Patient', backref='rendez_vous')
@@ -1416,6 +1424,7 @@ class RendezVous(db.Model):
             'statut_label': self.get_statut_label(),
             'statut_badge': self.get_statut_badge_class(),
             'est_depasse': self.est_depasse(),
+            'archive': bool(self.archive),
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

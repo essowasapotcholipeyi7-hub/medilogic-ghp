@@ -14,6 +14,20 @@ class RendezVousService:
     DUREE_MIN = 15
     DUREE_MAX = 120
     DUREE_DEFAUT = 30
+
+    # ⭐ Onglets de la liste (refonte "annulés à part, terminé à part, juste
+    # les actifs visibles par défaut") — chaque onglet correspond à un
+    # sous-ensemble de `statut`, orthogonal au flag `archive` (voir
+    # get_rendez_vous_liste). 'archive' n'est pas un statut : c'est
+    # justement les rendez-vous mis à la fourrière, quel que soit leur
+    # statut réel.
+    VUES_STATUTS = {
+        'actifs': ['programme', 'confirme', 'reporte'],
+        'termines': ['termine', 'absent'],
+        'annules': ['annule'],
+        'tous': None,
+    }
+    VUE_DEFAUT = 'actifs'
     
     @classmethod
     def creer_rendez_vous(cls, data, structure_id, utilisateur_nom='Systeme'):
@@ -85,11 +99,27 @@ class RendezVousService:
             return False, {'error': str(e)}
     
     @classmethod
-    def get_rendez_vous_liste(cls, structure_id, date_debut=None, date_fin=None, 
-                              statut=None, medecin_id=None):
-        """Récupère la liste des rendez-vous"""
+    def get_rendez_vous_liste(cls, structure_id, date_debut=None, date_fin=None,
+                              statut=None, medecin_id=None, vue=None, recherche_patient=None):
+        """Récupère la liste des rendez-vous.
+
+        `vue` pilote le regroupement par onglet (Actifs/Terminés/Annulés/
+        Archivés/Tous — voir VUES_STATUTS) ; `statut` reste accepté seul
+        pour affiner À L'INTÉRIEUR d'un onglet (ex. ne montrer que les
+        'reporte' dans l'onglet Actifs). Les rendez-vous archivés
+        (`archive=True`) sont exclus de tous les onglets SAUF 'archive'
+        lui-même, qui ne montre QUE ceux-là quel que soit leur statut."""
         query = RendezVous.query.filter_by(structure_id=structure_id)
-        
+
+        vue = vue or cls.VUE_DEFAUT
+        if vue == 'archive':
+            query = query.filter(RendezVous.archive.is_(True))
+        else:
+            query = query.filter(db.or_(RendezVous.archive.is_(False), RendezVous.archive.is_(None)))
+            statuts_vue = cls.VUES_STATUTS.get(vue, cls.VUES_STATUTS[cls.VUE_DEFAUT])
+            if statuts_vue:
+                query = query.filter(RendezVous.statut.in_(statuts_vue))
+
         if date_debut:
             query = query.filter(RendezVous.date_rendez_vous >= date_debut)
         if date_fin:
@@ -98,13 +128,39 @@ class RendezVousService:
             query = query.filter(RendezVous.statut == statut)
         if medecin_id:
             query = query.filter(RendezVous.medecin_id == medecin_id)
-        
+        if recherche_patient:
+            query = query.filter(RendezVous.patient_nom.ilike(f'%{recherche_patient}%'))
+
         total = query.count()
         rendez_vous = query.order_by(
             RendezVous.id.desc()
         ).all()
-        
+
         return rendez_vous, total
+
+    @classmethod
+    def archiver_rendez_vous(cls, rdv_id, structure_id):
+        """Met un rendez-vous à la fourrière (masqué de la vue par défaut,
+        statut inchangé) — libère l'espace pour les nouveaux rendez-vous
+        sans avoir à l'annuler."""
+        rdv = RendezVous.query.filter_by(id=rdv_id, structure_id=structure_id).first()
+        if not rdv:
+            return False, {'error': 'Rendez-vous non trouvé'}
+        rdv.archive = True
+        rdv.archived_at = datetime.utcnow()
+        db.session.commit()
+        return True, {'message': 'Rendez-vous archivé'}
+
+    @classmethod
+    def desarchiver_rendez_vous(cls, rdv_id, structure_id):
+        """Retire un rendez-vous de la fourrière."""
+        rdv = RendezVous.query.filter_by(id=rdv_id, structure_id=structure_id).first()
+        if not rdv:
+            return False, {'error': 'Rendez-vous non trouvé'}
+        rdv.archive = False
+        rdv.archived_at = None
+        db.session.commit()
+        return True, {'message': 'Rendez-vous désarchivé'}
     
     @classmethod
     def get_rendez_vous_par_id(cls, rdv_id, structure_id):

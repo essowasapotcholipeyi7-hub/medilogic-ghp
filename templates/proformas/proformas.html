@@ -13,6 +13,25 @@
                 </div>
             </div>
             <div class="card-body">
+                <!-- ⭐ ONGLETS - REFONTE : "on va ranger les factures proforma
+                     converti en vente reste dans historique... par defaut les
+                     proforma en attantes seulement visibles directement...
+                     donne aussi la possibilité qu'on mette une proforma meme
+                     en attante à la fouriere". En attente par défaut ;
+                     Historique = converties en vente/refusées/expirées ;
+                     Archivées = mises à la fourrière quel que soit leur
+                     statut réel (voir PROFORMA_VUES_STATUTS, app.py). -->
+                <ul class="nav nav-pills mb-3">
+                    {% for v, label, icone in [('attente','En attente','fa-hourglass-half'), ('historique','Historique','fa-clock-rotate-left'), ('archive','Archivées','fa-box-archive')] %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if vue == v %}active{% endif %}" href="{{ url_for('proformas', vue=v) }}">
+                            <i class="fas {{ icone }} me-1"></i>{{ label }}
+                            <span class="badge {% if vue == v %}bg-light text-dark{% else %}bg-secondary{% endif %} ms-1">{{ vue_compteurs[v] }}</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+
                 <!-- Statistiques -->
                 <div class="row g-3 mb-4">
                     <div class="col-md-3">
@@ -146,6 +165,20 @@
                                         </button>
                                         {% else %}
                                         <span class="badge bg-info">Converti</span>
+                                        {% endif %}
+                                        <!-- ⭐ Mise à la fourrière : masque une proforma des onglets
+                                             En attente/Historique sans toucher à son statut réel,
+                                             même si elle est encore "en attente" (patron : "donne
+                                             aussi la possibilité qu'on mette une proforma meme en
+                                             attante à la fouriere"). -->
+                                        {% if p.archive %}
+                                        <button onclick="desarchiverProforma({{ p.id }})" class="btn btn-outline-primary" title="Retirer de la fourrière">
+                                            <i class="fas fa-box-open"></i>
+                                        </button>
+                                        {% else %}
+                                        <button onclick="archiverProforma({{ p.id }})" class="btn btn-outline-dark" title="Mettre à la fourrière">
+                                            <i class="fas fa-box-archive"></i>
+                                        </button>
                                         {% endif %}
                                     </div>
                                 </td>
@@ -1785,7 +1818,7 @@ function sauvegarderProforma() {
 // ============================================
 function changerStatut(id, statut) {
     if (!confirm('Confirmer le changement de statut ?')) return;
-    
+
     fetch(`/api/proformas/${id}/statut`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1799,6 +1832,36 @@ function changerStatut(id, statut) {
             alert('Erreur: ' + data.error);
         }
     });
+}
+
+// ============================================
+// ⭐ MISE À LA FOURRIÈRE (archive) — masque une proforma des onglets
+// En attente/Historique sans changer son statut réel.
+// ============================================
+function archiverProforma(id) {
+    if (!confirm('Mettre cette proforma à la fourrière ? Elle ne sera plus visible dans En attente/Historique, mais reste consultable dans l\'onglet Archivées.')) return;
+
+    fetch(`/api/proformas/${id}/archiver`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        });
+}
+
+function desarchiverProforma(id) {
+    fetch(`/api/proformas/${id}/desarchiver`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        });
 }
 
 // ============================================
