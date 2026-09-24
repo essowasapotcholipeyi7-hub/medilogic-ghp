@@ -320,7 +320,34 @@
                     <input type="hidden" id="protocoleId">
                     <input type="hidden" id="medicamentsData" value="">
                     <input type="hidden" id="bulletinData" value="">
-                    
+
+                    <!-- ⭐ IMPORT DEPUIS UN FICHIER (Word/PDF) DEJA PREPARE — patron :
+                         "on doit pouvoir importer un fichier et le modifier etc tout
+                         comme dans gestion patient". Pré-remplit titre + contenu
+                         (texte libre), ou une ligne par médicament/examen détecté
+                         selon la catégorie — l'utilisateur vérifie/complète avant
+                         d'enregistrer, rien n'est sauvegardé par cet appel. -->
+                    <div class="card mb-3 border-secondary">
+                        <div class="card-body py-2">
+                            <label class="form-label fw-bold mb-1">
+                                <i class="fas fa-file-import me-1"></i>Importer depuis un fichier (optionnel)
+                            </label>
+                            <div class="row align-items-center g-2">
+                                <div class="col-md-8">
+                                    <input type="file" id="protocoleFichier" class="form-control form-control-sm" accept=".docx,.pdf">
+                                </div>
+                                <div class="col-md-4">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="importerFichierProtocole()">
+                                        <i class="fas fa-upload me-1"></i>Importer
+                                    </button>
+                                </div>
+                            </div>
+                            <small class="text-muted mt-1 d-block">
+                                Un document déjà rédigé (.docx ou .pdf) : sélectionnez d'abord la catégorie ci-dessous, puis importez — pré-remplit le titre et le contenu (ou une ligne par médicament/examen selon la catégorie).
+                            </small>
+                        </div>
+                    </div>
+
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label fw-bold">Titre *</label>
@@ -743,6 +770,79 @@ function initBulletinListeners() {
             }
         });
     }
+}
+
+// ============================================================
+// ⭐ IMPORT DEPUIS UN FICHIER (Word/PDF) — extrait le texte côté serveur
+// (voir /api/import-fichier-texte, app.py) et pré-remplit le formulaire
+// selon la catégorie sélectionnée : titre + contenu (texte libre) pour
+// les catégories standard ; une ligne = un médicament/examen candidat
+// pour ordonnance_type/bulletin_examen (même principe que
+// gestion_patients : le nom seul est pré-rempli, dosage/quantité restent
+// à compléter manuellement — rien n'est deviné sur un dosage).
+// ============================================================
+function importerFichierProtocole() {
+    var input = document.getElementById('protocoleFichier');
+    var fichier = input.files[0];
+    if (!fichier) {
+        alert('Choisissez un fichier .docx ou .pdf');
+        return;
+    }
+    var categorie = document.getElementById('categorie').value;
+    if (!categorie) {
+        alert('Sélectionnez d\'abord une catégorie, puis importez.');
+        return;
+    }
+
+    var formData = new FormData();
+    formData.append('fichier', fichier);
+
+    fetch('/api/import-fichier-texte', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.success) {
+                alert(data.error || 'Échec de l\'import');
+                return;
+            }
+
+            var titreField = document.getElementById('titre');
+            var lignes = data.lignes || [];
+            var titreVenaitDuFichier = false;
+            if (!titreField.value.trim() || titreField.value === 'ORDONNANCE MEDICALE' || titreField.value === 'BULLETIN D\'EXAMEN') {
+                titreField.value = data.nom_suggere || titreField.value;
+                titreVenaitDuFichier = true;
+            }
+            // La 1re ligne (titre/en-tête du document) vient de devenir le
+            // titre : on ne la réimporte pas comme ligne de contenu.
+            if (titreVenaitDuFichier && data.nom_suggere && lignes[0] === data.nom_suggere) {
+                lignes = lignes.slice(1);
+            }
+
+            if (categorie === 'ordonnance_type') {
+                var existants = medicamentsList.map(function(m) { return (m.nom || '').trim(); });
+                var ajoutes = 0;
+                lignes.forEach(function(ligne) {
+                    if (existants.indexOf(ligne) === -1) {
+                        medicamentsList.push({ nom: ligne, dosage: '', quantite: '' });
+                        existants.push(ligne);
+                        ajoutes++;
+                    }
+                });
+                afficherMedicaments();
+                genererContenuOrdonnance();
+                if (ajoutes === 0) alert('Fichier importé mais aucun nouveau médicament détecté.');
+            } else if (categorie === 'bulletin_examen') {
+                var examensField = document.getElementById('bulletinExamens');
+                var existantsLignes = (examensField.value || '').split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
+                var nouvellesLignes = lignes.filter(function(l) { return existantsLignes.indexOf(l) === -1; });
+                examensField.value = existantsLignes.concat(nouvellesLignes).join('\n');
+                genererContenuBulletin();
+                if (nouvellesLignes.length === 0) alert('Fichier importé mais aucun nouvel examen détecté.');
+            } else {
+                document.getElementById('contenu').value = data.texte || '';
+            }
+        })
+        .catch(function() { alert('Erreur réseau lors de l\'import'); });
 }
 
 // ============================================================
