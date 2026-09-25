@@ -9,6 +9,7 @@ import sys
 import base64
 import unicodedata
 from functools import lru_cache
+import threading
 from threading import Timer
 from datetime import datetime
 
@@ -59,8 +60,23 @@ def get_credentials_info():
 class SheetsHelper:
     def __init__(self):
         self.scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        self.structure_prefix = None
-        self.structure_id = None
+        # ⭐⭐ SÉCURITÉ : structure_id/structure_prefix étaient de simples
+        # attributs d'instance sur ce singleton (une seule instance de
+        # SheetsHelper pour tout le process) alors que login_required
+        # appelle set_structure(session['structure_id']) à CHAQUE requête
+        # (app.py). Sous un worker avec plusieurs threads/greenlets
+        # (gthread/gevent — pas le sync worker par défaut, mais une
+        # config plausible), deux requêtes de DEUX STRUCTURES DIFFÉRENTES
+        # en vol en même temps pouvaient s'entrelacer sur un appel I/O
+        # (Google Sheets) : la requête A lit alors les données de la
+        # structure B (fuite de patients/produits/utilisateurs entre
+        # cliniques), sans qu'aucun filtre structure_id habituel des
+        # routes ne s'applique ici — le contournait entièrement. Passé en
+        # threading.local() : chaque thread/greenlet a désormais sa
+        # PROPRE valeur, aucun autre appel du code n'a besoin de changer
+        # (self.structure_id / self.structure_prefix se lisent et
+        # s'écrivent exactement comme avant).
+        self._local = threading.local()
         self._prix_cache = {}  # ⭐ Cache pour les prix
         self._prix_cache_duration = 300  # 5 minutes
 
@@ -95,7 +111,22 @@ class SheetsHelper:
         except Exception as e:
             print(f"⚠️ Erreur: {e}")
             raise e
-    
+
+    @property
+    def structure_id(self):
+        return getattr(self._local, 'structure_id', None)
+
+    @structure_id.setter
+    def structure_id(self, value):
+        self._local.structure_id = value
+
+    @property
+    def structure_prefix(self):
+        return getattr(self._local, 'structure_prefix', None)
+
+    @structure_prefix.setter
+    def structure_prefix(self, value):
+        self._local.structure_prefix = value
 
     def init_structures_sheet(self):
         """Crée la feuille structures si elle n'existe pas"""
