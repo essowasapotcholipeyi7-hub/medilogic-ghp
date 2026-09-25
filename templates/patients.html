@@ -460,7 +460,12 @@
                                         <option value="amu_cnss">AMU-CNSS (80%)</option>
                                         <option value="amu_inam">AMU-INAM (80%)</option>
                                         <option value="amu_tns">AMU-TNS (80%)</option>
-                                        <option value="autre">Autre</option>
+                                        <!-- ⭐ "Autre" masqué TEMPORAIREMENT (patron : "les gens se
+                                             trompent et mettent le nom des assurances complémentaires
+                                             là") — confusion avec la section "Assurance complémentaire
+                                             (CAC)" juste en dessous, qui a son propre champ "Nom de
+                                             l'assurance". Pour réactiver : décommenter cette ligne. -->
+                                        <!-- <option value="autre">Autre</option> -->
                                     </select>
                                 </div>
                                 <div class="col-md-4 mb-2" id="taux_div">
@@ -653,7 +658,13 @@
                                         <option value="amu_cnss">AMU-CNSS</option>
                                         <option value="amu_inam">AMU-INAM</option>
                                         <option value="amu_tns">AMU-TNS</option>
-                                        <option value="autre">Autre assurance</option>
+                                        <!-- ⭐ "Autre" masqué TEMPORAIREMENT par défaut (même raison
+                                             que le formulaire d'ajout ci-dessus) — mais laissé dans le
+                                             DOM (hidden) et réaffiché dynamiquement par JS quand le
+                                             patient ouvert en a DÉJÀ un (voir ouvrirModalEdition ~L2126)
+                                             pour ne pas faire disparaître silencieusement la donnée
+                                             d'un patient existant. -->
+                                        <option value="autre" id="editOptionAutre" hidden>Autre assurance</option>
                                     </select>
                                 </div>
                                 <div class="col-md-4 mb-2">
@@ -2063,6 +2074,16 @@ function savePatient() {
 // ============================================
 // MODIFICATION PATIENT
 // ============================================
+// ⭐ L'option "Autre" du select #editAssurance est cachée par défaut (voir
+// le commentaire sur #editOptionAutre) — on la réaffiche seulement pour un
+// patient qui l'utilise DÉJÀ, sinon sa fiche s'ouvrirait avec ce champ
+// silencieusement vidé (et écraserait sa vraie valeur au prochain
+// enregistrement).
+function afficherOptionAutreSiUtilisee(typeAssurance) {
+    const option = document.getElementById('editOptionAutre');
+    if (option) option.hidden = (typeAssurance !== 'autre');
+}
+
 function editPatient(id) {
     if (!id || id === 'undefined') {
         alert('Erreur: ID patient invalide');
@@ -2123,6 +2144,7 @@ function editPatient(id) {
             document.getElementById('editAge').value = patient.age || calculerAge(dateNaissance);
             
             document.getElementById('editTaux').value = patient.taux_prise_charge || 0;
+            afficherOptionAutreSiUtilisee(patient.type_assurance || assuranceValue);
             document.getElementById('editAssurance').value = patient.type_assurance || assuranceValue;
             document.getElementById('editAutreAssurance').value = patient.type_assurance || '';
             document.getElementById('editNumeroAssure').value = patient.numero_assure || '';
@@ -2156,6 +2178,7 @@ function editPatient(id) {
             document.getElementById('editAge').value = calculerAge(dateNaissance);
             
             document.getElementById('editTaux').value = cells[4]?.innerText.replace('%', '') || 0;
+            afficherOptionAutreSiUtilisee(assuranceValue);
             document.getElementById('editAssurance').value = assuranceValue;
             document.getElementById('editAutreAssurance').value = autreAssuranceValue;
             document.getElementById('editNumeroAssure').value = '';
