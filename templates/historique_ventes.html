@@ -1305,6 +1305,26 @@ function imprimerHistorique() {
     // ⭐ NOUVEAU : compte des ventes avec une aide hospitalière apportée.
     var aideCount = ventesFiltrees.filter(function(v) { return (v.aide_hospitaliere || 0) > 0; }).length;
 
+    // ⭐ Quand une recherche par acte est active (échographie, ECG, NFS...),
+    // ajouter un total dédié à CET acte précis (nombre + somme des prix
+    // tarifaires propres) — sans ça, "faire les comptes" d'un acte précis
+    // depuis un rapport imprimé n'était pas possible : le CA global ci-
+    // dessus mélange tous les actes/produits de la vente entière.
+    var rechercheActive = (searchGlobalActuel || '').trim();
+    var totalActeRecherche = null;
+    var nbActeRecherche = 0;
+    if (rechercheActive) {
+        var rechercheNorm = normaliserTexte(rechercheActive);
+        ventesFiltrees.forEach(function(v) {
+            (v.articles || []).forEach(function(a) {
+                if (normaliserTexte(a.nom || '').indexOf(rechercheNorm) !== -1) {
+                    totalActeRecherche = (totalActeRecherche || 0) + (a.prix || 0);
+                    nbActeRecherche++;
+                }
+            });
+        });
+    }
+
     html += '<div class="summary">';
     html += '<div class="summary-item"><strong>Total ventes</strong><br>' + ventesFiltrees.length + '</div>';
     html += '<div class="summary-item"><strong>CA (espèces)</strong><br>' + Math.round(totalCA).toLocaleString('fr-FR') + ' F</div>';
@@ -1315,6 +1335,10 @@ function imprimerHistorique() {
     html += '<div class="summary-item"><strong style="color:#6c757d;">Non assurés</strong><br>' + nonAssuresCount + '</div>';
     html += '<div class="summary-item"><strong style="color:#20c997;">Avec CAC</strong><br>' + cacCount + '</div>';
     html += '<div class="summary-item"><strong style="color:#e0a800;">Avec aide</strong><br>' + aideCount + '</div>';
+    if (totalActeRecherche !== null) {
+        html += '<div class="summary-item"><strong style="color:#dc3545;">"' + escFR(rechercheActive) + '" (' + nbActeRecherche + ')</strong><br>' +
+                Math.round(totalActeRecherche).toLocaleString('fr-FR') + ' F</div>';
+    }
     html += '</div>';
     
     html += '<table>';
@@ -1353,21 +1377,30 @@ function imprimerHistorique() {
             badgeClass = 'badge-secondary';
         }
         
-        var details = v.detail || 'Aucun détail';
-        
-        if (v.detail_complet && v.detail_complet.length > 0) {
-            details = v.detail_complet.join(', ');
-        }
-        if (v.articles && v.articles.length > 0) {
-            var articlesListe = [];
-            for (var a = 0; a < v.articles.length; a++) {
-                var article = v.articles[a];
-                var nom = article.nom || 'Article';
-                var qte = article.quantite || 1;
-                articlesListe.push(nom + ' x' + qte);
+        // ⭐ Recherche active (échographie, ECG, NFS...) : afficher le prix
+        // propre de l'acte trouvé (comme à l'écran), pas seulement son nom
+        // — sinon le rapport imprimé retombe dans le même problème que le
+        // tableau avant le correctif : impossible de faire les comptes
+        // d'un acte précis quand il est vendu avec un autre.
+        var details;
+        if (rechercheActive) {
+            details = construireDetailCellule(v);
+        } else {
+            details = v.detail || 'Aucun détail';
+            if (v.detail_complet && v.detail_complet.length > 0) {
+                details = v.detail_complet.join(', ');
             }
-            if (articlesListe.length > 0) {
-                details = articlesListe.join(', ');
+            if (v.articles && v.articles.length > 0) {
+                var articlesListe = [];
+                for (var a = 0; a < v.articles.length; a++) {
+                    var article = v.articles[a];
+                    var nom = article.nom || 'Article';
+                    var qte = article.quantite || 1;
+                    articlesListe.push(nom + ' x' + qte);
+                }
+                if (articlesListe.length > 0) {
+                    details = articlesListe.join(', ');
+                }
             }
         }
         
