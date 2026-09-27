@@ -103,10 +103,18 @@ MAPPING_PBR_AMU = {
     "RADIOPELVIMETRIE": ("Q213", 13260),
 
     # --- Échographie (IMAGERIE CHU, section Echographie) ---
-    "ECG": None,  # pas dans ce référentiel imagerie (cardiologie/consultation)
+    # ⭐ Confirmé par le patron : ECG = Électrocardiogramme, code E800
+    # (ACTES NON IONISANTS CHU, pas dans le référentiel imagerie — d'où
+    # le "pas trouvé" du premier passage qui ne cherchait que dans
+    # IMAGERIE CHU/IRM).
+    "ECG": ("E800", 10710),
     "ECHO DOPPLER DU CŒUR": ("Q435", 17680),
-    "HOLTER TENSIONNEL": None,
-    "HOLTER ECG": None,
+    # ⭐ Confirmé par le patron : l'AMU ne prend pas en charge le Holter
+    # (tensionnel ou ECG) — pas de code officiel, PBR AMU = 0 (et non
+    # "pas de correspondance", qui aurait laissé le pbr actuel, faux,
+    # inchangé).
+    "HOLTER TENSIONNEL": ("N/A", 0),
+    "HOLTER ECG": ("N/A", 0),
     "ECHO TRANSFONTANELLAIRE": ("Q411", 8840),
     "ECHO OCULAIRE": ("Q416", 6630),
     "ECHO CERVICALE / THYROIDE / PAROTIDE / SOUS MAXILLAIRE / THORACIQUE": ("Q423", 13260),  # incertain
@@ -138,7 +146,16 @@ MAPPING_PBR_AMU = {
     "AgHbs": ("R416", 6050),
     "DYE TEST (TOXO)": ("R400", 6050),
     "RUBEOLE": ("R411", 7700),
-    "SRV": None,  # abréviation non identifiée avec certitude
+    # ⭐ Confirmé par le patron : SRV = sérologie rétrovirale, deux méthodes
+    # bien distinctes dans le barème CHU (R412 test rapide / R413 Elisa) —
+    # la ligne unique "SRV" a été séparée en deux actes par
+    # scripts/separer_srv_valeo.py (le prix élevé, 13 800 F, correspond à
+    # l'Elisa, plus complet ; le test rapide a été ajouté au même prix
+    # provisoire). Gardé ici pour mémoire — ni l'une ni l'autre variante
+    # ne matche plus la clé "SRV" seule, donc ce script ne les touche
+    # plus (leur pbr est déjà correct).
+    "SRV Elisa": ("R413", 6050),
+    "SRV test rapide": ("R412", 2200),
     "TPHA": ("R406", 3850),
     "VDRL/RPR": ("R406", 3850),
     "TRANSAMINASES": ("R876", 1650),
