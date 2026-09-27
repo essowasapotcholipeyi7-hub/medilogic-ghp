@@ -901,6 +901,7 @@ def index():
                 session['role'] = infos['role']
                 session['is_admin'] = infos['is_admin']
                 session['type_compte'] = 'structure' if infos['is_admin'] else 'user'
+                _reinitialiser_medecin_du_jour_connexion(infos['structure_id'])
                 flash(f"Bienvenue {infos['user_name']} (mode hors-ligne — Google Sheets injoignable)", 'warning')
                 return redirect(url_for('dashboard'))
             flash('Connexion à Google Sheets impossible, et aucun compte hors-ligne correspondant trouvé.', 'danger')
@@ -985,6 +986,7 @@ def index():
                                 session['role'] = role  # 🔥 AJOUT DU RÔLE
                                 session['is_admin'] = (role == 'admin')  # 🔥 ADMIN SI ROLE = 'admin'
                                 session['type_compte'] = 'user'  # ligne struct_N_users (vs compte structure)
+                                _reinitialiser_medecin_du_jour_connexion(structure_id)
 
                                 print(f"✅ Connexion réussie pour {row.get('nom')} (rôle: {role})")
                                 flash(f'Bienvenue {row.get("nom")}', 'success')
@@ -1033,6 +1035,7 @@ def index():
                             session['role'] = 'admin'
                             session['is_admin'] = True
                             session['type_compte'] = 'structure'  # compte propriétaire (feuille structures)
+                            _reinitialiser_medecin_du_jour_connexion(structure.get('ID'))
 
                             flash(f'Bienvenue {structure.get("nom")}', 'success')
                             return redirect(url_for('dashboard'))
@@ -1098,6 +1101,7 @@ def _poser_session_compte(structure_id, utilisateur_id, type_compte, se_souvenir
         session['role'] = 'admin'
         session['is_admin'] = True
         session['type_compte'] = 'structure'
+        _reinitialiser_medecin_du_jour_connexion(structure.get('ID'))
         return structure.get('nom'), None
 
     # 'user'
@@ -1139,6 +1143,7 @@ def _poser_session_compte(structure_id, utilisateur_id, type_compte, se_souvenir
     session['role'] = role
     session['is_admin'] = (role == 'admin')
     session['type_compte'] = 'user'
+    _reinitialiser_medecin_du_jour_connexion(structure_id)
     return row.get('nom'), None
 
 
@@ -9114,6 +9119,24 @@ def medecin_du_jour_actuel(structure_id, moment=None):
     if not medecin:
         return None
     return {'id': medecin.id, 'nom_complet': medecin.get_nom_complet()}
+
+
+def _reinitialiser_medecin_du_jour_connexion(structure_id):
+    """Efface le médecin du jour partagé de cette structure à CHAQUE
+    connexion (n'importe quel poste) — patron : "je veux que si on choisit
+    un médecin du jour et on se déconnecte, si on revient, que ça ne reste
+    pas par défaut [sur ce médecin] ... on évite que ça reste sur un
+    médecin alors qu'on voulait changer pour un autre". Volontairement
+    plus agressif qu'un simple changement de jour calendaire : un choix
+    explicite est redemandé après CHAQUE connexion, quel que soit le
+    poste qui vient de se reconnecter."""
+    if not structure_id:
+        return
+    try:
+        MedecinDuJour.query.filter_by(structure_id=structure_id, date=datetime.utcnow().date()).delete()
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def _repartition_ligne_vente_attente(article, taux_amu, taux_cac):
