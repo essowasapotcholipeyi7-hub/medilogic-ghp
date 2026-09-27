@@ -10286,23 +10286,34 @@ def api_supprimer_taux_part_medecin(ligne_id):
 @app.route('/api/medecin-du-jour', methods=['POST'])
 @login_required
 def api_definir_medecin_du_jour():
-    """Définit/modifie le médecin du jour pour AUJOURD'HUI, pour cette
-    structure — accessible à quiconque a accès à Actes & Vente (pas
+    """Définit/modifie/efface le médecin du jour pour AUJOURD'HUI, pour
+    cette structure — accessible à quiconque a accès à Actes & Vente (pas
     admin-only : c'est un geste de prise de poste du matin, pas un
     paramétrage), modifiable autant de fois que nécessaire dans la
-    journée (upsert). Voir medecin_du_jour_actuel()."""
+    journée (upsert). Voir medecin_du_jour_actuel().
+
+    ⭐ medecin_id vide/absent = EFFACER le médecin du jour (supprime la
+    ligne) plutôt que d'être rejeté — patron : "je viens d'essayer en
+    choisissant rien mais ça ne marche pas" ; sans ça, impossible de
+    revenir à "non défini" pour forcer un choix explicite avant la
+    prochaine vente (ex: changement d'équipe)."""
     try:
         structure_id = session.get('structure_id')
         data = request.json or {}
         medecin_id = data.get('medecin_id')
+        aujourdhui = datetime.utcnow().date()
+        ligne = MedecinDuJour.query.filter_by(structure_id=structure_id, date=aujourdhui).first()
+
         if not medecin_id:
-            return jsonify({'success': False, 'error': 'Médecin requis'}), 400
+            if ligne:
+                db.session.delete(ligne)
+                db.session.commit()
+            return jsonify({'success': True, 'medecin_id': None, 'medecin_nom': None})
+
         medecin = Medecin.query.filter_by(id=medecin_id, structure_id=structure_id, actif=True).first()
         if not medecin:
             return jsonify({'success': False, 'error': 'Médecin introuvable'}), 404
 
-        aujourdhui = datetime.utcnow().date()
-        ligne = MedecinDuJour.query.filter_by(structure_id=structure_id, date=aujourdhui).first()
         if ligne:
             ligne.medecin_id = medecin.id
             ligne.defini_par = session.get('user_name', 'System')
