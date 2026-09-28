@@ -4878,7 +4878,7 @@ def admin_jours_feries_supprimer(jour_id):
 
 @app.route('/api/admin/actes', methods=['POST'])
 @login_required
-@admin_required
+@roles_required('admin', 'gestionnaire')
 def api_add_acte():
     """Ajouter ou modifier un acte dans Google Sheets"""
     try:
@@ -4969,7 +4969,7 @@ def api_add_acte():
 
 @app.route('/api/admin/actes/<int:acte_id>', methods=['DELETE'])
 @login_required
-@admin_required
+@roles_required('admin', 'gestionnaire')
 def api_delete_acte(acte_id):
     """Supprimer un acte dans Google Sheets"""
     try:
