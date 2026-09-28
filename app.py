@@ -9030,7 +9030,7 @@ def api_export_historique_produits():
         contenu = '\n'.join(lignes_txt)
         return Response(
             contenu, mimetype='text/plain',
-            headers={'Content-Disposition': 'attachment; filename=historique_medicaments.txt'}
+            headers={'Content-Disposition': 'attachment; filename=historique_actes_produits.txt'}
         )
 
     # Excel (openpyxl — déjà une dépendance du projet)
@@ -9038,7 +9038,7 @@ def api_export_historique_produits():
     from openpyxl.styles import Font
     wb = Workbook()
     ws = wb.active
-    ws.title = 'Historique médicaments'
+    ws.title = 'Historique actes et produits'
     ws.append(colonnes)
     for cell in ws[1]:
         cell.font = Font(bold=True)
@@ -9054,7 +9054,7 @@ def api_export_historique_produits():
     return Response(
         buffer.read(),
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        headers={'Content-Disposition': 'attachment; filename=historique_medicaments.xlsx'}
+        headers={'Content-Disposition': 'attachment; filename=historique_actes_produits.xlsx'}
     )
 
 
