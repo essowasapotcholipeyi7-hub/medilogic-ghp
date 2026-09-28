@@ -1,0 +1,27 @@
+name: Surveillance production
+
+# patron : "comment faire pour que ça soit au haut niveau" — le crash du
+# 2026-09-28 a été decouvert par une plainte utilisateur, pas par une
+# alerte. Ce workflow tourne toutes les 10 minutes et échoue si /health
+# (voir app.py) ne répond pas correctement — GitHub envoie automatiquement
+# un email au propriétaire du dépôt dès qu'un workflow planifié échoue
+# (Settings > Notifications > Actions sur github.com), sans compte ni
+# service tiers à configurer.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:  # bouton "Run workflow" pour tester manuellement
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vérifier /health
+        run: |
+          code=$(curl -s -o /tmp/reponse.json -w "%{http_code}" --max-time 45 https://medilogic-ghp.onrender.com/health)
+          echo "Code HTTP : $code"
+          cat /tmp/reponse.json || true
+          if [ "$code" != "200" ]; then
+            echo "::error::/health a répondu $code au lieu de 200"
+            exit 1
+          fi
