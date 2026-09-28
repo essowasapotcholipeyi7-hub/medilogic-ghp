@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Mode hors-ligne — Patients</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body style="background:#f5f7fa;">
+<nav class="navbar navbar-dark bg-warning-emphasis" style="background:#b45309;">
+    <div class="container">
+        <span class="navbar-brand text-white">⚠ Mode hors-ligne — {{ nom_utilisateur }}</span>
+        <div>
+            <a href="/ventes" class="btn btn-sm btn-light me-2">Ventes</a>
+            <a href="/logout" class="btn btn-sm btn-outline-light">Déconnexion</a>
+        </div>
+    </div>
+</nav>
+<div class="container mt-4">
+    <div class="alert alert-warning">
+        Connexion internet indisponible. Vos actions sont enregistrées localement
+        et seront envoyées automatiquement dès le retour du réseau.
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">Rechercher un patient</div>
+        <div class="card-body">
+            <input type="text" id="rechercheInput" class="form-control mb-3" placeholder="Nom, prénom ou téléphone...">
+            <div id="resultats"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            Nouveau patient
+            <span id="messageCreation" class="text-success small"></span>
+        </div>
+        <div class="card-body">
+            <form id="formPatient" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Nom *</label>
+                    <input type="text" name="nom" class="form-control" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Prénom</label>
+                    <input type="text" name="prenom" class="form-control">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Téléphone</label>
+                    <input type="text" name="telephone" class="form-control">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Type d'assurance</label>
+                    <select name="type_assurance" class="form-select">
+                        <option value="non_assure">Non assuré</option>
+                        <option value="amu">AMU</option>
+                        <option value="cnss">CNSS</option>
+                        <option value="privee">Assurance privée</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">N° assuré</label>
+                    <input type="text" name="numero_assure" class="form-control">
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">Enregistrer le patient</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function afficherResultats(patients) {
+    const zone = document.getElementById('resultats');
+    if (!patients.length) {
+        zone.innerHTML = '<p class="text-muted">Aucun patient trouvé.</p>';
+        return;
+    }
+    zone.innerHTML = '<table class="table table-sm"><thead><tr><th>Nom</th><th>Prénom</th><th>Téléphone</th><th>N° local</th><th></th></tr></thead><tbody>' +
+        patients.map(p => `<tr>
+            <td>${p.nom}</td><td>${p.prenom}</td><td>${p.telephone || ''}</td>
+            <td>${p.numero_local || ''}</td>
+            <td><a href="/ventes?patient=${p.uuid}" class="btn btn-sm btn-success">Vendre</a></td>
+        </tr>`).join('') + '</tbody></table>';
+}
+
+function rechercher() {
+    const q = document.getElementById('rechercheInput').value;
+    fetch('/api/offline/patients/recherche?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(d => { if (d.success) afficherResultats(d.patients); });
+}
+
+document.getElementById('rechercheInput').addEventListener('input', rechercher);
+rechercher();
+
+document.getElementById('formPatient').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.target).entries());
+    fetch('/api/offline/patients', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).then(r => r.json()).then(d => {
+        if (d.success) {
+            document.getElementById('messageCreation').textContent = 'Patient enregistré (n° ' + d.numero_local + ')';
+            e.target.reset();
+            rechercher();
+        } else {
+            alert('Erreur : ' + d.error);
+        }
+    });
+});
+</script>
+</body>
+</html>

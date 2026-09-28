@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Mode hors-ligne — Vente</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body style="background:#f5f7fa;">
+<nav class="navbar navbar-dark" style="background:#b45309;">
+    <div class="container">
+        <span class="navbar-brand text-white">⚠ Mode hors-ligne — {{ nom_utilisateur }}</span>
+        <div>
+            <a href="/patients" class="btn btn-sm btn-light me-2">Patients</a>
+            <a href="/logout" class="btn btn-sm btn-outline-light">Déconnexion</a>
+        </div>
+    </div>
+</nav>
+<div class="container mt-4" style="max-width:720px;">
+    <div class="alert alert-warning">
+        Connexion internet indisponible. Catalogue local : {{ nb_actes }} acte(s), {{ nb_produits }} produit(s)
+        (dernière mise à jour pendant que le réseau fonctionnait — les prix peuvent être légèrement obsolètes).
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header">Patient</div>
+        <div class="card-body">
+            <input type="text" id="rechercheInput" class="form-control mb-2" placeholder="Chercher un patient...">
+            <div id="resultatsPatient"></div>
+            <div id="patientChoisi" class="alert alert-info d-none mt-2"></div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs" id="ongletsType">
+                <li class="nav-item"><a class="nav-link active" data-type="actes" href="#">Acte</a></li>
+                <li class="nav-item"><a class="nav-link" data-type="pharmacie" href="#">Pharmacie</a></li>
+            </ul>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">Article</label>
+                <input type="text" id="articleInput" class="form-control" placeholder="Nom de l'acte/produit...">
+                <div id="suggestionsArticle" class="list-group mt-1"></div>
+            </div>
+            <div id="panier"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Encaissement</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Net à payer (FCFA)</label>
+                    <input type="number" id="netAPayer" class="form-control" min="0" step="1">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Montant donné (FCFA)</label>
+                    <input type="number" id="montantDonne" class="form-control" min="0" step="1">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Mode de paiement</label>
+                    <select id="modePaiement" class="form-select">
+                        <option value="especes">Espèces</option>
+                        <option value="mobile_money">Mobile Money</option>
+                    </select>
+                </div>
+            </div>
+            <button id="btnValider" class="btn btn-success mt-3">Enregistrer la vente</button>
+            <span id="messageVente" class="ms-2"></span>
+        </div>
+    </div>
+</div>
+
+<script>
+let patientChoisiUuid = null;
+let typeVente = 'actes';
+let panier = [];
+let catalogue = { actes: [], produits: [] };
+
+fetch('/api/offline/patients/recherche').then(r => r.json()); // warmup
+
+document.querySelectorAll('#ongletsType .nav-link').forEach(a => {
+    a.addEventListener('click', function(e) {
+        e.preventDefault();
+        document.querySelectorAll('#ongletsType .nav-link').forEach(x => x.classList.remove('active'));
+        this.classList.add('active');
+        typeVente = this.dataset.type;
+        panier = [];
+        afficherPanier();
+    });
+});
+
+function rechercherPatient() {
+    const q = document.getElementById('rechercheInput').value;
+    fetch('/api/offline/patients/recherche?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(d => {
+            const zone = document.getElementById('resultatsPatient');
+            if (!d.success || !d.patients.length) { zone.innerHTML = ''; return; }
+            zone.innerHTML = d.patients.slice(0, 8).map(p =>
+                `<button type="button" class="btn btn-outline-secondary btn-sm me-1 mb-1" onclick="choisirPatient('${p.uuid}', '${(p.nom + ' ' + p.prenom).replace(/'/g, "")}')">${p.nom} ${p.prenom}</button>`
+            ).join('');
+        });
+}
+document.getElementById('rechercheInput').addEventListener('input', rechercherPatient);
+
+function choisirPatient(uuid, nomComplet) {
+    patientChoisiUuid = uuid;
+    const zone = document.getElementById('patientChoisi');
+    zone.classList.remove('d-none');
+    zone.textContent = 'Patient sélectionné : ' + nomComplet;
+}
+
+document.getElementById('articleInput').addEventListener('input', function() {
+    const terme = this.value.toLowerCase();
+    const url = typeVente === 'actes' ? '/api/offline/catalogue/actes' : '/api/offline/catalogue/produits';
+    fetch(url + '?q=' + encodeURIComponent(terme)).then(r => r.json()).then(d => {
+        const zone = document.getElementById('suggestionsArticle');
+        zone.innerHTML = (d.items || []).slice(0, 8).map(a =>
+            `<a href="#" class="list-group-item list-group-item-action" onclick="ajouterArticle(event, '${a.nom.replace(/'/g, "")}', ${a.prix || 0}, ${JSON.stringify(a.id)})">${a.nom} — ${a.prix || 0} FCFA</a>`
+        ).join('');
+    });
+});
+
+function ajouterArticle(e, nom, prix, id) {
+    e.preventDefault();
+    panier.push({ nom, prix, prix_unitaire: prix, quantite: 1, id });
+    document.getElementById('articleInput').value = '';
+    document.getElementById('suggestionsArticle').innerHTML = '';
+    afficherPanier();
+}
+
+function afficherPanier() {
+    const zone = document.getElementById('panier');
+    if (!panier.length) { zone.innerHTML = '<p class="text-muted">Aucun article ajouté.</p>'; return; }
+    zone.innerHTML = '<table class="table table-sm"><tbody>' + panier.map((a, i) =>
+        `<tr><td>${a.nom}</td><td>${a.prix} FCFA</td><td><button class="btn btn-sm btn-outline-danger" onclick="retirerArticle(${i})">Retirer</button></td></tr>`
+    ).join('') + '</table>';
+    const total = panier.reduce((s, a) => s + (a.prix || 0), 0);
+    document.getElementById('netAPayer').value = total;
+    document.getElementById('montantDonne').value = total;
+}
+function retirerArticle(i) { panier.splice(i, 1); afficherPanier(); }
+
+document.getElementById('btnValider').addEventListener('click', function() {
+    if (!patientChoisiUuid) { alert('Choisissez un patient.'); return; }
+    if (!panier.length) { alert('Ajoutez au moins un article.'); return; }
+
+    const netAPayer = parseFloat(document.getElementById('netAPayer').value || 0);
+    const montantDonne = parseFloat(document.getElementById('montantDonne').value || 0);
+    const data = {
+        patient_uuid: patientChoisiUuid,
+        sous_total: netAPayer,
+        net_a_payer: netAPayer,
+        montant_donne: montantDonne,
+        rendu: Math.max(0, montantDonne - netAPayer),
+        mode_paiement: document.getElementById('modePaiement').value,
+    };
+    data[typeVente] = panier;
+
+    const url = typeVente === 'actes' ? '/api/offline/ventes/actes' : '/api/offline/ventes/pharma';
+    fetch(url, {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+    }).then(r => r.json()).then(d => {
+        const msg = document.getElementById('messageVente');
+        if (d.success) {
+            msg.className = 'ms-2 text-success';
+            msg.textContent = 'Vente enregistrée (n° ' + d.numero_local + ')' + (d.avertissement ? ' — ' + d.avertissement : '');
+            panier = []; afficherPanier();
+        } else {
+            msg.className = 'ms-2 text-danger';
+            msg.textContent = 'Erreur : ' + d.error;
+        }
+    });
+});
+</script>
+</body>
+</html>
