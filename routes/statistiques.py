@@ -29,6 +29,17 @@ def _verifier_role_statistiques():
             return jsonify({'error': 'Non autorisé'}), 401
         flash('Veuillez vous connecter', 'warning')
         return redirect(url_for('index'))
+    # ⭐ Le bordereau imprimable (/assurance/bordereau) doit rester
+    # accessible aux caissiers/secrétaires : ce sont eux qui gèrent la
+    # page Factures assurances (/factures/assurances, réservée à ces deux
+    # rôles) et doivent pouvoir imprimer le bordereau à joindre au dépôt
+    # d'une facture — patron : "il faut que les secretaires et caissieres
+    # aussi arrivent à imprimer les bordereaux pour le depot des factures
+    # generées". Le reste du blueprint (chiffre d'affaires, stats
+    # détaillées...) reste réservé à 'statistiques' comme avant.
+    est_bordereau = request.path == '/api/statistiques/assurance/bordereau'
+    if est_bordereau and session.get('role') in ('caissier', 'secretaire'):
+        return
     if not a_acces('statistiques'):
         if chemin_api:
             return jsonify({'error': 'Accès non autorisé pour votre rôle'}), 403
@@ -1300,11 +1311,14 @@ def bordereau_assurance():
     for v in ventes:
         patient = Patient.query.get(v.patient_id)
 
-        # Filtre par société souscriptrice (assurance complémentaire
-        # uniquement) : instantané pris à la vente, sinon valeur courante
-        # sur la fiche patient (ventes antérieures à ce champ).
+        # Société souscriptrice (assurance complémentaire uniquement) :
+        # instantané pris à la vente, sinon valeur courante sur la fiche
+        # patient (ventes antérieures à ce champ). Toujours calculée (pas
+        # seulement pour filtrer) — sert aussi à regrouper le bordereau
+        # global par société (voir plus bas, patron : "imprimer aussi un
+        # bordereau global aussi par compagnie").
+        societe_vente = '' if est_principale else (_societe_vente(v) or (patient.societe_assurance2 if patient else ''))
         if not est_principale and societe_filtre:
-            societe_vente = _societe_vente(v) or (patient.societe_assurance2 if patient else '')
             if (societe_vente or '').strip().lower() != societe_filtre.lower():
                 continue
 
@@ -1330,6 +1344,7 @@ def bordereau_assurance():
             'montant_total': montants['total_prix'],
             'part_assurance': part_assurance,
             'reste_patient': montants['reste_patient'],
+            'societe': societe_vente or '',
         })
         total_montant += montants['total_prix']
         total_part_assurance += part_assurance
@@ -1338,6 +1353,30 @@ def bordereau_assurance():
     nom_compagnie = _label_assurance(nom_assurance)
 
     structure = _get_structure_info(structure_id)
+
+    # ⭐ Bordereau GLOBAL (aucune société précisée, complémentaire) : on
+    # regroupe les lignes par société avec un sous-total chacune, pour que
+    # la compagnie puisse vérifier la part de chacune de ses sociétés dans
+    # le total — patron : "imprimer aussi un bordereau global aussi par
+    # compagnie". Le mode "une société" garde l'affichage plat existant
+    # (groupes=None).
+    groupes = None
+    if not est_principale and not societe_filtre:
+        par_societe = {}
+        ordre = []
+        for l in lignes:
+            cle = l['societe'] or 'Société non renseignée'
+            if cle not in par_societe:
+                par_societe[cle] = []
+                ordre.append(cle)
+            par_societe[cle].append(l)
+        groupes = [{
+            'societe': cle,
+            'lignes': par_societe[cle],
+            'sous_total_montant': sum(l['montant_total'] for l in par_societe[cle]),
+            'sous_total_part': sum(l['part_assurance'] for l in par_societe[cle]),
+            'sous_total_reste': sum(l['reste_patient'] for l in par_societe[cle]),
+        } for cle in sorted(ordre)]
 
     # Numéro de bordereau (traçabilité du document) et montant arrêté en
     # toutes lettres, adressé à la compagnie/société.
@@ -1349,6 +1388,7 @@ def bordereau_assurance():
         structure=structure,
         nom_compagnie=nom_compagnie,
         nom_societe=societe_filtre,
+        groupes=groupes,
         numero_bordereau=numero_bordereau,
         periode_libelle=dates['libelle'],
         lignes=lignes,
