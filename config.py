@@ -50,6 +50,25 @@ class Config:
     SQLALCHEMY_DATABASE_URI = _url_postgres_pour_sqlalchemy(os.getenv('DATABASE_URL')) or 'postgresql+psycopg2://...'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # ⭐⭐ CAUSE RÉELLE DES "500 Internal Server Error" RÉCURRENTS EN
+    # PRODUCTION (identifié le 2026-09-29, symptôme signalé "trop récurrent
+    # depuis hier") : Neon (Postgres serverless, connexion via son pooler
+    # "-pooler") ferme les connexions inactives côté serveur sans prévenir
+    # le pool de connexions de SQLAlchemy. Sans pool_pre_ping, SQLAlchemy
+    # réutilise une connexion qu'il croit encore valide, l'échec de requête
+    # remonte tel quel jusqu'à Flask -> 500 générique, sur N'IMPORTE QUELLE
+    # route utilisant db.session, de façon intermittente (la connexion
+    # suivante, fraîche, fonctionne — d'où le caractère "aléatoire" du bug).
+    # pool_pre_ping fait un aller-retour léger (SELECT 1) avant de rendre
+    # une connexion du pool, et la remplace silencieusement si elle est
+    # morte — élimine cette classe entière d'erreurs sans rien changer
+    # côté route. pool_recycle recycle aussi les connexions avant qu'elles
+    # n'atteignent l'âge où Neon a tendance à les couper de son côté.
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,
+        'pool_recycle': 280,
+    }
+
     # ⭐ Bascule hors-ligne (voir utils/db_failover.py) : n'existe que si
     # DATABASE_URL_LOCAL est définie (jamais le cas sur Render) — sinon
     # aucun changement de comportement.
