@@ -27,6 +27,7 @@
         <thead>
             <tr>
                 <th>N°</th><th>Patient</th><th>Type</th><th>Heure</th>
+                <th>Assuré</th><th>Prise en charge</th>
                 <th>Net à payer</th><th>Statut</th><th></th>
             </tr>
         </thead>
@@ -37,6 +38,14 @@
                 <td>{{ v.patient_nom }}</td>
                 <td>{{ 'Pharmacie' if v.type == 'pharmacie' else 'Acte' }}</td>
                 <td>{{ v.date_vente[11:16] if v.date_vente and v.date_vente|length > 16 else '' }}</td>
+                <td>
+                    {% if v.assurance_nom %}
+                    <span class="badge bg-success-subtle text-success-emphasis">{{ v.assurance_nom }}{% if v.assurance2_nom %} + {{ v.assurance2_nom }}{% endif %}</span>
+                    {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary-emphasis">Non assuré</span>
+                    {% endif %}
+                </td>
+                <td>{% if v.prise_en_charge_totale %}{{ '{:,.0f}'.format(v.prise_en_charge_totale).replace(',', ' ') }} FCFA{% else %}—{% endif %}</td>
                 <td>{{ '{:,.0f}'.format(v.net_a_payer or 0).replace(',', ' ') }} FCFA</td>
                 <td>
                     {% if v.synced %}
@@ -51,7 +60,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="7" class="text-center text-muted">Aucune vente enregistrée aujourd'hui depuis ce poste.</td></tr>
+            <tr><td colspan="9" class="text-center text-muted">Aucune vente enregistrée aujourd'hui depuis ce poste.</td></tr>
             {% endfor %}
         </tbody>
     </table>

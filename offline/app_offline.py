@@ -244,7 +244,7 @@ def historique():
     if not utilisateur_connecte():
         return redirect('/login')
 
-    from crypto_helper import dechiffrer
+    import json as _json
     aujourdhui = datetime.now(timezone.utc).date().isoformat()
     ventes = requeter(
         """SELECT * FROM offline_ventes
@@ -255,6 +255,14 @@ def historique():
     lignes = []
     for v in ventes:
         v = dict(v)
+        # ⭐ Colonne "Assuré" + part assurance — même esprit que l'historique
+        # en ligne (historique_ventes.html) : le patron a demandé qu'on
+        # voie ici aussi qui est assuré et ce que l'assurance a pris en
+        # charge, pas seulement le net à payer. Ces champs existent déjà
+        # dans offline_ventes (voir prise_en_charge/prise_en_charge2,
+        # ajoutés aujourd'hui avec base_remboursement/reste_a_payer) —
+        # juste jamais remontés jusqu'à cette page.
+        prise_en_charge_totale = (v['prise_en_charge'] or 0) + (v['prise_en_charge2'] or 0)
         lignes.append({
             'uuid': v['uuid'],
             'numero_local': v['numero_local'],
@@ -263,6 +271,9 @@ def historique():
             'net_a_payer': v['net_a_payer'],
             'date_vente': v['date_vente'],
             'synced': bool(v['neon_id']),
+            'assurance_nom': v['assurances'] and _json.loads(v['assurances']).get('principale', {}).get('nom'),
+            'assurance2_nom': v['assurance2_nom'],
+            'prise_en_charge_totale': prise_en_charge_totale,
         })
     return render_template('offline_historique.html', ventes=lignes, nom_utilisateur=nom_utilisateur())
 
