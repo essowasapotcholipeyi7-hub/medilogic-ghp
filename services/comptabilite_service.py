@@ -1182,6 +1182,141 @@ def generer_ecriture_paie(paie, employe, user_nom='SYSTEME'):
 
 
 # ============================================================
+# REPORT À NOUVEAU (OUVERTURE D'EXERCICE) — journal RAN
+# ============================================================
+# Demande du patron (2026-09-29), après avoir ajouté le code journal RAN :
+# "vérifie toi-même comment ça doit être et fais-le comme ça". Principe
+# SYSCOHADA standard repris ici : à l'ouverture d'un nouvel exercice, CHAQUE
+# compte de BILAN (classes 1 à 5 — capitaux, immobilisations, stocks,
+# tiers, trésorerie ; PAS les classes 6/7 charges/produits, qui repartent à
+# zéro chaque exercice) reprend son solde de clôture tel quel, sur une
+# écriture datée du 1er jour du nouvel exercice. Volontairement SIMPLE :
+# pas d'affectation du résultat (12 -> 131) — ce choix reste une décision
+# humaine/du conseil, faite séparément si besoin via une écriture OD
+# normale ; le compte 12 (résultat) est reporté tel quel comme n'importe
+# quel autre compte de bilan, pratique courante avant affectation formelle.
+#
+# ⭐ Le point le plus important (lien direct avec le chantier "comptes
+# tiers reliés aux comptes généraux") : un compte de tiers (411/401/
+# tiers-payants assurance...) n'est PAS reporté en un seul bloc — chaque
+# tiers (chaque client, chaque fournisseur) garde SA PROPRE ligne avec son
+# propre solde, exactement comme à la question précédente sur la
+# séparation par compte. Sans ça, le suivi individuel de qui doit quoi
+# serait perdu dès le premier jour du nouvel exercice.
+
+def previsualiser_report_a_nouveau(structure_id, date_cloture):
+    """Calcule ce que produirait generer_report_a_nouveau() SANS rien
+    persister — pour que l'écran de confirmation montre les lignes et le
+    total avant que le comptable ne déclenche pour de vrai une écriture
+    difficile à annuler proprement (elle rouvrirait tous les soldes d'un
+    exercice déjà clôturé).
+
+    Retourne {'lignes': [...], 'total_debit':.., 'total_credit':.., 'equilibre': bool}.
+    Une ligne = soit un compte sans tiers (solde global), soit UN tiers
+    précis sur un compte de tiers (voir en-tête de section)."""
+    from sqlalchemy import text
+
+    # ⭐ Filtre sur LEFT(numero, 1), PAS sur la colonne classe : vérifié en
+    # conditions réelles (structure 1) que des comptes hérités (numéros
+    # courts pré-harmonisation 8-chiffres — 211, 411, 611... voir
+    # scripts/migrer_comptes_8chiffres.py) ont une colonne classe vide/NULL
+    # alors qu'ils portent de vrais montants — filtrer dessus les aurait
+    # silencieusement exclus du report à nouveau. Le premier chiffre du
+    # numéro, lui, est un invariant garanti par le plan comptable (voir
+    # utils/plan_comptable_syscohada.py, en-tête) quel que soit le format.
+    rows = db.session.execute(text("""
+        SELECT
+            c.id AS compte_id, c.numero AS compte_numero, c.nom AS compte_nom,
+            l.tiers_type, l.tiers_id, l.tiers_nom,
+            SUM(l.debit - l.credit) AS solde
+        FROM lignes_ecritures l
+        JOIN ecritures_comptables e ON e.id = l.ecriture_id
+        JOIN comptes_comptables c ON c.id = l.compte_id
+        WHERE e.structure_id = :structure_id
+          AND e.statut = 'valide'
+          AND e.date_ecriture <= :date_cloture
+          AND LEFT(c.numero, 1) IN ('1', '2', '3', '4', '5')
+        GROUP BY c.id, c.numero, c.nom, l.tiers_type, l.tiers_id, l.tiers_nom
+        HAVING ABS(SUM(l.debit - l.credit)) > 0.5
+        ORDER BY c.numero, l.tiers_nom
+    """), {'structure_id': structure_id, 'date_cloture': date_cloture}).fetchall()
+
+    lignes = []
+    total_debit = 0.0
+    total_credit = 0.0
+    for row in rows:
+        solde = _to_float(row.solde)
+        debit = round(solde, 2) if solde > 0 else 0
+        credit = round(-solde, 2) if solde < 0 else 0
+        total_debit += debit
+        total_credit += credit
+        libelle_tiers = f" — {row.tiers_nom}" if row.tiers_nom else ""
+        lignes.append({
+            'numero_compte': row.compte_numero,
+            'compte_nom': row.compte_nom,
+            'libelle': f"À nouveau — {row.compte_nom}{libelle_tiers}",
+            'debit': debit,
+            'credit': credit,
+            'tiers_type': row.tiers_type,
+            'tiers_id': row.tiers_id,
+            'tiers_nom': row.tiers_nom,
+        })
+
+    return {
+        'lignes': lignes,
+        'total_debit': round(total_debit, 2),
+        'total_credit': round(total_credit, 2),
+        'equilibre': abs(total_debit - total_credit) <= 1,
+    }
+
+
+def generer_report_a_nouveau(structure_id, date_cloture, date_ouverture=None, user_nom='SYSTEME'):
+    """Génère (et VALIDE immédiatement, comme tout auto-généré) l'écriture
+    de report à nouveau — voir previsualiser_report_a_nouveau() pour le
+    détail du calcul, identique ici. date_ouverture par défaut : lendemain
+    de date_cloture.
+
+    Refuse de dupliquer : une seule écriture RAN par (structure, date
+    d'ouverture) — voir piece_justificative ci-dessous."""
+    try:
+        if date_ouverture is None:
+            date_ouverture = date_cloture + timedelta(days=1)
+
+        piece = f"RAN-{date_ouverture.year}"
+        deja_existante = EcritureComptable.query.filter_by(
+            structure_id=structure_id, journal_code='RAN', piece_justificative=piece
+        ).first()
+        if deja_existante:
+            message = f"Report à nouveau {date_ouverture.year} déjà généré (écriture #{deja_existante.id})."
+            print(f"⚠️ [comptabilite_service] {message}")
+            return None
+
+        apercu = previsualiser_report_a_nouveau(structure_id, date_cloture)
+        if not apercu['lignes']:
+            print(f"ℹ️ [comptabilite_service] Report à nouveau : rien à reporter pour la structure {structure_id} au {date_cloture}.")
+            return None
+
+        ecriture = creer_ecriture(
+            structure_id=structure_id,
+            date_ecriture=date_ouverture,
+            libelle=f"Report à nouveau — ouverture exercice {date_ouverture.year}",
+            lignes=apercu['lignes'],
+            journal_code='RAN',
+            piece_justificative=piece,
+            auto=True,
+            source_type='report_a_nouveau',
+            source_id=None,
+            user_nom=user_nom,
+        )
+        return ecriture
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ [comptabilite_service] Erreur generer_report_a_nouveau: {e}")
+        _log_anomalie(structure_id, 'report_a_nouveau', None, f"Échec génération du report à nouveau: {e}")
+        return None
+
+
+# ============================================================
 # PROVISIONS POUR CRÉANCES DOUTEUSES
 # ============================================================
 

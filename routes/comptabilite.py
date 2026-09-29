@@ -1102,6 +1102,49 @@ def generer_grand_livre(structure_id, date_debut, date_fin, compte_id=None, tier
     return lignes
 
 
+@compta_bp.route('/api/report-a-nouveau/apercu')
+def api_report_a_nouveau_apercu():
+    """Calcule (sans rien enregistrer) ce que produirait la génération du
+    report à nouveau pour une date de clôture donnée — voir
+    services/comptabilite_service.previsualiser_report_a_nouveau(). Sert
+    d'écran de confirmation avant de déclencher pour de vrai une écriture
+    difficile à annuler proprement (elle rouvrirait tous les soldes d'un
+    exercice déjà clôturé)."""
+    structure_id = session.get('structure_id')
+    if not structure_id:
+        return jsonify({'success': False, 'error': 'Structure non trouvée'}), 404
+
+    date_cloture = parse_date(request.args.get('date_cloture'))
+    if not date_cloture:
+        return jsonify({'success': False, 'error': 'Date de clôture invalide'}), 400
+
+    from services.comptabilite_service import previsualiser_report_a_nouveau
+    apercu = previsualiser_report_a_nouveau(structure_id, date_cloture)
+    return jsonify({'success': True, **apercu})
+
+
+@compta_bp.route('/api/report-a-nouveau/generer', methods=['POST'])
+def api_report_a_nouveau_generer():
+    """Génère (et valide immédiatement) l'écriture de report à nouveau —
+    action volontaire du comptable, jamais automatique/planifiée : voir
+    services/comptabilite_service.generer_report_a_nouveau()."""
+    structure_id = session.get('structure_id')
+    if not structure_id:
+        return jsonify({'success': False, 'error': 'Structure non trouvée'}), 404
+
+    data = request.json or {}
+    date_cloture = parse_date(data.get('date_cloture'))
+    if not date_cloture:
+        return jsonify({'success': False, 'error': 'Date de clôture invalide'}), 400
+
+    from services.comptabilite_service import generer_report_a_nouveau
+    ecriture = generer_report_a_nouveau(structure_id, date_cloture, user_nom=session.get('user_name', 'System'))
+    if not ecriture:
+        return jsonify({'success': False, 'error': "Rien à générer, ou un report à nouveau existe déjà pour cet exercice — voir les anomalies comptables pour le détail."}), 400
+
+    return jsonify({'success': True, 'ecriture_id': ecriture.id, 'piece_justificative': ecriture.piece_justificative})
+
+
 @compta_bp.route('/api/tiers')
 def api_liste_tiers():
     """Liste des tiers (clients/fournisseurs) ayant AU MOINS une écriture —
