@@ -647,14 +647,26 @@ class EcritureComptable(db.Model):
     __tablename__ = 'ecritures_comptables'
 
     # Journaux auxiliaires (journaux divisionnaires SYSCOHADA)
+    # ⭐ 'BQ' -> 'BQU' (demande du patron, 2026-09-29) — 'BQ' entrait en
+    # collision d'intention avec la convention SYSCOHADA usuelle (BQ est
+    # parfois réservé à "Banque" au sens large sur plusieurs comptes ; BQU
+    # lève l'ambiguïté). Les 12 écritures déjà enregistrées sous 'BQ' sont
+    # migrées une fois pour toutes par scripts/renommer_journal_bq_en_bqu.py
+    # — ne jamais réintroduire 'BQ' comme clé active.
+    # ⭐ 'RAN' ajouté (même demande) : journal des à-nouveaux — reprise des
+    # soldes de bilan (classes 1 à 5) à l'ouverture d'un nouvel exercice.
+    # Purement une case du plan de journaux pour l'instant (utilisable dès
+    # maintenant en saisie manuelle, voir routes/comptabilite.py) — pas
+    # encore de générateur automatique de clôture d'exercice.
     JOURNAUX = {
         'VTE': "Journal des ventes",
         'CAI': "Journal de caisse",
-        'BQ': "Journal de banque",
+        'BQU': "Journal de banque",
         'ACH': "Journal des achats",
         'SAL': "Journal des salaires",
         'TR': "Journal de trésorerie",
         'OD': "Journal des opérations diverses",
+        'RAN': "Journal des à-nouveaux (report à nouveau)",
     }
 
     id = db.Column(db.Integer, primary_key=True)

@@ -487,7 +487,8 @@ def api_creer_ecriture():
             statut='brouillon' if data.get('soumettre') != 'true' else 'en_attente',
             created_by=session.get('user_id'),
             created_by_nom=user_name,
-            commentaire=data.get('commentaire')
+            commentaire=data.get('commentaire'),
+            journal_code=data.get('journal_code') or None,
         )
         
         db.session.add(ecriture)
@@ -542,6 +543,8 @@ def api_get_ecriture(id):
             'date_ecriture': ecriture.date_ecriture.strftime('%Y-%m-%d') if ecriture.date_ecriture else '',
             'libelle': ecriture.libelle,
             'piece_justificative': ecriture.piece_justificative or '',
+            'journal_code': ecriture.journal_code or '',
+            'journal_label': ecriture.get_journal_label() if ecriture.journal_code else '',
             'statut': ecriture.statut,
             'statut_label': ecriture.get_statut_label(),
             'commentaire': ecriture.commentaire or '',
@@ -599,6 +602,7 @@ def api_modifier_ecriture(id):
         
         ecriture.date_ecriture = date_ecriture
         ecriture.libelle = data.get('libelle')
+        ecriture.journal_code = data.get('journal_code') or None
         ecriture.commentaire = data.get('commentaire')
         # Ne pas modifier le numero de piece
         

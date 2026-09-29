@@ -1434,11 +1434,17 @@
                                 <i class="fas fa-info-circle"></i> Numéro auto-généré par année (ECR-2026-000001)
                             </div>
                         </div>
-                        <div class="col-md-3 mb-3">
+                        <div class="col-md-2 mb-3">
                             <label class="form-label">Date *</label>
                             <input type="date" class="form-control" id="ecritureDate" required>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label">Journal</label>
+                            <select class="form-control" id="ecritureJournalCode">
+                                <option value="">—</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5 mb-3">
                             <label class="form-label">Libellé *</label>
                             <input type="text" class="form-control" id="ecritureLibelle" required>
                         </div>
@@ -2078,6 +2084,7 @@ function ouvrirNouvelleEcriture() {
     document.getElementById('ecritureModalTitle').textContent = 'Nouvelle écriture';
     document.getElementById('ecritureDate').value = new Date().toISOString().split('T')[0];
     document.getElementById('ecritureLibelle').value = '';
+    document.getElementById('ecritureJournalCode').value = '';
     document.getElementById('ecritureCommentaire').value = '';
     
     // Générer le numéro de pièce automatiquement
@@ -2110,6 +2117,7 @@ function modifierEcriture(id) {
             document.getElementById('ecritureDate').value = data.date_ecriture || '';
             document.getElementById('ecritureLibelle').value = data.libelle || '';
             document.getElementById('ecriturePiece').value = data.piece_justificative || '';
+            document.getElementById('ecritureJournalCode').value = data.journal_code || '';
             document.getElementById('ecritureCommentaire').value = data.commentaire || '';
             
             const tbody = document.getElementById('lignesBody');
@@ -2139,6 +2147,7 @@ function voirEcriture(id) {
                     <div class="col-md-6">
                         <p><strong>Date :</strong> ${data.date_ecriture || ''}</p>
                         <p><strong>Pièce :</strong> ${data.piece_justificative || '-'}</p>
+                        <p><strong>Journal :</strong> ${data.journal_label || '-'}</p>
                         <p><strong>Libellé :</strong> ${data.libelle || ''}</p>
                         <p><strong>Statut :</strong> <span class="badge bg-success">${data.statut_label || data.statut}</span></p>
                     </div>
@@ -2262,6 +2271,7 @@ function sauvegarderEcriture(soumettre) {
     const date = document.getElementById('ecritureDate').value;
     const libelle = document.getElementById('ecritureLibelle').value.trim();
     const piece = document.getElementById('ecriturePiece').value.trim();
+    const journalCode = document.getElementById('ecritureJournalCode').value;
     const commentaire = document.getElementById('ecritureCommentaire').value.trim();
     const ecritureId = document.getElementById('ecritureId').value;
     
@@ -2302,6 +2312,7 @@ function sauvegarderEcriture(soumettre) {
         date_ecriture: date,
         libelle: libelle,
         piece_justificative: piece,
+        journal_code: journalCode || null,
         commentaire: commentaire,
         lignes: lignes,
         soumettre: soumettre ? 'true' : 'false'
@@ -3270,15 +3281,22 @@ function enregistrerParametrageTva() {
 
 function initFiltresJournaux() {
     // Sélecteur des journaux auxiliaires (journal des ventes, caisse, banque...)
+    // — alimente aussi le sélecteur "Journal" du formulaire de saisie manuelle
+    // d'écriture (#ecritureJournalCode) : avant, une écriture manuelle
+    // n'avait jamais de journal (impossible d'y affecter le journal des
+    // opérations diverses/à-nouveaux — voir aussi le nouveau journal RAN).
     fetch('/comptabilite/api/rapports/journaux/liste')
         .then(r => r.json())
         .then(journaux => {
+            window._journauxDisponibles = journaux;
             const sel = document.getElementById('rapportJournalCode');
+            const selEcriture = document.getElementById('ecritureJournalCode');
             journaux.forEach(j => {
                 const opt = document.createElement('option');
                 opt.value = j.code;
                 opt.textContent = j.nom;
                 sel.appendChild(opt);
+                if (selEcriture) selEcriture.appendChild(opt.cloneNode(true));
             });
         })
         .catch(err => console.error('Erreur chargement journaux:', err));

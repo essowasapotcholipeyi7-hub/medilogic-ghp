@@ -661,7 +661,7 @@ def generer_ecriture_vente(vente, user_nom='SYSTEME'):
                  'libelle': f"Encaissement vente — {vente.patient_nom}", 'credit': montant_effectif,
                  'tiers_type': 'patient', 'tiers_id': vente.patient_id, 'tiers_nom': vente.patient_nom},
             ]
-            journal_encaissement = 'CAI' if _compte_tresorerie(vente.mode_paiement) == COMPTE_CAISSE else 'BQ'
+            journal_encaissement = 'CAI' if _compte_tresorerie(vente.mode_paiement) == COMPTE_CAISSE else 'BQU'
             ecriture_encaissement = creer_ecriture(
                 structure_id=structure_id,
                 date_ecriture=(vente.date_vente.date() if vente.date_vente else datetime.utcnow().date()),
@@ -764,7 +764,7 @@ def generer_ecriture_paiement_facture(paiement, facture, user_nom='SYSTEME'):
             date_ecriture=(paiement.date_paiement.date() if paiement.date_paiement else datetime.utcnow().date()),
             libelle=f"Règlement facture {facture.numero_facture} — {facture.patient_nom}",
             lignes=lignes,
-            journal_code='CAI' if _compte_tresorerie(paiement.mode_paiement) == COMPTE_CAISSE else 'BQ',
+            journal_code='CAI' if _compte_tresorerie(paiement.mode_paiement) == COMPTE_CAISSE else 'BQU',
             piece_justificative=f"PAI-{paiement.id}",
             auto=True,
             source_type='paiement_facture',
@@ -817,7 +817,7 @@ def generer_ecriture_remboursement_assurance(montant, assurance_nom, structure_i
             date_ecriture=datetime.utcnow().date(),
             libelle=f"Remboursement assurance {assurance_nom} — {reference}{ref_txt}",
             lignes=lignes,
-            journal_code='BQ',
+            journal_code='BQU',
             piece_justificative=f"ASS-{source_id}",
             auto=True,
             source_type='paiement_assurance',
@@ -1006,7 +1006,7 @@ def generer_ecriture_reglement_fournisseur(reglement, achat, user_nom='SYSTEME')
             # banque) — l'achat lui-même (charge + dette) reste dans ACH,
             # séparément (voir generer_ecriture_achat_fournisseur). Un
             # règlement espèces va donc en CAI, un règlement banque en BQ.
-            journal_code='CAI' if _compte_tresorerie(reglement.mode_paiement) == COMPTE_CAISSE else 'BQ',
+            journal_code='CAI' if _compte_tresorerie(reglement.mode_paiement) == COMPTE_CAISSE else 'BQU',
             piece_justificative=f"REG-FRS-{reglement.id}",
             auto=True,
             source_type='reglement_fournisseur',
@@ -1153,7 +1153,7 @@ def generer_ecriture_paie(paie, employe, user_nom='SYSTEME'):
                 {'numero_compte': _compte_tresorerie(paie.mode_paiement),
                  'libelle': f"Paiement salaire — {employe.nom} {employe.prenom}", 'credit': net},
             ]
-            journal_paiement = 'CAI' if _compte_tresorerie(paie.mode_paiement) == COMPTE_CAISSE else 'BQ'
+            journal_paiement = 'CAI' if _compte_tresorerie(paie.mode_paiement) == COMPTE_CAISSE else 'BQU'
             ecriture_paiement = creer_ecriture(
                 structure_id=paie.structure_id,
                 date_ecriture=(paie.date_paiement or datetime.utcnow().date()),
