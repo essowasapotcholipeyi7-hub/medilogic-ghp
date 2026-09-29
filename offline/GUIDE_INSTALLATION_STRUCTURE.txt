@@ -1,0 +1,269 @@
+================================================================
+ GUIDE D'INSTALLATION — MODE HORS-LIGNE MEDILOGIC
+ (à faire sur le PC d'une structure/clinique, un poste par structure)
+================================================================
+
+Ce guide sert à installer le programme qui permet à une structure de
+continuer à travailler (recherche/création de patient, vente acte ou
+pharmacie) pendant une coupure internet. Un seul PC par structure.
+
+Suivez les étapes DANS L'ORDRE. La section "ASTUCES / ERREURS
+FRÉQUENTES" à la fin liste les problèmes déjà rencontrés et leur
+solution — regardez-y en premier si quelque chose bloque.
+
+
+----------------------------------------------------------------
+ AVANT DE COMMENCER — 3 valeurs à récupérer sur Render
+----------------------------------------------------------------
+
+Sur https://dashboard.render.com → service GHP → onglet "Environment",
+notez quelque part (bloc-notes, pas ce fichier) ces 3 valeurs :
+
+  - DATABASE_URL
+  - SPREADSHEET_ID
+  - PATIENT_ENCRYPTION_KEY
+
+⚠️ POINT CRITIQUE — PATIENT_ENCRYPTION_KEY :
+Les noms/prénoms/téléphones des patients sont chiffrés avec cette clé.
+Si elle est absente ou différente de celle de Render, les patients créés
+depuis ce PC seront soit enregistrés EN CLAIR (faille de sécurité), soit
+illisibles une fois envoyés au serveur. Ne JAMAIS improviser cette
+valeur : toujours la copier exactement depuis Render.
+
+Vous aurez aussi besoin du fichier "credentials.json" (compte de
+service Google) — demandez-le si vous ne l'avez pas déjà.
+
+Enfin, décidez le NUMÉRO DE STRUCTURE (OFFLINE_STRUCTURE_ID) que ce PC
+va servir. Un PC = une seule structure, toujours. Ne jamais réutiliser
+le même PC pour deux structures différentes.
+
+
+----------------------------------------------------------------
+ ÉTAPE 0 — Vérifier que Python est installé
+----------------------------------------------------------------
+
+Ouvrir une invite de commandes (touche Windows → taper "cmd" → Entrée)
+et taper :
+
+    python --version
+
+Si erreur ("n'est pas reconnu...") : télécharger Python sur
+python.org/downloads et l'installer. COCHER LA CASE "Add python.exe to
+PATH" pendant l'installation — sinon rien ne marchera après.
+
+
+----------------------------------------------------------------
+ ÉTAPE 1 — Copier le projet sur ce PC
+----------------------------------------------------------------
+
+Copier le dossier complet du projet (medilogic_ghp) sur ce PC, par
+exemple dans C:\medilogic_ghp — via clé USB, ou "git clone" si ce PC a
+accès à internet au moment de l'installation.
+
+⚠️ NE JAMAIS COPIER LE DOSSIER "venv"  s'il existe déjà dans la copie
+source. Un environnement Python (venv) contient des chemins figés
+propres à la machine où il a été créé — copié tel quel, il plante avec
+une erreur "Fatal error in launcher" ou "Unable to create process". Il
+doit toujours être recréé sur place (étape 2), jamais transporté.
+
+Si vous copiez via clé USB : videz/supprimez le dossier "venv" AVANT de
+copier sur la clé, ou ignorez-le simplement en le recopiant à part.
+
+
+----------------------------------------------------------------
+ ÉTAPE 2 — Installer les dépendances
+----------------------------------------------------------------
+
+Invite de commandes, dans le dossier du projet :
+
+    cd C:\medilogic_ghp
+    python -m venv venv
+    venv\Scripts\activate.bat
+    pip install -r requirements.txt
+
+Laisser l'installation se terminer (peut prendre 1-2 minutes).
+
+
+----------------------------------------------------------------
+ ÉTAPE 3 — Fichier credentials.json
+----------------------------------------------------------------
+
+Copier le fichier "credentials.json" à la racine de C:\medilogic_ghp
+(au même niveau que le fichier app.py).
+
+
+----------------------------------------------------------------
+ ÉTAPE 4 — Créer le fichier .env
+----------------------------------------------------------------
+
+Créer un fichier texte nommé exactement ".env" (pas ".env.txt" — dans
+l'Explorateur Windows, activez "Extensions de noms de fichiers" pour
+vérifier) dans C:\medilogic_ghp, avec ce contenu :
+
+    DATABASE_URL=<valeur copiée depuis Render>
+    SPREADSHEET_ID=<valeur copiée depuis Render>
+    PATIENT_ENCRYPTION_KEY=<valeur copiée depuis Render>
+    OFFLINE_STRUCTURE_ID=<numéro de LA structure servie par CE PC>
+    ONLINE_APP_URL=https://medilogic-ghp.onrender.com
+
+Exemple : pour la clinique pilote, OFFLINE_STRUCTURE_ID=1
+
+ASTUCE — sauvegarde automatique (optionnelle mais recommandée) :
+si une clé USB reste branchée en permanence sur ce PC, ou qu'un dossier
+réseau est accessible, ajouter aussi une ligne :
+
+    OFFLINE_BACKUP_DIR=D:\Sauvegardes_MediLogic
+
+(remplacer par le vrai chemin). Le programme sauvegarde automatiquement
+son fichier local toutes les 15 minutes — sur le disque du PC toujours,
+et en plus à cet endroit si la ligne est ajoutée. Ça protège les ventes
+non encore envoyées au serveur si ce PC tombe en panne pendant une
+coupure. Les 40 dernières sauvegardes sont gardées, les plus anciennes
+supprimées automatiquement.
+
+
+----------------------------------------------------------------
+ ÉTAPE 5 — Tester manuellement avant d'automatiser
+----------------------------------------------------------------
+
+Toujours dans l'invite de commandes (venv activé) :
+
+    python -m waitress --listen=127.0.0.1:5100 offline.app_offline:app
+
+Laisser cette fenêtre ouverte, puis ouvrir http://127.0.0.1:5100/ dans
+un navigateur :
+
+  - Internet fonctionne → redirection automatique vers le site normal
+    (rien de visible ne change pour le personnel).
+  - Pour tester le mode hors-ligne SANS couper internet pour de vrai :
+    fermer (Ctrl+C), relancer en tapant avant la commande :
+        set OFFLINE_FORCE=1
+    puis la même commande "python -m waitress...". Le programme se
+    comporte alors exactement comme si internet était coupé, sans le
+    couper réellement. NE JAMAIS laisser OFFLINE_FORCE=1 activé en
+    usage réel — c'est uniquement pour tester.
+
+Si tout marche, fermer (Ctrl+C) et passer à l'automatisation.
+
+
+----------------------------------------------------------------
+ ÉTAPE 6 — Automatiser le démarrage
+----------------------------------------------------------------
+
+Deux méthodes selon les droits disponibles sur ce PC.
+
+  AVEC droits administrateur (préférée) :
+  Invite de commandes EN TANT QU'ADMINISTRATEUR (clic droit → "Exécuter
+  en tant qu'administrateur"), dans C:\medilogic_ghp :
+
+      offline\installer_tache_planifiee.bat
+
+  Ça crée une tâche planifiée Windows qui relance le programme à
+  chaque connexion de l'utilisateur.
+
+  SANS droits administrateur :
+  Invite de commandes normale, dans C:\medilogic_ghp :
+
+      offline\installer_sans_admin.bat
+
+  Aucune élévation nécessaire — dépose un raccourci dans le dossier
+  "Démarrage" personnel de Windows.
+
+
+----------------------------------------------------------------
+ ÉTAPE 7 — Basculer le personnel sur la nouvelle adresse
+----------------------------------------------------------------
+
+Remplacer le favori/raccourci habituel par http://127.0.0.1:5100/ sur
+ce poste. Un seul lien à utiliser tout le temps — pas de bascule
+manuelle à faire : ce lien redirige tout seul vers le site normal
+quand internet marche, et sert la version locale sinon.
+
+
+================================================================
+ COMMENT METTRE À JOUR / REDÉMARRER LE PROGRAMME PLUS TARD
+================================================================
+
+Quand une correction a été faite (nouveau code disponible) :
+
+  1. Récupérer la mise à jour :
+         cd C:\medilogic_ghp
+         git pull origin main
+
+  2. Redémarrer le programme pour qu'il prenne en compte le nouveau
+     code — le plus simple et sûr : REDÉMARRER LE PC (le programme se
+     relance tout seul à la connexion). Sinon :
+       - S'il y a une fenêtre noire ouverte avec du texte qui défile :
+         la fermer (X ou Ctrl+C), puis redoubler-cliquer sur
+         offline\lancer_offline.bat pour la relancer.
+       - S'il n'y a pas de fenêtre visible (tourne en arrière-plan) :
+         ouvrir le Gestionnaire des tâches (Ctrl+Maj+Échap), chercher
+         un processus "python.exe", clic droit → Fin de tâche, puis
+         relancer offline\lancer_offline.bat.
+
+
+================================================================
+ ASTUCES / ERREURS FRÉQUENTES DÉJÀ RENCONTRÉES
+================================================================
+
+--- "No module named waitress" ---
+Le venv de ce PC n'a pas (ou plus) les dépendances installées.
+Solution :
+    cd C:\medilogic_ghp
+    venv\Scripts\activate.bat
+    pip install -r requirements.txt
+
+--- "Fatal error in launcher" / "Unable to create process" ---
+Le dossier "venv" a été copié depuis un autre PC au lieu d'être recréé
+sur place. Solution : supprimer le dossier "venv", puis refaire
+l'étape 2 (python -m venv venv / pip install -r requirements.txt).
+
+--- "Accès refusé" en essayant installer_tache_planifiee.bat ---
+Ce compte Windows n'a pas les droits administrateur. Solution :
+utiliser offline\installer_sans_admin.bat à la place (étape 6).
+
+--- Dans PowerShell, taper un chemin entre guillemets ne fait rien ---
+Exemple : "C:\medilogic_ghp\offline\lancer_offline.bat" tapé tel quel
+dans PowerShell ne lance rien (juste affiché comme du texte).
+Solution : soit double-cliquer le fichier dans l'Explorateur au lieu de
+le taper, soit dans PowerShell ajouter "&" devant :
+    & "C:\medilogic_ghp\offline\lancer_offline.bat"
+
+--- La page http://127.0.0.1:5100/ ne s'affiche pas du tout ---
+Ça ne marche QUE sur le PC où le programme tourne réellement (127.0.0.1
+veut dire "ce PC-ci uniquement", jamais un autre PC ou un téléphone).
+Vérifier que la fenêtre du programme est bien ouverte et n'affiche pas
+d'erreur en boucle (voir "No module named waitress" ci-dessus).
+
+--- Le reçu d'une vente pharmacie n'affichait que les totaux, jamais
+    l'article vendu ---
+Bug corrigé le 2026-09-29 (décalage entre le nom envoyé par la page et
+celui attendu par le serveur). Faire un "git pull" + redémarrage suffit
+pour avoir le correctif. Si une vente réelle a été faite AVANT cette
+date avec ce défaut, le stock de l'article vendu à ce moment-là n'a pas
+été décompté automatiquement — à corriger à la main dans le stock si
+besoin.
+
+--- Données de test pendant les essais ---
+Ce PC est branché sur les VRAIES données de la structure (sauf si
+OFFLINE_FORCE=1 est utilisé pour tester, voir étape 5). Ne créer que
+des patients/ventes clairement marqués "TEST" pendant les essais, et
+prévenir pour qu'ils soient supprimés de la vraie base ensuite.
+
+
+================================================================
+ VÉRIFICATION FINALE (à faire après installation complète)
+================================================================
+
+  1. Redémarrer le PC — vérifier que http://127.0.0.1:5100/ répond
+     bien après redémarrage, sans rien relancer à la main.
+  2. Simuler une coupure (débrancher le câble réseau / couper le
+     Wi-Fi) — vérifier que la page de connexion hors-ligne apparaît
+     après quelques secondes, se connecter, créer un patient TEST, une
+     vente TEST.
+  3. Rebrancher le réseau — attendre ~1 minute, vérifier dans
+     http://127.0.0.1:5100/api/offline/sync/status que la
+     synchronisation s'est faite ("en_attente": 0, "erreurs": 0).
+  4. Vérifier que le patient/la vente TEST sont bien arrivés en ligne,
+     puis prévenir pour qu'ils soient supprimés (données de test, pas
+     de vrais patients).
