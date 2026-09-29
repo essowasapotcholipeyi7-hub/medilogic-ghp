@@ -12,6 +12,7 @@ ci-dessous, branchée sur SQLite.
 
 import os
 import sys
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -49,11 +50,13 @@ try:
     from offline.catalog_sync import (
         rafraichir_numeros_locaux, rafraichir_catalogue, rafraichir_utilisateurs,
         rafraichir_patients_existants, rafraichir_structure_info,
+        rafraichir_pbr_complementaires,
     )
     rafraichir_numeros_locaux()
     rafraichir_catalogue()
     rafraichir_utilisateurs()
     rafraichir_structure_info()
+    rafraichir_pbr_complementaires()
     n = rafraichir_patients_existants()
     if n:
         print(f"[offline] {n} patient(s) existant(s) mis en cache au démarrage.")
@@ -128,7 +131,18 @@ def _chercher_catalogue(table, terme):
     for ligne in lignes:
         donnees = _json.loads(ligne['donnees'])
         prix = donnees.get('prix_vente') or donnees.get('prix') or donnees.get('prix_unitaire') or 0
-        items.append({'nom': ligne['nom'], 'prix': prix, 'id': donnees.get('ID') or donnees.get('id')})
+        # ⭐ pbr : base de remboursement AMU (plafond) — voir
+        # calculer_repartition_assurance(), services/hospitalisation_service.py.
+        # Toujours présent (le catalogue en ligne retombe déjà sur le prix de
+        # vente si la colonne PBR de la feuille Sheets est vide), jamais None.
+        pbr = donnees.get('pbr') or prix
+        items.append({
+            'nom': ligne['nom'],
+            'prix': prix,
+            'pbr': pbr,
+            'id': donnees.get('ID') or donnees.get('id'),
+            'stock': donnees.get('quantite_stock'),
+        })
     return items
 
 
@@ -144,6 +158,56 @@ def catalogue_produits():
     if not utilisateur_connecte():
         return jsonify({'success': False, 'error': 'Non connecté'}), 401
     return jsonify({'success': True, 'items': _chercher_catalogue('catalogue_produits', request.args.get('q', ''))})
+
+
+@app.route('/api/offline/pbr-complementaires')
+def pbr_complementaires():
+    """Table des plafonds CAC par acte/produit pour la compagnie du
+    patient — utilisée par le calcul d'assurance côté vente (offline_ventes.html)."""
+    if not utilisateur_connecte():
+        return jsonify({'success': False, 'error': 'Non connecté'}), 401
+    compagnie = (request.args.get('compagnie') or '').strip()
+    type_article = request.args.get('type', 'acte')
+    if not compagnie:
+        return jsonify({'success': True, 'items': {}})
+    lignes = requeter(
+        "SELECT nom_acte, pbr_1, pbr_2 FROM catalogue_pbr_complementaires WHERE type = ? AND compagnie = ?",
+        (type_article, compagnie)
+    )
+    return jsonify({'success': True, 'items': {l['nom_acte']: {'pbr_1': l['pbr_1'], 'pbr_2': l['pbr_2']} for l in lignes}})
+
+
+@app.route('/historique')
+def historique():
+    """Ventes ENREGISTRÉES DEPUIS CE POSTE aujourd'hui — pas l'historique
+    complet de la structure (celui-ci vivrait sur Neon, injoignable la
+    plupart du temps où cette page est utile). Permet de retrouver/
+    réimprimer une vente sans avoir à retenir son lien juste après
+    création."""
+    if not utilisateur_connecte():
+        return redirect('/login')
+
+    from crypto_helper import dechiffrer
+    aujourdhui = datetime.now(timezone.utc).date().isoformat()
+    ventes = requeter(
+        """SELECT * FROM offline_ventes
+           WHERE structure_id = ? AND date_vente >= ?
+           ORDER BY date_vente DESC""",
+        (OFFLINE_STRUCTURE_ID, aujourdhui)
+    )
+    lignes = []
+    for v in ventes:
+        v = dict(v)
+        lignes.append({
+            'uuid': v['uuid'],
+            'numero_local': v['numero_local'],
+            'patient_nom': v['patient_nom'],
+            'type': v['type'],
+            'net_a_payer': v['net_a_payer'],
+            'date_vente': v['date_vente'],
+            'synced': bool(v['neon_id']),
+        })
+    return render_template('offline_historique.html', ventes=lignes, nom_utilisateur=nom_utilisateur())
 
 
 @app.route('/recu/<vente_uuid>')

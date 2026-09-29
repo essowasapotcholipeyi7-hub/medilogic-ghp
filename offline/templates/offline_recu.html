@@ -13,6 +13,9 @@ td, th { padding: 2px 0; }
 .total { font-weight: bold; font-size: {{ '12px' if format == '80mm' else '15px' }}; }
 .no-print { margin-top: 15px; }
 .avertissement { background: #fff3cd; border: 1px solid #b45309; padding: 6px; margin-bottom: 8px; font-size: {{ '9px' if format == '80mm' else '11px' }}; }
+@media print {
+    .avertissement { display: none !important; }
+}
 {% if format == '80mm' %}
 @page { size: 80mm auto; margin: 2mm 3mm; }
 {% endif %}

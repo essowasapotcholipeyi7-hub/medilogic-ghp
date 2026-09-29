@@ -11,14 +11,15 @@
         <span class="navbar-brand text-white">⚠ Mode hors-ligne — {{ nom_utilisateur }}</span>
         <div>
             <a href="/patients" class="btn btn-sm btn-light me-2">Patients</a>
+            <a href="/historique" class="btn btn-sm btn-light me-2">Historique du jour</a>
             <a href="/logout" class="btn btn-sm btn-outline-light">Déconnexion</a>
         </div>
     </div>
 </nav>
-<div class="container mt-4" style="max-width:720px;">
+<div class="container mt-4" style="max-width:760px;">
     <div class="alert alert-warning">
         Connexion internet indisponible. Catalogue local : {{ nb_actes }} acte(s), {{ nb_produits }} produit(s)
-        (dernière mise à jour pendant que le réseau fonctionnait — les prix peuvent être légèrement obsolètes).
+        (dernière mise à jour pendant que le réseau fonctionnait — les prix et stocks peuvent être légèrement obsolètes).
     </div>
 
     <div class="card mb-3">
@@ -27,6 +28,16 @@
             <input type="text" id="rechercheInput" class="form-control mb-2" placeholder="Chercher un patient...">
             <div id="resultatsPatient"></div>
             <div id="patientChoisi" class="alert alert-info d-none mt-2"></div>
+            <div id="optionsPbrCac" class="d-none mt-2 p-2 border rounded bg-light small">
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="checkAppliquePbrCac" checked>
+                    <label class="form-check-label" for="checkAppliquePbrCac">Appliquer le plafond CAC de ce patient (si connu)</label>
+                </div>
+                <select id="selectPbrCacVariante" class="form-select form-select-sm d-inline-block" style="width:auto;">
+                    <option value="defaut">PBR habituel</option>
+                    <option value="alternatif">PBR alternatif</option>
+                </select>
+            </div>
         </div>
     </div>
 
@@ -38,11 +49,14 @@
             </ul>
         </div>
         <div class="card-body">
-            <div class="mb-3">
+            <div class="mb-2">
                 <label class="form-label">Article</label>
                 <input type="text" id="articleInput" class="form-control" placeholder="Nom de l'acte/produit...">
                 <div id="suggestionsArticle" class="list-group mt-1"></div>
             </div>
+            <button type="button" id="btnArticleLibre" class="btn btn-sm btn-outline-secondary mb-3">
+                + Article hors catalogue (prix libre)
+            </button>
             <div id="panier"></div>
         </div>
     </div>
@@ -84,9 +98,10 @@
 <script>
 const LABELS_ASSURANCE = {amu_cnss: 'AMU-CNSS', amu_inam: 'AMU-INAM', amu_tns: 'AMU-TNS'};
 
-let patientChoisi = null; // objet complet (uuid, nom, prenom, assurances...)
+let patientChoisi = null;
 let typeVente = 'actes';
 let panier = [];
+let pbrCacTable = {}; // {nom_article: {pbr_1, pbr_2}}, pour la compagnie CAC du patient
 
 document.querySelectorAll('#ongletsType .nav-link').forEach(a => {
     a.addEventListener('click', function(e) {
@@ -95,6 +110,7 @@ document.querySelectorAll('#ongletsType .nav-link').forEach(a => {
         this.classList.add('active');
         typeVente = this.dataset.type;
         panier = [];
+        chargerPbrCacTable();
         afficherPanier();
     });
 });
@@ -114,6 +130,15 @@ function rechercherPatient() {
 }
 document.getElementById('rechercheInput').addEventListener('input', rechercherPatient);
 
+function chargerPbrCacTable() {
+    pbrCacTable = {};
+    if (!patientChoisi || !patientChoisi.assurance2_nom) { afficherPanier(); return; }
+    const typeParam = typeVente === 'actes' ? 'acte' : 'produit';
+    fetch(`/api/offline/pbr-complementaires?compagnie=${encodeURIComponent(patientChoisi.assurance2_nom)}&type=${typeParam}`)
+        .then(r => r.json())
+        .then(d => { pbrCacTable = d.items || {}; afficherPanier(); });
+}
+
 function choisirPatient(index) {
     patientChoisi = window._patientsTrouves[index];
     const zone = document.getElementById('patientChoisi');
@@ -121,56 +146,107 @@ function choisirPatient(index) {
 
     let details = `Patient sélectionné : <strong>${patientChoisi.nom} ${patientChoisi.prenom}</strong>`;
     const libelleAssurance = LABELS_ASSURANCE[patientChoisi.type_assurance];
-    if (libelleAssurance) {
-        details += ` — ${libelleAssurance} (${patientChoisi.taux_prise_charge}%)`;
-    } else {
-        details += ` — Non assuré`;
-    }
+    details += libelleAssurance ? ` — ${libelleAssurance} (${patientChoisi.taux_prise_charge}%)` : ` — Non assuré`;
     if (patientChoisi.assurance2_nom) {
         details += ` + CAC ${patientChoisi.assurance2_nom} (${patientChoisi.taux_assurance2}%)`;
     }
     zone.innerHTML = details;
-    afficherPanier();
+
+    document.getElementById('optionsPbrCac').classList.toggle('d-none', !patientChoisi.assurance2_nom);
+    chargerPbrCacTable();
 }
+
+document.getElementById('checkAppliquePbrCac').addEventListener('change', afficherPanier);
+document.getElementById('selectPbrCacVariante').addEventListener('change', afficherPanier);
 
 document.getElementById('articleInput').addEventListener('input', function() {
     const terme = this.value.toLowerCase();
     const url = typeVente === 'actes' ? '/api/offline/catalogue/actes' : '/api/offline/catalogue/produits';
     fetch(url + '?q=' + encodeURIComponent(terme)).then(r => r.json()).then(d => {
         const zone = document.getElementById('suggestionsArticle');
-        zone.innerHTML = (d.items || []).slice(0, 8).map(a =>
-            `<a href="#" class="list-group-item list-group-item-action" onclick="ajouterArticle(event, '${a.nom.replace(/'/g, "")}', ${a.prix || 0}, ${JSON.stringify(a.id)})">${a.nom} — ${a.prix || 0} FCFA</a>`
-        ).join('');
+        zone.innerHTML = (d.items || []).slice(0, 8).map(a => {
+            const stockTxt = (typeVente === 'pharmacie' && a.stock !== null && a.stock !== undefined)
+                ? ` <span class="text-muted">(stock : ${a.stock})</span>` : '';
+            return `<a href="#" class="list-group-item list-group-item-action" onclick='ajouterArticle(event, ${JSON.stringify(a)})'>${a.nom} — ${a.prix} FCFA${stockTxt}</a>`;
+        }).join('');
     });
 });
 
-function ajouterArticle(e, nom, prix, id) {
+function ajouterArticle(e, article) {
     e.preventDefault();
-    panier.push({ nom, prix, prix_unitaire: prix, quantite: 1, id });
+    panier.push({
+        nom: article.nom, prix: article.prix, prix_unitaire: article.prix,
+        pbr: article.pbr || article.prix, quantite: 1, id: article.id,
+        prise_en_charge_amu: true, prise_en_charge_cac: true,
+    });
     document.getElementById('articleInput').value = '';
     document.getElementById('suggestionsArticle').innerHTML = '';
     afficherPanier();
 }
 
-// Calcule prise en charge assurance principale + CAC, sur le modèle
-// simplifié : la CAC s'applique sur ce qui reste après l'assurance
-// principale (pas la logique complète PBR/plafond par compagnie de la
-// version en ligne, qui a besoin des tarifs PBR par article — hors
-// périmètre de ce pilote, voir le plan).
+document.getElementById('btnArticleLibre').addEventListener('click', function() {
+    const nom = prompt('Nom de l\'article :');
+    if (!nom) return;
+    const prix = parseFloat(prompt('Prix (FCFA) :', '0'));
+    if (!prix || prix <= 0) { alert('Prix invalide.'); return; }
+    panier.push({
+        nom, prix, prix_unitaire: prix, pbr: prix, quantite: 1, id: null,
+        prise_en_charge_amu: true, prise_en_charge_cac: true, libre: true,
+    });
+    afficherPanier();
+});
+
+// ===== Calcul du plafond PBR-CAC — même formule que calculerTotal()
+// (templates/actes_vente.html) et calculer_repartition_assurance()
+// (services/hospitalisation_service.py) : plafond AMU = min(prix, pbr),
+// CAC calculée sur le reste après AMU puis elle-même plafonnée par
+// compagnie si applicable, un seul taux CAC appliqué à la base sommée,
+// arrondi une seule fois à la fin (jamais ligne par ligne). =====
+function tauxAmuPourArticle(article) {
+    if (!patientChoisi) return 0;
+    const taux = parseFloat(patientChoisi.taux_prise_charge) || 0;
+    return (article.nom && article.nom.includes('P160')) ? 90 : taux;
+}
+
 function calculerTotaux() {
-    const sousTotal = panier.reduce((s, a) => s + (a.prix || 0) * (a.quantite || 1), 0);
-    let priseEnCharge = 0, priseEnCharge2 = 0;
-    if (patientChoisi) {
-        const tauxPrincipal = parseFloat(patientChoisi.taux_prise_charge) || 0;
-        priseEnCharge = Math.round(sousTotal * tauxPrincipal / 100);
-        const resteApresPrincipal = sousTotal - priseEnCharge;
-        if (patientChoisi.assurance2_nom) {
-            const tauxCac = parseFloat(patientChoisi.taux_assurance2) || 0;
-            priseEnCharge2 = Math.round(resteApresPrincipal * tauxCac / 100);
+    const libelleAssurance = patientChoisi ? LABELS_ASSURANCE[patientChoisi.type_assurance] : null;
+    const appliquePbrCac = document.getElementById('checkAppliquePbrCac').checked;
+    const pbrCacVariante = document.getElementById('selectPbrCacVariante').value;
+
+    let sousTotal = 0, totalAmu = 0, baseCac = 0;
+    for (const a of panier) {
+        const prix = a.prix || 0, pbr = a.pbr || prix, qte = a.quantite || 1;
+        const total = prix * qte;
+        sousTotal += total;
+
+        let partAmu = 0;
+        const aAmu = libelleAssurance && a.prise_en_charge_amu;
+        if (aAmu) {
+            const baseAmu = Math.min(prix, pbr) * qte;
+            partAmu = baseAmu * tauxAmuPourArticle(a) / 100;
+            totalAmu += partAmu;
+        }
+
+        if (patientChoisi && patientChoisi.assurance2_nom && a.prise_en_charge_cac) {
+            let reste = aAmu ? (total - partAmu) : total;
+            if (appliquePbrCac && pbrCacTable[a.nom]) {
+                const entree = pbrCacTable[a.nom];
+                const plafondUnitaire = (pbrCacVariante === 'alternatif' && entree.pbr_2 != null) ? entree.pbr_2 : entree.pbr_1;
+                reste = Math.min(reste, plafondUnitaire * qte);
+            }
+            baseCac += Math.max(reste, 0);
         }
     }
-    const netAPayer = Math.max(0, sousTotal - priseEnCharge - priseEnCharge2);
-    return { sousTotal, priseEnCharge, priseEnCharge2, netAPayer };
+    const tauxCac = (patientChoisi && patientChoisi.assurance2_nom) ? (parseFloat(patientChoisi.taux_assurance2) || 0) : 0;
+    const totalCac = baseCac * tauxCac / 100;
+    const netAPayer = Math.max(0, sousTotal - totalAmu - totalCac);
+
+    return {
+        sousTotal: Math.round(sousTotal),
+        priseEnCharge: Math.round(totalAmu),
+        priseEnCharge2: Math.round(totalCac),
+        netAPayer: Math.round(netAPayer),
+    };
 }
 
 function afficherPanier() {
@@ -178,7 +254,7 @@ function afficherPanier() {
     if (!panier.length) { zone.innerHTML = '<p class="text-muted">Aucun article ajouté.</p>'; }
     else {
         zone.innerHTML = '<table class="table table-sm"><tbody>' + panier.map((a, i) =>
-            `<tr><td>${a.nom}</td><td>${a.prix} FCFA</td><td><button class="btn btn-sm btn-outline-danger" onclick="retirerArticle(${i})">Retirer</button></td></tr>`
+            `<tr><td>${a.nom}${a.libre ? ' <span class="badge bg-secondary">libre</span>' : ''}</td><td>${a.prix} FCFA</td><td><button class="btn btn-sm btn-outline-danger" onclick="retirerArticle(${i})">Retirer</button></td></tr>`
         ).join('') + '</table>';
     }
 
@@ -234,6 +310,8 @@ document.getElementById('btnValider').addEventListener('click', function() {
         prise_en_charge2: t.priseEnCharge2,
         societe_assurance2: patientChoisi.societe_assurance2 || null,
         numero_assure2: patientChoisi.numero_assure2 || null,
+        applique_pbr_cac: document.getElementById('checkAppliquePbrCac').checked,
+        pbr_cac_variante: document.getElementById('selectPbrCacVariante').value,
     };
     data[typeVente] = panier;
 
@@ -247,8 +325,9 @@ document.getElementById('btnValider').addEventListener('click', function() {
                 (d.avertissement ? ' — ' + d.avertissement : '') + '</span><br>' +
                 '<a href="/recu/' + d.uuid + '?format=80mm" target="_blank" class="btn btn-sm btn-outline-primary mt-1 me-1">Imprimer (ticket 80mm)</a>' +
                 '<a href="/recu/' + d.uuid + '?format=A4" target="_blank" class="btn btn-sm btn-outline-secondary mt-1">Imprimer (A4)</a>';
-            panier = []; patientChoisi = null;
+            panier = []; patientChoisi = null; pbrCacTable = {};
             document.getElementById('patientChoisi').classList.add('d-none');
+            document.getElementById('optionsPbrCac').classList.add('d-none');
             afficherPanier();
         } else {
             msg.innerHTML = '<span class="text-danger">Erreur : ' + d.error + '</span>';

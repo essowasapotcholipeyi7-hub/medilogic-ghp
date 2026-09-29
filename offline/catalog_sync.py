@@ -205,6 +205,41 @@ def rafraichir_patients_existants():
     return n
 
 
+def rafraichir_pbr_complementaires():
+    """Cache la table des plafonds de prise en charge complémentaire (CAC)
+    par acte/produit et par compagnie — voir models.py:2349-2365
+    (PbrComplementaire). Sans ce cache, la vente hors-ligne ne pourrait pas
+    appliquer le plafond par compagnie et sur-évaluerait la part payée par
+    l'assurance complémentaire — risque réel de rejet de remboursement."""
+    if OFFLINE_FORCE:
+        raise ReseauSimuleCoupe()
+    import psycopg2
+    import psycopg2.extras
+    conn_pg = psycopg2.connect(DATABASE_URL, connect_timeout=10)
+    try:
+        with conn_pg.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT type, nom_acte, compagnie, pbr_1, pbr_2 FROM pbr_complementaires WHERE structure_id = %s",
+                (OFFLINE_STRUCTURE_ID,)
+            )
+            lignes = cur.fetchall()
+    finally:
+        conn_pg.close()
+
+    conn = get_connection()
+    conn.execute("DELETE FROM catalogue_pbr_complementaires")
+    for ligne in lignes:
+        conn.execute(
+            """INSERT OR REPLACE INTO catalogue_pbr_complementaires (type, nom_acte, compagnie, pbr_1, pbr_2)
+               VALUES (?, ?, ?, ?, ?)""",
+            tuple(_valeur_sqlite(v) for v in (
+                ligne['type'], ligne['nom_acte'], ligne['compagnie'], ligne['pbr_1'], ligne['pbr_2']
+            ))
+        )
+    conn.commit()
+    return len(lignes)
+
+
 def rafraichir_structure_info():
     """Cache le nom/adresse/téléphone de cette structure — nécessaire pour
     l'en-tête du reçu imprimé hors-ligne (offline_recu.html), qui ne peut

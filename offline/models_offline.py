@@ -119,6 +119,20 @@ CREATE TABLE IF NOT EXISTS offline_outbox (
     last_error TEXT
 );
 
+-- Plafonds de prise en charge complémentaire (CAC) par acte/produit et par
+-- compagnie d'assurance — voir pbr_complementaires côté Neon
+-- (models.py:2349-2365). Indispensable pour un calcul d'assurance correct :
+-- sans ça, le pilote sous-évaluait la part patient / sur-évaluait la part
+-- assurance, avec un vrai risque de rejet de remboursement.
+CREATE TABLE IF NOT EXISTS catalogue_pbr_complementaires (
+    type TEXT NOT NULL,        -- 'acte' | 'produit'
+    nom_acte TEXT NOT NULL,
+    compagnie TEXT NOT NULL,
+    pbr_1 REAL NOT NULL,
+    pbr_2 REAL,
+    PRIMARY KEY (type, nom_acte, compagnie)
+);
+
 CREATE TABLE IF NOT EXISTS offline_structure_info (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     nom TEXT,

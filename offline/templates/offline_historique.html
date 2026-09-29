@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Mode hors-ligne — Historique du jour</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body style="background:#f5f7fa;">
+<nav class="navbar navbar-dark bg-warning-emphasis" style="background:#b45309;">
+    <div class="container">
+        <span class="navbar-brand text-white">⚠ Mode hors-ligne — {{ nom_utilisateur }}</span>
+        <div>
+            <a href="/patients" class="btn btn-sm btn-light me-2">Patients</a>
+            <a href="/ventes" class="btn btn-sm btn-light me-2">Ventes</a>
+            <a href="/logout" class="btn btn-sm btn-outline-light">Déconnexion</a>
+        </div>
+    </div>
+</nav>
+<div class="container mt-4">
+    <div class="alert alert-info">
+        Ventes enregistrées <strong>depuis ce poste</strong> aujourd'hui — pas l'historique complet
+        de la structure (celui-ci vit sur le serveur, hors de portée la plupart du temps où cette page sert).
+    </div>
+
+    <table class="table table-hover bg-white">
+        <thead>
+            <tr>
+                <th>N°</th><th>Patient</th><th>Type</th><th>Heure</th>
+                <th>Net à payer</th><th>Statut</th><th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for v in ventes %}
+            <tr>
+                <td>{{ v.numero_local }}</td>
+                <td>{{ v.patient_nom }}</td>
+                <td>{{ 'Pharmacie' if v.type == 'pharmacie' else 'Acte' }}</td>
+                <td>{{ v.date_vente[11:16] if v.date_vente and v.date_vente|length > 16 else '' }}</td>
+                <td>{{ '{:,.0f}'.format(v.net_a_payer or 0).replace(',', ' ') }} FCFA</td>
+                <td>
+                    {% if v.synced %}
+                    <span class="badge bg-success">Synchronisée</span>
+                    {% else %}
+                    <span class="badge bg-warning text-dark">En attente</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="/recu/{{ v.uuid }}?format=80mm" target="_blank" class="btn btn-sm btn-outline-primary">Reçu 80mm</a>
+                    <a href="/recu/{{ v.uuid }}?format=A4" target="_blank" class="btn btn-sm btn-outline-secondary">A4</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-center text-muted">Aucune vente enregistrée aujourd'hui depuis ce poste.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+</body>
+</html>
