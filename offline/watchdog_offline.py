@@ -120,17 +120,27 @@ def _cycle():
             echecs_consecutifs = 0
             maintenant_ts = time.time()
             if maintenant_ts - dernier_refresh_catalogue > CATALOG_REFRESH_INTERVAL_SECONDS:
-                try:
-                    rafraichir_catalogue()
-                    rafraichir_numeros_locaux()
-                    rafraichir_structure_info()
-                    rafraichir_pbr_complementaires()
-                    n = rafraichir_patients_existants()
-                    if n:
-                        print(f"[offline-watchdog] {n} patient(s) existant(s) mis en cache.")
-                    dernier_refresh_catalogue = maintenant_ts
-                except Exception as e:
-                    print(f"[offline-watchdog] Rafraîchissement catalogue échoué : {e}")
+                # ⭐ Un try/except PAR appel, jamais un seul autour de tous —
+                # sinon un hoquet Neon sur UN SEUL d'entre eux (ex:
+                # rafraichir_numeros_locaux) empêche aussi les suivants de
+                # tourner, y compris rafraichir_pbr_complementaires (plafond
+                # CAC) qui n'a pourtant aucun rapport avec cet échec. Bug
+                # réel trouvé le 2026-09-29 : le plafond d'assurance pouvait
+                # rester vide indéfiniment à cause de ça.
+                for nom, fonction in (
+                    ('catalogue', rafraichir_catalogue),
+                    ('numéros locaux', rafraichir_numeros_locaux),
+                    ('infos structure', rafraichir_structure_info),
+                    ('plafonds PBR complémentaires (CAC)', rafraichir_pbr_complementaires),
+                    ('patients existants', rafraichir_patients_existants),
+                ):
+                    try:
+                        resultat = fonction()
+                        if nom == 'patients existants' and resultat:
+                            print(f"[offline-watchdog] {resultat} patient(s) existant(s) mis en cache.")
+                    except Exception as e:
+                        print(f"[offline-watchdog] Rafraîchissement '{nom}' échoué : {e}")
+                dernier_refresh_catalogue = maintenant_ts
             if maintenant_ts - dernier_refresh_users > USERS_CACHE_REFRESH_INTERVAL_SECONDS:
                 try:
                     rafraichir_utilisateurs()

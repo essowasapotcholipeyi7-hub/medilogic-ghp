@@ -73,22 +73,41 @@ initialiser_schema()
 # numero_local (voir catalog_sync.rafraichir_numeros_locaux) — best-effort :
 # si le réseau est déjà coupé au lancement de l'appli, on garde la dernière
 # valeur connue (ou 0 sur une toute première installation).
-try:
-    from offline.catalog_sync import (
-        rafraichir_numeros_locaux, rafraichir_catalogue, rafraichir_utilisateurs,
-        rafraichir_patients_existants, rafraichir_structure_info,
-        rafraichir_pbr_complementaires,
-    )
-    rafraichir_numeros_locaux()
-    rafraichir_catalogue()
-    rafraichir_utilisateurs()
-    rafraichir_structure_info()
-    rafraichir_pbr_complementaires()
-    n = rafraichir_patients_existants()
-    if n:
-        print(f"[offline] {n} patient(s) existant(s) mis en cache au démarrage.")
-except Exception as e:
-    print(f"[offline] Rafraîchissement initial impossible (réseau coupé ?) : {e}")
+from offline.catalog_sync import (
+    rafraichir_numeros_locaux, rafraichir_catalogue, rafraichir_utilisateurs,
+    rafraichir_patients_existants, rafraichir_structure_info,
+    rafraichir_pbr_complementaires,
+)
+
+
+def _rafraichir_au_demarrage():
+    """⭐ Chaque rafraîchissement dans SON PROPRE try/except — jamais un seul
+    bloc autour de tous. Sinon un simple hoquet réseau sur UN SEUL appel
+    (ex: Neon injoignable une seconde au démarrage, déjà vu en vrai) empêche
+    TOUS les suivants de s'exécuter, y compris ceux qui n'ont besoin QUE de
+    Google Sheets (rafraichir_catalogue) et qui auraient sinon réussi sans
+    problème. Bug réel trouvé le 2026-09-29 : catalogue_pbr_complementaires
+    (le plafond CAC) pouvait rester vide indéfiniment à cause d'un échec
+    Neon précédent dans la même séquence, sans lien avec les données PBR
+    elles-mêmes — le plafond d'assurance ne s'appliquait alors jamais, avec
+    le risque financier que ça représente."""
+    for nom, fonction in (
+        ('numéros locaux', rafraichir_numeros_locaux),
+        ('catalogue', rafraichir_catalogue),
+        ('utilisateurs', rafraichir_utilisateurs),
+        ('infos structure', rafraichir_structure_info),
+        ('plafonds PBR complémentaires (CAC)', rafraichir_pbr_complementaires),
+        ('patients existants', rafraichir_patients_existants),
+    ):
+        try:
+            resultat = fonction()
+            if nom == 'patients existants' and resultat:
+                print(f"[offline] {resultat} patient(s) existant(s) mis en cache au démarrage.")
+        except Exception as e:
+            print(f"[offline] Rafraîchissement '{nom}' impossible au démarrage (réseau coupé ?) : {e}")
+
+
+_rafraichir_au_demarrage()
 
 # Une première sauvegarde dès le lancement (pas seulement au premier cycle du
 # watchdog, ~15 min plus tard) — utile si l'appli est redémarrée juste avant
