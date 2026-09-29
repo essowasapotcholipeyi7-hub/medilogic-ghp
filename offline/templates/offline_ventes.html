@@ -232,7 +232,7 @@ function calculerTotaux() {
     const appliquePbrCac = document.getElementById('checkAppliquePbrCac').checked;
     const pbrCacVariante = document.getElementById('selectPbrCacVariante').value;
 
-    let sousTotal = 0, totalAmu = 0, baseCac = 0;
+    let sousTotal = 0, totalAmu = 0, baseCac = 0, baseRemboursement = 0;
     for (const a of panier) {
         const prix = a.prix || 0, pbr = a.pbr || prix, qte = a.quantite || 1;
         const total = prix * qte;
@@ -242,6 +242,14 @@ function calculerTotaux() {
         const aAmu = libelleAssurance && a.prise_en_charge_amu;
         if (aAmu) {
             const baseAmu = Math.min(prix, pbr) * qte;
+            // ⭐ "PBR" affiché dans l'historique des ventes en ligne après
+            // synchro (historique_ventes.html:904, v.base_remboursement) —
+            // même définition que calculerTotal() (templates/actes_vente.html
+            // :1548, pbrTotalAMU) : la somme des bases plafonnées, PAS le
+            // montant de prise en charge. Champ oublié jusqu'ici (jamais
+            // calculé ni envoyé), d'où "PBR" toujours à 0 après synchro
+            // (signalé par le patron le 2026-09-29).
+            baseRemboursement += baseAmu;
             partAmu = baseAmu * tauxAmuPourArticle(a) / 100;
             totalAmu += partAmu;
         }
@@ -292,6 +300,7 @@ function calculerTotaux() {
         sousTotal: Math.round(sousTotal),
         priseEnCharge: Math.round(totalAmu),
         priseEnCharge2: Math.round(totalCac),
+        baseRemboursement: Math.round(baseRemboursement),
         aideHospitaliere: Math.round(aideHospitaliere),
         tauxAide, typeAide,
         netAPayer: Math.round(netAPayer),
@@ -357,10 +366,18 @@ document.getElementById('btnValider').addEventListener('click', function() {
         net_a_payer: t.netAPayer,
         montant_donne: montantDonne,
         rendu: Math.max(0, montantDonne - t.netAPayer),
+        // ⭐ Pendant de "rendu" : ce qui reste dû si le montant donné est
+        // inférieur au net à payer (paiement partiel) — même formule que
+        // templates/actes_vente.html:1918 (resteAPayer). Oublié jusqu'ici,
+        // comme base_remboursement ci-dessous : un paiement partiel hors-
+        // ligne n'aurait jamais fait apparaître le solde dû une fois
+        // synchronisé.
+        reste_a_payer: Math.max(0, t.netAPayer - montantDonne),
         mode_paiement: document.getElementById('modePaiement').value,
         assurance_nom: libelleAssurance,
         taux_assurance: libelleAssurance ? patientChoisi.taux_prise_charge : 0,
         prise_en_charge: t.priseEnCharge,
+        base_remboursement: t.baseRemboursement,
         numero_assure: patientChoisi.numero_assure || null,
         assurance2_nom: patientChoisi.assurance2_nom || null,
         taux_assurance2: patientChoisi.assurance2_nom ? patientChoisi.taux_assurance2 : 0,
