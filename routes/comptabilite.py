@@ -915,6 +915,42 @@ def api_liste_journaux():
     return jsonify([{'code': code, 'nom': nom} for code, nom in EcritureComptable.JOURNAUX.items()])
 
 
+@compta_bp.route('/api/rapports/exercices/liste')
+def api_liste_exercices():
+    """⭐ Sélecteur "Exercice" des rapports (journal/grand livre/balance/
+    TVA/résultat/bilan) : avant, revoir une année antérieure (N-1, N-2...)
+    demandait de taper les dates à la main — chaque rapport acceptait déjà
+    n'importe quelle plage (rien à changer côté génération), seul un
+    raccourci manquait pour vraiment s'en servir. Retourne les années
+    ayant AU MOINS une écriture validée pour cette structure, plus
+    l'année civile en cours même si elle est encore vide (nouvel
+    exercice qui démarre)."""
+    structure_id = session.get('structure_id')
+    if not structure_id:
+        return jsonify([])
+
+    from sqlalchemy import text
+    rows = db.session.execute(text("""
+        SELECT DISTINCT EXTRACT(YEAR FROM date_ecriture)::int AS annee
+        FROM ecritures_comptables
+        WHERE structure_id = :structure_id AND statut = 'valide'
+    """), {'structure_id': structure_id}).fetchall()
+
+    annee_courante = datetime.now().year
+    annees = {r.annee for r in rows}
+    annees.add(annee_courante)
+
+    def _libelle(a):
+        ecart = annee_courante - a
+        if ecart == 0:
+            return f"Exercice {a} (en cours)"
+        if ecart > 0:
+            return f"Exercice {a} (N-{ecart})"
+        return f"Exercice {a} (N+{-ecart})"
+
+    return jsonify([{'annee': a, 'libelle': _libelle(a)} for a in sorted(annees, reverse=True)])
+
+
 @compta_bp.route('/api/rapports/grand_livre')
 def api_grand_livre():
     structure_id = session.get('structure_id')
@@ -1224,41 +1260,51 @@ def api_auto_lettrer():
 
 
 def generer_balance(structure_id, date_debut, date_fin):
+    """⭐ Réécrit en une seule requête SQL agrégée (2026-09-29) — la version
+    précédente chargeait TOUTES les lignes JAMAIS enregistrées de CHAQUE
+    compte (compte.lignes, sans filtre SQL), y compris les exercices hors
+    période demandée, puis filtrait en Python + déclenchait une requête
+    séparée par ligne pour lire ligne.ecriture.statut (N+1). Négligeable au
+    tout début, mais ça ne pouvait que ralentir à chaque nouvel exercice
+    accumulé — exactement le scénario "voir la balance d'un exercice
+    antérieur (N-1, N-2...)" demandé ici. Résultat identique, un aller-
+    retour DB au lieu de milliers."""
+    from sqlalchemy import text
+
     date_debut_obj = parse_date(date_debut) if date_debut else None
     date_fin_obj = parse_date(date_fin) if date_fin else None
-    
-    comptes = CompteComptable.query.filter_by(
-        structure_id=structure_id,
-        actif=True
-    ).order_by(CompteComptable.numero).all()
-    
+
+    rows = db.session.execute(text("""
+        SELECT c.numero AS compte_numero, c.nom AS compte_nom,
+               SUM(l.debit) AS total_debit,
+               SUM(l.credit) AS total_credit
+        FROM comptes_comptables c
+        JOIN lignes_ecritures l ON l.compte_id = c.id
+        JOIN ecritures_comptables e ON e.id = l.ecriture_id
+        WHERE c.structure_id = :structure_id AND c.actif = true
+          AND e.statut = 'valide'
+          AND (:date_debut IS NULL OR e.date_ecriture >= :date_debut)
+          AND (:date_fin IS NULL OR e.date_ecriture <= :date_fin)
+        GROUP BY c.id, c.numero, c.nom
+        HAVING SUM(l.debit) > 0 OR SUM(l.credit) > 0
+        ORDER BY c.numero
+    """), {
+        'structure_id': structure_id,
+        'date_debut': date_debut_obj.strftime('%Y-%m-%d') if date_debut_obj else None,
+        'date_fin': date_fin_obj.strftime('%Y-%m-%d') if date_fin_obj else None,
+    }).fetchall()
+
     result = []
-    for compte in comptes:
-        total_debit = 0
-        total_credit = 0
-        
-        for ligne in compte.lignes:
-            if ligne.ecriture.statut != 'valide':
-                continue
-            
-            if date_debut_obj and ligne.ecriture.date_ecriture < date_debut_obj:
-                continue
-            if date_fin_obj and ligne.ecriture.date_ecriture > date_fin_obj:
-                continue
-            
-            total_debit += float(ligne.debit) if ligne.debit else 0
-            total_credit += float(ligne.credit) if ligne.credit else 0
-        
-        solde = total_debit - total_credit
-        
-        if total_debit > 0 or total_credit > 0:
-            result.append({
-                'compte_numero': compte.numero,
-                'compte_nom': compte.nom,
-                'total_debit': total_debit,
-                'total_credit': total_credit,
-                'solde': solde
-            })
+    for row in rows:
+        total_debit = float(row.total_debit)
+        total_credit = float(row.total_credit)
+        result.append({
+            'compte_numero': row.compte_numero,
+            'compte_nom': row.compte_nom,
+            'total_debit': total_debit,
+            'total_credit': total_credit,
+            'solde': total_debit - total_credit,
+        })
 
     return result
 

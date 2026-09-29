@@ -456,14 +456,23 @@
                     <div class="tab-pane fade" id="rapports" role="tabpanel">
                         <h6><i class="fas fa-file-alt"></i> Rapports comptables</h6>
 
+                        <div class="row mb-2">
+                            <div class="col-md-3">
+                                <label class="form-label small">Exercice</label>
+                                <select class="form-control form-control-sm" id="rapportExercice" onchange="appliquerExerciceRapport()">
+                                    <option value="">— Dates personnalisées —</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <div class="row mb-3">
                             <div class="col-md-3">
                                 <label class="form-label small">Date début</label>
-                                <input type="date" class="form-control form-control-sm" id="rapportDateDebut" onchange="chargerJournal()">
+                                <input type="date" class="form-control form-control-sm" id="rapportDateDebut" onchange="document.getElementById('rapportExercice').value=''; chargerJournal();">
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label small">Date fin</label>
-                                <input type="date" class="form-control form-control-sm" id="rapportDateFin" onchange="chargerJournal()">
+                                <input type="date" class="form-control form-control-sm" id="rapportDateFin" onchange="document.getElementById('rapportExercice').value=''; chargerJournal();">
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label small">Type</label>
@@ -3345,6 +3354,23 @@ function initFiltresJournaux() {
         })
         .catch(err => console.error('Erreur chargement journaux:', err));
 
+    // Sélecteur "Exercice" (raccourci N / N-1 / N-2...) — chaque rapport
+    // acceptait déjà n'importe quelle plage de dates, mais il fallait les
+    // taper à la main pour revoir un exercice antérieur ; demandé
+    // explicitement par le patron.
+    fetch('/comptabilite/api/rapports/exercices/liste')
+        .then(r => r.json())
+        .then(exercices => {
+            const sel = document.getElementById('rapportExercice');
+            exercices.forEach(ex => {
+                const opt = document.createElement('option');
+                opt.value = ex.annee;
+                opt.textContent = ex.libelle;
+                sel.appendChild(opt);
+            });
+        })
+        .catch(err => console.error('Erreur chargement exercices:', err));
+
     // Sélecteur "grand livre d'un seul compte" — réutilise la liste des comptes
     fetch('/comptabilite/api/comptes')
         .then(r => r.json())
@@ -3376,6 +3402,14 @@ function initFiltresJournaux() {
             });
         })
         .catch(err => console.error('Erreur chargement tiers:', err));
+}
+
+function appliquerExerciceRapport() {
+    const annee = document.getElementById('rapportExercice').value;
+    if (!annee) return;
+    document.getElementById('rapportDateDebut').value = `${annee}-01-01`;
+    document.getElementById('rapportDateFin').value = `${annee}-12-31`;
+    chargerJournal();
 }
 
 // ============================================================
