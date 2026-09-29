@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, render_template, redirect, request, session, jsonify
 
-from offline.config_offline import OFFLINE_STRUCTURE_ID, ONLINE_APP_URL
+from offline.config_offline import OFFLINE_STRUCTURE_ID, ONLINE_APP_URL, OFFLINE_DB_PATH
 from offline.models_offline import initialiser_schema
 from offline.db_offline import get_connection, requeter
 from offline.connectivity import app_en_ligne_joignable
@@ -34,8 +34,35 @@ if not OFFLINE_STRUCTURE_ID:
         "jamais risquer de mélanger les données de deux cliniques différentes."
     )
 
+def _obtenir_secret_key():
+    """⭐ SÉCURITÉ : ne jamais utiliser de valeur par défaut codée en dur —
+    ce dépôt est sur GitHub, une clé par défaut y serait publique et
+    permettrait de forger une session sur n'importe quelle installation qui
+    ne l'aurait pas explicitement changée. Si OFFLINE_SECRET_KEY n'est pas
+    définie, une clé aléatoire est générée UNE FOIS et conservée dans un
+    fichier local (à côté du fichier SQLite) — stable entre redémarrages,
+    mais jamais partagée entre deux installations ni versionnée."""
+    depuis_env = os.environ.get('OFFLINE_SECRET_KEY')
+    if depuis_env:
+        return depuis_env
+
+    import secrets
+    chemin = os.path.join(os.path.dirname(OFFLINE_DB_PATH), '.secret_key')
+    os.makedirs(os.path.dirname(chemin), exist_ok=True)
+    if os.path.exists(chemin):
+        with open(chemin, 'r', encoding='utf-8') as f:
+            cle = f.read().strip()
+        if cle:
+            return cle
+    cle = secrets.token_hex(32)
+    with open(chemin, 'w', encoding='utf-8') as f:
+        f.write(cle)
+    print(f"[offline] OFFLINE_SECRET_KEY absente — clé aléatoire générée et sauvegardée dans {chemin}")
+    return cle
+
+
 app = Flask(__name__, template_folder='templates')
-app.secret_key = os.environ.get('OFFLINE_SECRET_KEY', 'medilogic-offline-pilote-cle-dev')
+app.secret_key = _obtenir_secret_key()
 
 app.register_blueprint(bp_patients)
 app.register_blueprint(bp_ventes)

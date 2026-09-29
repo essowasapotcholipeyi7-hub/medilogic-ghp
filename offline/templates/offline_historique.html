@@ -9,6 +9,7 @@
 <nav class="navbar navbar-dark bg-warning-emphasis" style="background:#b45309;">
     <div class="container">
         <span class="navbar-brand text-white">⚠ Mode hors-ligne — {{ nom_utilisateur }}</span>
+            <span id="badgeSynchro" class="badge bg-secondary ms-2"></span>
         <div>
             <a href="/patients" class="btn btn-sm btn-light me-2">Patients</a>
             <a href="/ventes" class="btn btn-sm btn-light me-2">Ventes</a>
@@ -55,5 +56,25 @@
         </tbody>
     </table>
 </div>
+<script>
+function rafraichirBadgeSynchro() {
+    fetch('/api/offline/sync/status').then(r => r.json()).then(d => {
+        const badge = document.getElementById('badgeSynchro');
+        if (!badge) return;
+        if (d.en_attente > 0) {
+            badge.className = 'badge bg-warning text-dark ms-2';
+            badge.textContent = d.en_attente + ' en attente de synchro';
+        } else if (d.erreurs > 0) {
+            badge.className = 'badge bg-danger ms-2';
+            badge.textContent = d.erreurs + ' erreur(s) de synchro';
+        } else {
+            badge.className = 'badge bg-success ms-2';
+            badge.textContent = 'Tout synchronisé';
+        }
+    }).catch(() => {});
+}
+rafraichirBadgeSynchro();
+setInterval(rafraichirBadgeSynchro, 15000);
+</script>
 </body>
 </html>
