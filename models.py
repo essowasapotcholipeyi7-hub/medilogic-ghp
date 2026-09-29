@@ -2454,6 +2454,17 @@ class SoinHospitalisation(db.Model):
     date_enregistrement = db.Column(db.DateTime, default=datetime.utcnow)
     statut = db.Column(db.String(20), default='en_cours')  # en_cours/facture
 
+    # ⭐ Part médecin (patron, 2026-09-30) : "au cours d'hospitalisation un
+    # médecin qui doit prendre de pourcentage réalise une écho... on doit
+    # pouvoir récupérer ça". Capturé ICI, au moment du soin — pas à la
+    # facturation en fin de séjour, qui peut avoir lieu des jours après et
+    # couvrir plusieurs médecins différents sur le même séjour. Voir
+    # services/part_medecin_service.py (même mécanisme qu'une vente
+    # directe), déclenché à la conversion facture/proforma en Vente
+    # (api_convertir_proforma, app.py) une fois ce soin réellement facturé.
+    medecin_id = db.Column(db.Integer)
+    medecin_nom = db.Column(db.String(255))
+
     @property
     def total(self):
         return float(self.prix or 0) * int(self.quantite or 0)
@@ -3139,6 +3150,12 @@ class LigneSoinAmbulatoire(db.Model):
     enregistre_par = db.Column(db.String(255))
     date_enregistrement = db.Column(db.DateTime, default=datetime.utcnow)
     statut = db.Column(db.String(20), default='en_cours')  # en_cours / facture
+
+    # ⭐ Part médecin — même principe et même raison que SoinHospitalisation
+    # ci-dessus (voir son commentaire) : capturé au moment du soin, pas à
+    # la facturation.
+    medecin_id = db.Column(db.Integer)
+    medecin_nom = db.Column(db.String(255))
 
     @property
     def total(self):
