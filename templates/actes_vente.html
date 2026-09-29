@@ -2754,6 +2754,16 @@ function soumettreVenteEnAttente() {
             quantite: item.quantite,
             prise_en_charge_amu: item.prise_en_charge_amu !== false,
             prise_en_charge_cac: item.prise_en_charge_cac !== false,
+            // ⭐ FIX (patron, 2026-09-30) : ces deux champs étaient absents
+            // ici, donc perdus dès la mise en attente — une vente finalisée
+            // ensuite depuis "ventes en attente" échappait TOUJOURS à la
+            // part médecin, sans que personne ne l'ait décidé (ni "Aucun
+            // médecin" explicite, ni un vrai oubli — juste une perte de
+            // données silencieuse). Le choix fait à l'admission (y compris
+            // "Aucun médecin", voir ajouterActe()) est maintenant conservé
+            // jusqu'à la finalisation.
+            medecin_id: item.medecin_id || null,
+            medecin_nom: item.medecin_nom || null,
         };
     });
 
@@ -2831,6 +2841,12 @@ if (VENTE_ATTENTE) {
         nom: a.nom, prix: a.prix, pbr: a.pbr, quantite: a.quantite,
         prise_en_charge_amu: a.prise_en_charge_amu !== false,
         prise_en_charge_cac: a.prise_en_charge_cac !== false,
+        // ⭐ FIX (patron, 2026-09-30) : voir le même commentaire dans
+        // soumettreVenteEnAttente() — reconstitue le choix médecin fait à
+        // l'admission (peut être null, dont l'explicite "Aucun médecin"),
+        // au lieu de le perdre silencieusement à la finalisation.
+        medecin_id: a.medecin_id || null,
+        medecin_nom: a.medecin_nom || null,
     }));
     // ⭐ Pas de resoumission possible d'une vente déjà en cours de
     // finalisation — seul "Finaliser la vente" a un sens ici.
