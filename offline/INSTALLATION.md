@@ -35,9 +35,17 @@ que cette clé est bien la même qu'en production.**
 
 ## Étape 1 — Copier le projet
 
-Sur le PC client, copier tout le dossier `medilogic_ghp` (via clé USB, ou un
+Sur le PC client, copier le dossier `medilogic_ghp` (via clé USB, ou un
 `git clone` du dépôt si ce PC a un accès internet au moment de
 l'installation) vers, par exemple, `C:\medilogic_ghp`.
+
+**⚠️ Ne JAMAIS copier le dossier `venv`** s'il existe déjà sur la machine
+source — un environnement virtuel Python contient des chemins absolus
+propres à la machine où il a été créé (`venv\Scripts\pip.exe`,
+`python.exe`... pointent en dur vers l'ancien chemin) : copié tel quel, il
+plante avec une erreur du type *"Unable to create process..."* /
+*"Fatal error in launcher"*. Il doit toujours être recréé sur place (étape
+2 ci-dessous), jamais transporté.
 
 ## Étape 2 — Installer les dépendances
 
