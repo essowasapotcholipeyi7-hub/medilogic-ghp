@@ -23,20 +23,24 @@
         et seront envoyées automatiquement dès le retour du réseau.
     </div>
 
-    <div class="card mb-4">
-        <div class="card-header">Rechercher un patient</div>
-        <div class="card-body">
-            <input type="text" id="rechercheInput" class="form-control mb-3" placeholder="Nom, prénom ou téléphone...">
-            <div id="resultats"></div>
-        </div>
-    </div>
-
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            Nouveau patient
-            <span id="messageCreation" class="text-success small"></span>
+        <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs" id="ongletsPatient">
+                <li class="nav-item"><a class="nav-link active" data-onglet="recherche" href="#">Rechercher un patient</a></li>
+                <li class="nav-item"><a class="nav-link" data-onglet="nouveau" href="#">+ Nouveau patient</a></li>
+            </ul>
         </div>
-        <div class="card-body">
+
+        <div class="card-body" id="ongletRecherche">
+            <input type="text" id="rechercheInput" class="form-control mb-3" placeholder="Nom, prénom ou téléphone...">
+            <div id="resultats"><p class="text-muted">Tapez un nom, prénom ou numéro de téléphone pour rechercher.</p></div>
+        </div>
+
+        <div class="card-body d-none" id="ongletNouveau">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">Nouveau patient</h5>
+                <span id="messageCreation" class="text-success small"></span>
+            </div>
             <form id="formPatient">
                 <div class="row g-3 mb-3">
                     <div class="col-md-4">
@@ -154,6 +158,24 @@
 const TAUX_PAR_DEFAUT_AMU = 80;
 const TAUX_PAR_DEFAUT_CAC = 80;
 
+// ⭐ Onglets Recherche / Nouveau patient — avant, le formulaire "Nouveau
+// patient" était toujours après la liste de résultats, et cette liste
+// chargeait TOUS les patients de la structure dès l'ouverture de la page
+// (recherche avec terme vide) : avec 80+ patients réels, il fallait
+// défiler toute la liste avant de pouvoir enregistrer un patient. Les deux
+// sont maintenant dans des onglets séparés, "Nouveau patient" accessible
+// en un clic sans rien défiler.
+document.querySelectorAll('#ongletsPatient .nav-link').forEach(a => {
+    a.addEventListener('click', function(e) {
+        e.preventDefault();
+        document.querySelectorAll('#ongletsPatient .nav-link').forEach(x => x.classList.remove('active'));
+        this.classList.add('active');
+        const onglet = this.dataset.onglet;
+        document.getElementById('ongletRecherche').classList.toggle('d-none', onglet !== 'recherche');
+        document.getElementById('ongletNouveau').classList.toggle('d-none', onglet !== 'nouveau');
+    });
+});
+
 function afficherResultats(patients) {
     const zone = document.getElementById('resultats');
     if (!patients.length) {
@@ -169,14 +191,17 @@ function afficherResultats(patients) {
 }
 
 function rechercher() {
-    const q = document.getElementById('rechercheInput').value;
+    const q = document.getElementById('rechercheInput').value.trim();
+    if (!q) {
+        document.getElementById('resultats').innerHTML = '<p class="text-muted">Tapez un nom, prénom ou numéro de téléphone pour rechercher.</p>';
+        return;
+    }
     fetch('/api/offline/patients/recherche?q=' + encodeURIComponent(q))
         .then(r => r.json())
         .then(d => { if (d.success) afficherResultats(d.patients); });
 }
 
 document.getElementById('rechercheInput').addEventListener('input', rechercher);
-rechercher();
 
 // ===== Assurance principale : taux + N° assuré obligatoire =====
 document.getElementById('typeAssurance').addEventListener('change', function() {
