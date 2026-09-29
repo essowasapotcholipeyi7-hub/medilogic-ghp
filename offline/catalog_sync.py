@@ -35,6 +35,22 @@ def _maintenant():
     return datetime.now(timezone.utc).isoformat()
 
 
+def _valeur_sqlite(v):
+    """SQLite (module sqlite3) ne sait lier que None/int/float/str/bytes —
+    psycopg2 renvoie les colonnes Postgres NUMERIC/DECIMAL en
+    decimal.Decimal (même quand le modèle SQLAlchemy déclare Float — dérive
+    de schéma déjà vue ailleurs dans ce dépôt) et les dates en
+    date/datetime : converties ici plutôt que de faire confiance au type
+    déclaré côté modèle."""
+    from decimal import Decimal
+    from datetime import date, datetime as dt
+    if isinstance(v, Decimal):
+        return float(v)
+    if isinstance(v, (dt, date)):
+        return v.isoformat()
+    return v
+
+
 def _rafraichir_table(nom_table, base_sheet, cle_champ):
     if OFFLINE_FORCE:
         raise ReseauSimuleCoupe()
@@ -111,6 +127,82 @@ def rafraichir_numeros_locaux():
     )
     conn.commit()
     return depart_patients, depart_ventes
+
+
+def rafraichir_patients_existants():
+    """Met en cache localement les patients DÉJÀ existants de cette
+    structure (créés avant l'installation du pilote, ou en ligne depuis)
+    — sans ça, la recherche hors-ligne (routes_patients.rechercher_patients)
+    ne trouverait QUE les patients créés pendant la coupure elle-même,
+    jamais ceux déjà suivis par la clinique (bug vécu : "les patients ne
+    viennent pas" au premier essai réel).
+
+    nom/prenom/telephone restent stockés CHIFFRÉS (tels que lus depuis
+    Neon) — jamais déchiffrés avant stockage local, exactement comme pour
+    un patient créé hors-ligne ; déchiffrés seulement à l'affichage.
+
+    N'ajoute que les patients pas encore en cache (déduplication par
+    neon_id) — ne met PAS à jour un patient déjà caché si ses informations
+    ont changé en ligne depuis : simplification acceptée pour ce pilote
+    (l'essentiel — pouvoir retrouver et vendre à un patient existant
+    pendant une coupure — fonctionne ; une mise à jour de champ pendant
+    que ce PC était hors service resynchronisera au prochain rafraîchissement
+    seulement pour les patients pas encore mis en cache)."""
+    if OFFLINE_FORCE:
+        raise ReseauSimuleCoupe()
+    import uuid as uuid_module
+    import psycopg2
+    import psycopg2.extras
+
+    conn = get_connection()
+    deja_caches = {
+        row['neon_id'] for row in
+        conn.execute("SELECT neon_id FROM offline_patients WHERE neon_id IS NOT NULL")
+    }
+
+    conn_pg = psycopg2.connect(DATABASE_URL, connect_timeout=10)
+    try:
+        with conn_pg.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, nom, prenom, telephone, adresse, date_naissance, type_assurance,
+                       taux_prise_charge, numero_assure, assurance2_nom, taux_assurance2,
+                       numero_assure2, societe_assurance2, personne_a_prevenir_nom,
+                       personne_a_prevenir_telephone, personne_a_prevenir_relation, email,
+                       numero_local, created_at
+                FROM patients WHERE structure_id = %s
+            """, (OFFLINE_STRUCTURE_ID,))
+            lignes = cur.fetchall()
+    finally:
+        conn_pg.close()
+
+    horodatage = _maintenant()
+    n = 0
+    for ligne in lignes:
+        if ligne['id'] in deja_caches:
+            continue
+        conn.execute("""
+            INSERT INTO offline_patients (
+                uuid, neon_id, structure_id, nom, prenom, telephone, adresse, date_naissance,
+                type_assurance, taux_prise_charge, numero_assure, assurance2_nom,
+                taux_assurance2, numero_assure2, societe_assurance2, personne_a_prevenir_nom,
+                personne_a_prevenir_telephone, personne_a_prevenir_relation, email,
+                numero_local, created_at, synced_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, tuple(_valeur_sqlite(v) for v in (
+            str(uuid_module.uuid4()), ligne['id'], OFFLINE_STRUCTURE_ID,
+            ligne['nom'], ligne['prenom'], ligne['telephone'], ligne['adresse'],
+            ligne['date_naissance'],
+            ligne['type_assurance'], ligne['taux_prise_charge'], ligne['numero_assure'],
+            ligne['assurance2_nom'], ligne['taux_assurance2'], ligne['numero_assure2'],
+            ligne['societe_assurance2'], ligne['personne_a_prevenir_nom'],
+            ligne['personne_a_prevenir_telephone'], ligne['personne_a_prevenir_relation'],
+            ligne['email'], ligne['numero_local'],
+            ligne['created_at'] or horodatage,
+            horodatage,
+        )))
+        n += 1
+    conn.commit()
+    return n
 
 
 def rafraichir_utilisateurs():

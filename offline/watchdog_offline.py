@@ -40,7 +40,10 @@ def _marquer_mode(mode):
 
 def _cycle():
     from offline.outbox import push_pending
-    from offline.catalog_sync import rafraichir_catalogue, rafraichir_utilisateurs, rafraichir_numeros_locaux
+    from offline.catalog_sync import (
+        rafraichir_catalogue, rafraichir_utilisateurs, rafraichir_numeros_locaux,
+        rafraichir_patients_existants,
+    )
 
     conn = get_connection()
     ligne = conn.execute("SELECT mode FROM offline_sync_state WHERE id = 1").fetchone()
@@ -83,6 +86,9 @@ def _cycle():
                 try:
                     rafraichir_catalogue()
                     rafraichir_numeros_locaux()
+                    n = rafraichir_patients_existants()
+                    if n:
+                        print(f"[offline-watchdog] {n} patient(s) existant(s) mis en cache.")
                     dernier_refresh_catalogue = maintenant_ts
                 except Exception as e:
                     print(f"[offline-watchdog] Rafraîchissement catalogue échoué : {e}")

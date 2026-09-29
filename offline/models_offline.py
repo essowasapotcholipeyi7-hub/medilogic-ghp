@@ -38,6 +38,12 @@ CREATE TABLE IF NOT EXISTS offline_patients (
     synced_at TEXT
 );
 
+-- Un patient Neon (déjà existant, mis en cache par
+-- catalog_sync.rafraichir_patients_existants) ne doit jamais être caché
+-- deux fois — filet de sécurité en plus de la dédoublonnage côté Python.
+CREATE UNIQUE INDEX IF NOT EXISTS ix_offline_patients_neon_id
+    ON offline_patients (neon_id) WHERE neon_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS offline_ventes (
     uuid TEXT PRIMARY KEY,
     neon_id INTEGER,

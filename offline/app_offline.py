@@ -46,10 +46,16 @@ initialiser_schema()
 # si le réseau est déjà coupé au lancement de l'appli, on garde la dernière
 # valeur connue (ou 0 sur une toute première installation).
 try:
-    from offline.catalog_sync import rafraichir_numeros_locaux, rafraichir_catalogue, rafraichir_utilisateurs
+    from offline.catalog_sync import (
+        rafraichir_numeros_locaux, rafraichir_catalogue, rafraichir_utilisateurs,
+        rafraichir_patients_existants,
+    )
     rafraichir_numeros_locaux()
     rafraichir_catalogue()
     rafraichir_utilisateurs()
+    n = rafraichir_patients_existants()
+    if n:
+        print(f"[offline] {n} patient(s) existant(s) mis en cache au démarrage.")
 except Exception as e:
     print(f"[offline] Rafraîchissement initial impossible (réseau coupé ?) : {e}")
 
