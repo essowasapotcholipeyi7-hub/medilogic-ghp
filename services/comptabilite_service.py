@@ -40,6 +40,7 @@ from utils.plan_comptable_syscohada import (
     COMPTE_PERTE_CREANCE_IRRECOUVRABLE, COMPTE_CREANCE_ABANDONNEE,
     COMPTE_DOTATION_AMORTISSEMENT, compte_charge_pour_motif,
     COMPTE_TVA_COLLECTEE, COMPTE_TVA_DEDUCTIBLE,
+    COMPTE_RESULTAT_BENEFICE, COMPTE_RESULTAT_PERTE,
 )
 from utils.categorisation import categoriser_acte
 
@@ -1216,6 +1217,129 @@ def generer_ecriture_paie(paie, employe, user_nom='SYSTEME'):
 
 
 # ============================================================
+# CLÔTURE DES COMPTES DE GESTION (fin d'exercice) — journal OD
+# ============================================================
+# Trouvé en vérifiant le report à nouveau (2026-09-29) : le bouton
+# "Confirmer et générer" du RAN restait désactivé pour GHP et Clinique
+# Valeo (structure 13) parce que les comptes de bilan (classes 1-5) seuls
+# ne s'équilibraient pas — la vraie cause : le résultat net de l'exercice
+# (produits classe 7 moins charges classe 6) n'était jamais "clôturé" vers
+# le compte 12 (Résultat), donc restait invisible du côté bilan. Étape
+# SYSCOHADA standard, distincte du RAN : chaque compte de charge/produit
+# reprend un solde inverse qui le ramène à zéro (une charge normalement
+# débitrice est créditée du même montant, et inversement pour un produit),
+# et la différence (produits - charges) est logée au compte 12 — 120
+# (bénéfice, crédité) ou 129 (perte, débitée). Répond à "c'est nécessaire ?
+# si oui alors fais-le" : oui, nécessaire pour utiliser le RAN sur ces deux
+# structures, et c'est de toute façon une étape normale de fin d'exercice.
+
+def previsualiser_cloture_exercice(structure_id, date_debut, date_fin):
+    """Calcule (sans rien persister) l'écriture de clôture des comptes de
+    gestion pour la période [date_debut, date_fin] — un compte par ligne
+    (charge ou produit), plus la ligne de résultat (12 ou 129). Retourne
+    aussi 'resultat' (positif = bénéfice, négatif = perte) pour l'écran de
+    confirmation."""
+    from sqlalchemy import text
+
+    rows = db.session.execute(text("""
+        SELECT c.numero AS compte_numero, c.nom AS compte_nom,
+               SUM(l.debit - l.credit) AS solde
+        FROM lignes_ecritures l
+        JOIN ecritures_comptables e ON e.id = l.ecriture_id
+        JOIN comptes_comptables c ON c.id = l.compte_id
+        WHERE e.structure_id = :structure_id
+          AND e.statut = 'valide'
+          AND e.date_ecriture >= :date_debut
+          AND e.date_ecriture <= :date_fin
+          AND LEFT(c.numero, 1) IN ('6', '7')
+        GROUP BY c.id, c.numero, c.nom
+        HAVING ABS(SUM(l.debit - l.credit)) > 0.5
+        ORDER BY c.numero
+    """), {'structure_id': structure_id, 'date_debut': date_debut, 'date_fin': date_fin}).fetchall()
+
+    lignes = []
+    resultat = 0.0  # produits - charges ; voir démonstration dans le commentaire de section
+    for row in rows:
+        solde = _to_float(row.solde)
+        resultat -= solde
+        if solde > 0:
+            lignes.append({'numero_compte': row.compte_numero,
+                            'libelle': f"Clôture exercice — {row.compte_nom}",
+                            'credit': round(solde, 2)})
+        else:
+            lignes.append({'numero_compte': row.compte_numero,
+                            'libelle': f"Clôture exercice — {row.compte_nom}",
+                            'debit': round(-solde, 2)})
+
+    resultat = round(resultat, 2)
+    if abs(resultat) > 0.5:
+        if resultat > 0:
+            lignes.append({'numero_compte': COMPTE_RESULTAT_BENEFICE,
+                            'libelle': "Résultat net de l'exercice (bénéfice)",
+                            'credit': resultat})
+        else:
+            lignes.append({'numero_compte': COMPTE_RESULTAT_PERTE,
+                            'libelle': "Résultat net de l'exercice (perte)",
+                            'debit': -resultat})
+
+    total_debit = round(sum(l.get('debit', 0) for l in lignes), 2)
+    total_credit = round(sum(l.get('credit', 0) for l in lignes), 2)
+    return {
+        'lignes': lignes,
+        'resultat': resultat,
+        'total_debit': total_debit,
+        'total_credit': total_credit,
+        # ⭐ Comparaison sur le FCFA entier, pas le flottant à 2 décimales —
+        # le FCFA n'a pas de sous-unité, et sommer beaucoup de lignes en
+        # float peut faire dériver le total de quelques centièmes selon
+        # l'ordre de sommation (constaté en testant : un même calcul a pu
+        # donner -1.0 puis -1.000000001 d'un run à l'autre). round() sans
+        # décimale élimine ce bruit sans changer le sens de la tolérance
+        # "à 1 FCFA près" déjà utilisée ailleurs (creer_ecriture).
+        'equilibre': abs(round(total_debit) - round(total_credit)) <= 1,
+    }
+
+
+def generer_cloture_exercice(structure_id, date_debut, date_fin, user_nom='SYSTEME'):
+    """Génère (et VALIDE immédiatement) l'écriture de clôture des comptes
+    de gestion — voir previsualiser_cloture_exercice() pour le détail du
+    calcul. Refuse de dupliquer : une seule clôture par (structure, année
+    de date_fin)."""
+    try:
+        piece = f"CLOTURE-{date_fin.year}"
+        deja_existante = EcritureComptable.query.filter_by(
+            structure_id=structure_id, piece_justificative=piece
+        ).first()
+        if deja_existante:
+            message = f"Clôture des comptes de gestion {date_fin.year} déjà générée (écriture #{deja_existante.id})."
+            print(f"⚠️ [comptabilite_service] {message}")
+            return None
+
+        apercu = previsualiser_cloture_exercice(structure_id, date_debut, date_fin)
+        if not apercu['lignes']:
+            print(f"ℹ️ [comptabilite_service] Clôture exercice : rien à clôturer pour la structure {structure_id} sur {date_debut}–{date_fin}.")
+            return None
+
+        return creer_ecriture(
+            structure_id=structure_id,
+            date_ecriture=date_fin,
+            libelle=f"Clôture des comptes de gestion — exercice {date_fin.year}",
+            lignes=apercu['lignes'],
+            journal_code='OD',
+            piece_justificative=piece,
+            auto=True,
+            source_type='cloture_exercice',
+            source_id=None,
+            user_nom=user_nom,
+        )
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ [comptabilite_service] Erreur generer_cloture_exercice: {e}")
+        _log_anomalie(structure_id, 'cloture_exercice', None, f"Échec génération de la clôture d'exercice: {e}")
+        return None
+
+
+# ============================================================
 # REPORT À NOUVEAU (OUVERTURE D'EXERCICE) — journal RAN
 # ============================================================
 # Demande du patron (2026-09-29), après avoir ajouté le code journal RAN :
@@ -1300,7 +1424,11 @@ def previsualiser_report_a_nouveau(structure_id, date_cloture):
         'lignes': lignes,
         'total_debit': round(total_debit, 2),
         'total_credit': round(total_credit, 2),
-        'equilibre': abs(total_debit - total_credit) <= 1,
+        # ⭐ Même fix que previsualiser_cloture_exercice : comparaison sur
+        # le FCFA entier, pas le flottant — évite un faux "déséquilibré"
+        # dû au seul ordre de sommation (constaté en testant en conditions
+        # réelles : même calcul, résultat différent d'un run à l'autre).
+        'equilibre': abs(round(total_debit) - round(total_credit)) <= 1,
     }
 
 

@@ -1138,6 +1138,50 @@ def generer_grand_livre(structure_id, date_debut, date_fin, compte_id=None, tier
     return lignes
 
 
+@compta_bp.route('/api/cloture-exercice/apercu')
+def api_cloture_exercice_apercu():
+    """Calcule (sans rien enregistrer) l'écriture de clôture des comptes
+    de gestion (classes 6/7 -> compte 12) pour une période — voir
+    services/comptabilite_service.previsualiser_cloture_exercice(). Étape
+    normale de fin d'exercice, et prérequis pour que le report à nouveau
+    s'équilibre sur les comptes de bilan seuls."""
+    structure_id = session.get('structure_id')
+    if not structure_id:
+        return jsonify({'success': False, 'error': 'Structure non trouvée'}), 404
+
+    date_debut = parse_date(request.args.get('date_debut'))
+    date_fin = parse_date(request.args.get('date_fin'))
+    if not date_debut or not date_fin:
+        return jsonify({'success': False, 'error': 'Dates de début/fin invalides'}), 400
+
+    from services.comptabilite_service import previsualiser_cloture_exercice
+    apercu = previsualiser_cloture_exercice(structure_id, date_debut, date_fin)
+    return jsonify({'success': True, **apercu})
+
+
+@compta_bp.route('/api/cloture-exercice/generer', methods=['POST'])
+def api_cloture_exercice_generer():
+    """Génère (et valide immédiatement) l'écriture de clôture des comptes
+    de gestion — action volontaire du comptable, jamais automatique : voir
+    services/comptabilite_service.generer_cloture_exercice()."""
+    structure_id = session.get('structure_id')
+    if not structure_id:
+        return jsonify({'success': False, 'error': 'Structure non trouvée'}), 404
+
+    data = request.json or {}
+    date_debut = parse_date(data.get('date_debut'))
+    date_fin = parse_date(data.get('date_fin'))
+    if not date_debut or not date_fin:
+        return jsonify({'success': False, 'error': 'Dates de début/fin invalides'}), 400
+
+    from services.comptabilite_service import generer_cloture_exercice
+    ecriture = generer_cloture_exercice(structure_id, date_debut, date_fin, user_nom=session.get('user_name', 'System'))
+    if not ecriture:
+        return jsonify({'success': False, 'error': "Rien à clôturer, ou une clôture existe déjà pour cet exercice."}), 400
+
+    return jsonify({'success': True, 'ecriture_id': ecriture.id, 'piece_justificative': ecriture.piece_justificative})
+
+
 @compta_bp.route('/api/report-a-nouveau/apercu')
 def api_report_a_nouveau_apercu():
     """Calcule (sans rien enregistrer) ce que produirait la génération du
