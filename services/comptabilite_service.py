@@ -253,6 +253,35 @@ def _nom_assurance(vente, principale=True):
     return None
 
 
+def _tiers_id_assurance(nom_assurance):
+    """⭐ ID de tiers stable pour une compagnie d'assurance (audit du
+    2026-09-29 : "chaque journal de compte reste dans son support de
+    compte" -> comptes tiers correctement reliés aux comptes généraux —
+    trou trouvé et confirmé à corriger : les 7 compagnies nommées
+    (SUNU, GTA, FIDELIA, NSIA, GCA, C2A, OLEA + les 3 branches AMU) ont
+    chacune leur propre compte dédié dans le plan comptable, donc déjà
+    distinguables par numéro de compte seul — mais TOUTE AUTRE compagnie
+    retombe sur le même compte fourre-tout 41122800 (compte_assurance,
+    utils/plan_comptable_syscohada.py), où plusieurs compagnies "hors
+    liste" différentes se mélangeaient sans aucun moyen de les distinguer
+    ni de les lettrer (auto_lettrer_compte ignore les lignes sans tiers_id).
+
+    Il n'existe pas de table "Assurance" en base (juste des noms de
+    chaîne dispersés dans les fiches patient) — pas de vrai id entier à
+    réutiliser comme pour patient_id/fournisseur_id. CRC32 du nom
+    normalisé donne un entier STABLE (même compagnie -> même id, tout le
+    temps, y compris après un redémarrage) — jamais hash() natif Python,
+    randomisé par process (PYTHONHASHSEED) et donc différent à chaque
+    redémarrage pour la même compagnie, ce qui aurait cassé le
+    regroupement auxiliaire d'une exécution à l'autre. Masqué sur 31 bits
+    pour tenir dans LigneEcriture.tiers_id (INTEGER signé)."""
+    import zlib
+    cle = str(nom_assurance or '').strip().lower()
+    if not cle:
+        return None
+    return zlib.crc32(cle.encode('utf-8')) & 0x7FFFFFFF
+
+
 def _compte_tresorerie(mode_paiement):
     """'especes' -> Caisse (57100000). Tout le reste (carte, mobile money,
     chèque, virement...) -> Banque (52100000)."""
@@ -520,7 +549,9 @@ def generer_ecriture_vente(vente, user_nom='SYSTEME'):
             compte_num = compte_assurance(nom_assurance)
             lignes.append({'numero_compte': compte_num,
                             'libelle': f"Tiers-payant à recevoir ({nom_assurance or 'assurance'})",
-                            'debit': prise_en_charge})
+                            'debit': prise_en_charge,
+                            'tiers_type': 'assurance', 'tiers_id': _tiers_id_assurance(nom_assurance),
+                            'tiers_nom': nom_assurance})
             total_debit += prise_en_charge
 
         if prise_en_charge2 > 0:
@@ -535,7 +566,9 @@ def generer_ecriture_vente(vente, user_nom='SYSTEME'):
             libelle_assurance2 += f" — {societe})" if societe else ")"
             lignes.append({'numero_compte': compte_num2,
                             'libelle': libelle_assurance2,
-                            'debit': prise_en_charge2})
+                            'debit': prise_en_charge2,
+                            'tiers_type': 'assurance', 'tiers_id': _tiers_id_assurance(nom_assurance2),
+                            'tiers_nom': nom_assurance2})
             total_debit += prise_en_charge2
 
         if reste_a_payer > 0.5:
@@ -803,7 +836,8 @@ def generer_ecriture_remboursement_assurance(montant, assurance_nom, structure_i
         date_txt = f" du {date_versement}" if date_versement else ""
         lignes = [
             {'numero_compte': COMPTE_BANQUE, 'libelle': f"Virement {assurance_nom}{ref_txt}{date_txt}", 'debit': montant},
-            {'numero_compte': compte_num, 'libelle': f"Solde tiers-payant {assurance_nom}{ref_txt}", 'credit': montant},
+            {'numero_compte': compte_num, 'libelle': f"Solde tiers-payant {assurance_nom}{ref_txt}", 'credit': montant,
+             'tiers_type': 'assurance', 'tiers_id': _tiers_id_assurance(assurance_nom), 'tiers_nom': assurance_nom},
         ]
 
         commentaire = None

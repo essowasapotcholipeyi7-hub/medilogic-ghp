@@ -3396,7 +3396,13 @@ function initFiltresJournaux() {
                 const opt = document.createElement('option');
                 opt.value = t.tiers_id;
                 opt.dataset.tiersType = t.tiers_type;
-                const badge = t.tiers_type === 'fournisseur' ? 'Fournisseur' : 'Client';
+                // ⭐ 'assurance' ajouté (2026-09-29) — avant, ce badge ne
+                // connaissait que fournisseur/client, une compagnie
+                // d'assurance "hors liste" (voir _tiers_id_assurance,
+                // comptabilite_service.py) se serait affichée à tort
+                // comme "Client".
+                const badges = {fournisseur: 'Fournisseur', assurance: 'Assurance'};
+                const badge = badges[t.tiers_type] || 'Client';
                 opt.textContent = `${t.tiers_nom} (${badge})`;
                 sel.appendChild(opt);
             });
