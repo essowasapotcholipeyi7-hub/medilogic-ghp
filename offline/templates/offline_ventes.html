@@ -373,7 +373,14 @@ document.getElementById('btnValider').addEventListener('click', function() {
         type_aide: t.typeAide,
         aide_hospitaliere: t.aideHospitaliere,
     };
-    data[typeVente] = panier;
+    // ⭐ Doit correspondre EXACTEMENT à `colonne_articles` côté backend
+    // (routes_ventes.py) : 'actes' pour un acte, mais 'produits' (pas
+    // 'pharmacie') pour une vente pharmacie — sinon _creer_vente() lit une
+    // liste vide (data.get('produits') introuvable), et la vente est
+    // enregistrée SANS aucun article : le reçu n'affiche que les totaux,
+    // et le stock n'est jamais décrémenté à la synchro (bug réel trouvé le
+    // 2026-09-29, cf. panier envoyé sous la mauvaise clé 'pharmacie').
+    data[typeVente === 'pharmacie' ? 'produits' : 'actes'] = panier;
 
     const url = typeVente === 'actes' ? '/api/offline/ventes/actes' : '/api/offline/ventes/pharma';
     fetch(url, {
