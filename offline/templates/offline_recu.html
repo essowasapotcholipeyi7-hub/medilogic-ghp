@@ -86,6 +86,9 @@ td, th { padding: 2px 0; }
     {% if vente.prise_en_charge2 %}
     <tr><td>Prise en charge CAC</td><td class="droite">-{{ '{:,.0f}'.format(vente.prise_en_charge2).replace(',', ' ') }} FCFA</td></tr>
     {% endif %}
+    {% if vente.aide_hospitaliere %}
+    <tr><td>Aide hospitalière</td><td class="droite">-{{ '{:,.0f}'.format(vente.aide_hospitaliere).replace(',', ' ') }} FCFA</td></tr>
+    {% endif %}
     <tr class="total"><td>NET À PAYER</td><td class="droite">{{ '{:,.0f}'.format(vente.net_a_payer or 0).replace(',', ' ') }} FCFA</td></tr>
     <tr><td>Montant donné</td><td class="droite">{{ '{:,.0f}'.format(vente.montant_donne or 0).replace(',', ' ') }} FCFA</td></tr>
     {% if vente.rendu %}

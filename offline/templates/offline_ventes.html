@@ -75,8 +75,24 @@
                     <td id="libellePriseEnCharge2">Prise en charge CAC</td>
                     <td class="text-end">-<span id="valeurPriseEnCharge2">0</span> FCFA</td>
                 </tr>
+                <tr id="ligneAide" class="d-none text-warning">
+                    <td>Aide hospitalière</td>
+                    <td class="text-end">-<span id="valeurAide">0</span> FCFA</td>
+                </tr>
                 <tr class="fw-bold"><td>NET À PAYER</td><td class="text-end" id="ligneNetAPayer">0 FCFA</td></tr>
             </table>
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label text-warning">Aide hospitalière</label>
+                    <div class="input-group">
+                        <input type="number" id="tauxAideHospitaliere" class="form-control" value="0" min="0" step="5">
+                        <select id="typeAideHospitaliere" class="form-select" style="max-width:90px;">
+                            <option value="pourcentage" selected>%</option>
+                            <option value="montant">FCFA</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
             <div class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label">Montant donné (FCFA)</label>
@@ -159,6 +175,8 @@ function choisirPatient(index) {
 
 document.getElementById('checkAppliquePbrCac').addEventListener('change', afficherPanier);
 document.getElementById('selectPbrCacVariante').addEventListener('change', afficherPanier);
+document.getElementById('tauxAideHospitaliere').addEventListener('input', afficherPanier);
+document.getElementById('typeAideHospitaliere').addEventListener('change', afficherPanier);
 
 document.getElementById('articleInput').addEventListener('input', function() {
     const terme = this.value.toLowerCase();
@@ -240,12 +258,42 @@ function calculerTotaux() {
     }
     const tauxCac = (patientChoisi && patientChoisi.assurance2_nom) ? (parseFloat(patientChoisi.taux_assurance2) || 0) : 0;
     const totalCac = baseCac * tauxCac / 100;
-    const netAPayer = Math.max(0, sousTotal - totalAmu - totalCac);
+
+    // ===== Aide hospitalière — même 3 cas que calculerTotal()
+    // (templates/actes_vente.html:1652-1693), le 4e cas ("assurance
+    // principale désactivée pour cette vente") ne s'applique pas ici : ce
+    // pilote n'a pas de bascule pour désactiver l'AMU au cas par cas, donc
+    // un patient assuré l'a toujours (cas 1). Appliquée APRÈS AMU+CAC,
+    // jamais soumise au plafond PBR-CAC (couche indépendante). =====
+    const estAssure = !!libelleAssurance;
+    const aCac = !!(patientChoisi && patientChoisi.assurance2_nom);
+    let baseAide;
+    if (estAssure) {
+        baseAide = Math.max(sousTotal - totalAmu - totalCac, 0);           // cas 1
+    } else if (aCac) {
+        baseAide = Math.max(sousTotal - totalCac, 0);                     // cas 2
+    } else {
+        baseAide = sousTotal;                                              // cas 3
+    }
+
+    const typeAide = document.getElementById('typeAideHospitaliere').value;
+    let tauxAide = parseFloat(document.getElementById('tauxAideHospitaliere').value) || 0;
+    if (tauxAide < 0) tauxAide = 0;
+    if (typeAide === 'pourcentage' && tauxAide > 100) tauxAide = 100;
+
+    let aideHospitaliere = 0;
+    if (tauxAide > 0 && baseAide > 0) {
+        aideHospitaliere = (typeAide === 'montant') ? Math.min(tauxAide, baseAide) : (baseAide * tauxAide / 100);
+    }
+
+    const netAPayer = Math.max(0, baseAide - aideHospitaliere);
 
     return {
         sousTotal: Math.round(sousTotal),
         priseEnCharge: Math.round(totalAmu),
         priseEnCharge2: Math.round(totalCac),
+        aideHospitaliere: Math.round(aideHospitaliere),
+        tauxAide, typeAide,
         netAPayer: Math.round(netAPayer),
     };
 }
@@ -282,6 +330,14 @@ function afficherPanier() {
         lignePEC2.classList.add('d-none');
     }
 
+    const ligneAide = document.getElementById('ligneAide');
+    if (t.aideHospitaliere > 0) {
+        ligneAide.classList.remove('d-none');
+        document.getElementById('valeurAide').textContent = t.aideHospitaliere.toLocaleString('fr-FR');
+    } else {
+        ligneAide.classList.add('d-none');
+    }
+
     document.getElementById('montantDonne').value = t.netAPayer;
 }
 function retirerArticle(i) { panier.splice(i, 1); afficherPanier(); }
@@ -313,6 +369,9 @@ document.getElementById('btnValider').addEventListener('click', function() {
         numero_assure2: patientChoisi.numero_assure2 || null,
         applique_pbr_cac: document.getElementById('checkAppliquePbrCac').checked,
         pbr_cac_variante: document.getElementById('selectPbrCacVariante').value,
+        taux_aide: t.tauxAide,
+        type_aide: t.typeAide,
+        aide_hospitaliere: t.aideHospitaliere,
     };
     data[typeVente] = panier;
 
@@ -329,6 +388,8 @@ document.getElementById('btnValider').addEventListener('click', function() {
             panier = []; patientChoisi = null; pbrCacTable = {};
             document.getElementById('patientChoisi').classList.add('d-none');
             document.getElementById('optionsPbrCac').classList.add('d-none');
+            document.getElementById('tauxAideHospitaliere').value = 0;
+            document.getElementById('typeAideHospitaliere').value = 'pourcentage';
             afficherPanier();
         } else {
             msg.innerHTML = '<span class="text-danger">Erreur : ' + d.error + '</span>';
