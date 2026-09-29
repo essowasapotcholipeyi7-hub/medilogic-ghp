@@ -90,7 +90,11 @@ Ouvrir `http://127.0.0.1:5100/` dans un navigateur :
 Si tout fonctionne, fermer cette fenêtre (Ctrl+C) et passer à
 l'automatisation.
 
-## Étape 6 — Automatiser le démarrage (tâche planifiée Windows)
+## Étape 6 — Automatiser le démarrage
+
+Deux méthodes, selon les droits disponibles sur le PC client.
+
+### Avec droits administrateur (préférée)
 
 Depuis une invite de commandes **en tant qu'administrateur**, dans
 `C:\medilogic_ghp` :
@@ -102,6 +106,23 @@ offline\installer_tache_planifiee.bat
 Ce script crée une tâche planifiée Windows ("MediLogicOffline") qui lance
 `offline\lancer_offline.bat` à chaque connexion de l'utilisateur, et la
 démarre immédiatement pour vérifier que ça fonctionne.
+
+### Sans droits administrateur
+
+Si le compte utilisateur du PC client n'a pas accès à "Exécuter en tant
+qu'administrateur" (poste verrouillé), utiliser à la place, depuis une
+invite de commandes normale, dans `C:\medilogic_ghp` :
+
+```bat
+offline\installer_sans_admin.bat
+```
+
+Aucune élévation nécessaire : ce script dépose un petit fichier dans le
+dossier "Démarrage" personnel de l'utilisateur Windows
+(`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`), que Windows
+exécute automatiquement à chaque connexion — sans passer par le
+Planificateur de tâches. Le script indique ensuite la commande à lancer
+pour démarrer immédiatement sans attendre une reconnexion.
 
 ## Étape 7 — Basculer le personnel sur la nouvelle adresse
 
