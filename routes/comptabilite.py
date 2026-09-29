@@ -2516,6 +2516,19 @@ def _csv_montant(m):
     return str(int(round(m))) if m else ''
 
 
+def _csv_date(d):
+    """Date à 6 chiffres JJMMAA, sans séparateur (ex: '2026-09-29' ->
+    '290926') — demande explicite du patron pour cet export CSV/texte
+    comptable (distinct du FEC ci-dessous, qui doit rester AAAAMMJJ : c'est
+    le format imposé par la norme DGFiP, jamais à modifier). `d` est la
+    chaîne ISO 'AAAA-MM-JJ' déjà produite par generer_journal/
+    generer_grand_livre/api_rapport_tva."""
+    s = '' if d is None else str(d)
+    if len(s) >= 10 and s[4] == '-' and s[7] == '-':
+        return f"{s[8:10]}{s[5:7]}{s[2:4]}"
+    return s
+
+
 @compta_bp.route('/rapport/export-txt/<type_rapport>')
 def export_rapport_txt(type_rapport):
     """Export tableur (.csv, séparateur ';') d'UN rapport à la fois, avec
@@ -2577,7 +2590,7 @@ def export_rapport_txt(type_rapport):
         total_d = total_c = 0
         for l in data:
             lignes_csv.append(';'.join([
-                _csv_champ(l['date']), _csv_champ(l['piece']), _csv_champ(l['libelle']), _csv_champ(l['journal_code']),
+                _csv_champ(_csv_date(l['date'])), _csv_champ(l['piece']), _csv_champ(l['libelle']), _csv_champ(l['journal_code']),
                 _csv_champ(l['compte_numero']), _csv_champ(l['compte_nom']), _csv_champ(l.get('tiers_nom')),
                 _csv_montant(l['debit']), _csv_montant(l['credit']),
             ]))
@@ -2595,7 +2608,7 @@ def export_rapport_txt(type_rapport):
         total_d = total_c = 0
         for l in data:
             ligne = [
-                _csv_champ(l['date']), _csv_champ(l['compte_numero']), _csv_champ(l['compte_nom']), _csv_champ(l.get('tiers_nom')),
+                _csv_champ(_csv_date(l['date'])), _csv_champ(l['compte_numero']), _csv_champ(l['compte_nom']), _csv_champ(l.get('tiers_nom')),
                 _csv_champ(l['piece']), _csv_champ(l['libelle']),
                 _csv_montant(l['debit']), _csv_montant(l['credit']), _csv_champ(l.get('lettre')),
             ]
@@ -2625,13 +2638,13 @@ def export_rapport_txt(type_rapport):
         lignes_csv.append(_csv_champ('TVA COLLECTÉE (ventes)'))
         lignes_csv.append(';'.join(_csv_champ(c) for c in ['Date', 'Pièce', 'Libellé', 'Montant']))
         for l in data['lignes']:
-            lignes_csv.append(';'.join([_csv_champ(l['date']), _csv_champ(l['piece']), _csv_champ(l['libelle']), _csv_montant(l['montant'])]))
+            lignes_csv.append(';'.join([_csv_champ(_csv_date(l['date'])), _csv_champ(l['piece']), _csv_champ(l['libelle']), _csv_montant(l['montant'])]))
         lignes_csv.append(';'.join([_csv_champ('TOTAL TVA COLLECTÉE'), '', '', _csv_montant(data['total_collectee'])]))
         lignes_csv.append('')
         lignes_csv.append(_csv_champ('TVA DÉDUCTIBLE (achats fournisseurs)'))
         lignes_csv.append(';'.join(_csv_champ(c) for c in ['Date', 'Pièce', 'Libellé', 'Montant']))
         for l in data.get('lignes_deductible', []):
-            lignes_csv.append(';'.join([_csv_champ(l['date']), _csv_champ(l['piece']), _csv_champ(l['libelle']), _csv_montant(l['montant'])]))
+            lignes_csv.append(';'.join([_csv_champ(_csv_date(l['date'])), _csv_champ(l['piece']), _csv_champ(l['libelle']), _csv_montant(l['montant'])]))
         lignes_csv.append(';'.join([_csv_champ('TOTAL TVA DÉDUCTIBLE'), '', '', _csv_montant(data['total_deductible'])]))
         lignes_csv.append('')
         lignes_csv.append(';'.join([_csv_champ('TVA NETTE À PAYER (collectée - déductible)'), '', '', _csv_montant(data['tva_nette'])]))
