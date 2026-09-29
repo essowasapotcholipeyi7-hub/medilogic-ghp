@@ -272,6 +272,13 @@ class Employe(db.Model):
     numero_poste = db.Column(db.String(20))
     date_embauche = db.Column(db.Date, nullable=False)
     type_contrat = db.Column(db.String(50))
+    # ⭐ Patron : "pas de date de fin de contrat ni d'alerte de
+    # renouvellement" — nullable : un CDI (ou tout contrat à durée
+    # indéterminée) n'en a simplement pas. Voir
+    # Employe.jours_avant_fin_contrat / contrats_a_renouveler ci-dessous
+    # pour l'alerte (jamais de désactivation automatique de l'employé à
+    # l'échéance — décision volontairement laissée à l'admin).
+    date_fin_contrat = db.Column(db.Date)
     salaire_base = db.Column(db.Numeric, default=0)
 
     # ⭐ Paramètres de paie individuels (modifiables par salarié — chaque
@@ -326,7 +333,35 @@ class Employe(db.Model):
             years = today.year - self.date_embauche.year - ((today.month, today.day) < (self.date_embauche.month, self.date_embauche.day))
             return years
         return 0
-    
+
+    def jours_avant_fin_contrat(self):
+        """None si pas de date de fin (CDI/indéterminé) — sinon nombre de
+        jours restants (négatif si déjà expiré)."""
+        if not self.date_fin_contrat:
+            return None
+        return (self.date_fin_contrat - date.today()).days
+
+    def contrat_a_renouveler(self, seuil_jours=30):
+        """⭐ Patron : "alerte de renouvellement" — True si un contrat à
+        durée déterminée expire dans moins de `seuil_jours` jours (y
+        compris déjà expiré). Jamais de désactivation automatique : cette
+        méthode sert uniquement à signaler, l'admin décide."""
+        jours = self.jours_avant_fin_contrat()
+        return jours is not None and jours <= seuil_jours
+
+    @classmethod
+    def contrats_a_renouveler(cls, structure_id, seuil_jours=30):
+        """Employés actifs de la structure dont le contrat expire dans
+        moins de `seuil_jours` jours (ou déjà expiré) — pour l'alerte du
+        tableau de bord RH."""
+        limite = date.today() + timedelta(days=seuil_jours)
+        return cls.query.filter(
+            cls.structure_id == structure_id,
+            cls.statut == 'Actif',
+            cls.date_fin_contrat.isnot(None),
+            cls.date_fin_contrat <= limite,
+        ).order_by(cls.date_fin_contrat.asc()).all()
+
     def solde_conges(self):
         """Solde total des congés (ancien système)"""
         anciennete_mois = self.calculer_anciennete() * 12
