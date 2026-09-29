@@ -4,15 +4,18 @@
 <meta charset="UTF-8">
 <title>Reçu — {{ vente.numero_local }}</title>
 <style>
-body { font-family: 'Courier New', monospace; font-size: 12px; max-width: 320px; margin: 0 auto; padding: 10px; }
+body { font-family: {{ "'Courier New', monospace" if format == '80mm' else "Arial, sans-serif" }}; font-size: {{ '11px' if format == '80mm' else '14px' }}; max-width: {{ '78mm' if format == '80mm' else '480px' }}; margin: 0 auto; padding: 10px; }
 .centre { text-align: center; }
 .ligne { border-top: 1px dashed #000; margin: 6px 0; }
-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+table { width: 100%; border-collapse: collapse; font-size: {{ '10px' if format == '80mm' else '13px' }}; }
 td, th { padding: 2px 0; }
 .droite { text-align: right; }
-.total { font-weight: bold; font-size: 13px; }
+.total { font-weight: bold; font-size: {{ '12px' if format == '80mm' else '15px' }}; }
 .no-print { margin-top: 15px; }
-.avertissement { background: #fff3cd; border: 1px solid #b45309; padding: 6px; margin-bottom: 8px; font-size: 10px; }
+.avertissement { background: #fff3cd; border: 1px solid #b45309; padding: 6px; margin-bottom: 8px; font-size: {{ '9px' if format == '80mm' else '11px' }}; }
+{% if format == '80mm' %}
+@page { size: 80mm auto; margin: 2mm 3mm; }
+{% endif %}
 @media print {
     .no-print { display: none !important; }
     body { max-width: 100%; }
@@ -44,13 +47,13 @@ td, th { padding: 2px 0; }
 
 <p>
     <strong>Patient :</strong> {{ patient_nom }}<br>
-    {% if vente.taux_assurance and vente.taux_assurance > 0 %}
-    Prise en charge : {{ vente.taux_assurance }}%<br>
+    {% if vente.assurance_nom and vente.taux_assurance and vente.taux_assurance > 0 %}
+    {{ vente.assurance_nom }} — Prise en charge : {{ vente.taux_assurance }}%{% if patient_numero_assure %} (N° {{ patient_numero_assure }}){% endif %}<br>
     {% else %}
     Non assuré<br>
     {% endif %}
     {% if vente.assurance2_nom %}
-    CAC {{ vente.assurance2_nom }} ({{ vente.taux_assurance2 }}%)<br>
+    CAC {{ vente.assurance2_nom }} ({{ vente.taux_assurance2 }}%){% if vente.societe_assurance2 %} — {{ vente.societe_assurance2 }}{% endif %}<br>
     {% endif %}
     Paiement : {{ vente.mode_paiement }}
 </p>
@@ -75,7 +78,10 @@ td, th { padding: 2px 0; }
 <table>
     <tr><td>Sous-total</td><td class="droite">{{ '{:,.0f}'.format(vente.sous_total or 0).replace(',', ' ') }} FCFA</td></tr>
     {% if vente.prise_en_charge %}
-    <tr><td>Prise en charge</td><td class="droite">-{{ '{:,.0f}'.format(vente.prise_en_charge).replace(',', ' ') }} FCFA</td></tr>
+    <tr><td>Prise en charge {{ vente.assurance_nom or '' }}</td><td class="droite">-{{ '{:,.0f}'.format(vente.prise_en_charge).replace(',', ' ') }} FCFA</td></tr>
+    {% endif %}
+    {% if vente.prise_en_charge2 %}
+    <tr><td>Prise en charge CAC</td><td class="droite">-{{ '{:,.0f}'.format(vente.prise_en_charge2).replace(',', ' ') }} FCFA</td></tr>
     {% endif %}
     <tr class="total"><td>NET À PAYER</td><td class="droite">{{ '{:,.0f}'.format(vente.net_a_payer or 0).replace(',', ' ') }} FCFA</td></tr>
     <tr><td>Montant donné</td><td class="droite">{{ '{:,.0f}'.format(vente.montant_donne or 0).replace(',', ' ') }} FCFA</td></tr>
@@ -92,7 +98,16 @@ td, th { padding: 2px 0; }
 
 <div class="no-print centre">
     <button onclick="window.print()">Imprimer</button>
+    {% if format == '80mm' %}
+    <a href="?format=A4">Voir en A4</a>
+    {% else %}
+    <a href="?format=80mm">Voir en ticket 80mm</a>
+    {% endif %}
 </div>
+
+{% if format == '80mm' %}
+<script>setTimeout(() => window.print(), 300);</script>
+{% endif %}
 
 </body>
 </html>

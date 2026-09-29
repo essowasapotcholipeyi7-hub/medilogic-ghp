@@ -50,16 +50,24 @@
     <div class="card">
         <div class="card-header">Encaissement</div>
         <div class="card-body">
+            <table class="table table-sm mb-3" id="tableauTotaux">
+                <tr><td>Sous-total</td><td class="text-end"><strong id="ligneSousTotal">0</strong> FCFA</td></tr>
+                <tr id="lignePriseEnCharge" class="d-none text-success">
+                    <td id="libellePriseEnCharge">Prise en charge assurance</td>
+                    <td class="text-end">-<span id="valeurPriseEnCharge">0</span> FCFA</td>
+                </tr>
+                <tr id="lignePriseEnCharge2" class="d-none text-success">
+                    <td id="libellePriseEnCharge2">Prise en charge CAC</td>
+                    <td class="text-end">-<span id="valeurPriseEnCharge2">0</span> FCFA</td>
+                </tr>
+                <tr class="fw-bold"><td>NET À PAYER</td><td class="text-end" id="ligneNetAPayer">0 FCFA</td></tr>
+            </table>
             <div class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label">Net à payer (FCFA)</label>
-                    <input type="number" id="netAPayer" class="form-control" min="0" step="1">
-                </div>
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <label class="form-label">Montant donné (FCFA)</label>
                     <input type="number" id="montantDonne" class="form-control" min="0" step="1">
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <label class="form-label">Mode de paiement</label>
                     <select id="modePaiement" class="form-select">
                         <option value="especes">Espèces</option>
@@ -68,18 +76,17 @@
                 </div>
             </div>
             <button id="btnValider" class="btn btn-success mt-3">Enregistrer la vente</button>
-            <span id="messageVente" class="ms-2"></span>
+            <div id="messageVente" class="mt-2"></div>
         </div>
     </div>
 </div>
 
 <script>
-let patientChoisiUuid = null;
+const LABELS_ASSURANCE = {amu_cnss: 'AMU-CNSS', amu_inam: 'AMU-INAM', amu_tns: 'AMU-TNS'};
+
+let patientChoisi = null; // objet complet (uuid, nom, prenom, assurances...)
 let typeVente = 'actes';
 let panier = [];
-let catalogue = { actes: [], produits: [] };
-
-fetch('/api/offline/patients/recherche').then(r => r.json()); // warmup
 
 document.querySelectorAll('#ongletsType .nav-link').forEach(a => {
     a.addEventListener('click', function(e) {
@@ -99,18 +106,31 @@ function rechercherPatient() {
         .then(d => {
             const zone = document.getElementById('resultatsPatient');
             if (!d.success || !d.patients.length) { zone.innerHTML = ''; return; }
-            zone.innerHTML = d.patients.slice(0, 8).map(p =>
-                `<button type="button" class="btn btn-outline-secondary btn-sm me-1 mb-1" onclick="choisirPatient('${p.uuid}', '${(p.nom + ' ' + p.prenom).replace(/'/g, "")}')">${p.nom} ${p.prenom}</button>`
+            window._patientsTrouves = d.patients;
+            zone.innerHTML = d.patients.slice(0, 8).map((p, i) =>
+                `<button type="button" class="btn btn-outline-secondary btn-sm me-1 mb-1" onclick="choisirPatient(${i})">${p.nom} ${p.prenom}</button>`
             ).join('');
         });
 }
 document.getElementById('rechercheInput').addEventListener('input', rechercherPatient);
 
-function choisirPatient(uuid, nomComplet) {
-    patientChoisiUuid = uuid;
+function choisirPatient(index) {
+    patientChoisi = window._patientsTrouves[index];
     const zone = document.getElementById('patientChoisi');
     zone.classList.remove('d-none');
-    zone.textContent = 'Patient sélectionné : ' + nomComplet;
+
+    let details = `Patient sélectionné : <strong>${patientChoisi.nom} ${patientChoisi.prenom}</strong>`;
+    const libelleAssurance = LABELS_ASSURANCE[patientChoisi.type_assurance];
+    if (libelleAssurance) {
+        details += ` — ${libelleAssurance} (${patientChoisi.taux_prise_charge}%)`;
+    } else {
+        details += ` — Non assuré`;
+    }
+    if (patientChoisi.assurance2_nom) {
+        details += ` + CAC ${patientChoisi.assurance2_nom} (${patientChoisi.taux_assurance2}%)`;
+    }
+    zone.innerHTML = details;
+    afficherPanier();
 }
 
 document.getElementById('articleInput').addEventListener('input', function() {
@@ -132,31 +152,88 @@ function ajouterArticle(e, nom, prix, id) {
     afficherPanier();
 }
 
+// Calcule prise en charge assurance principale + CAC, sur le modèle
+// simplifié : la CAC s'applique sur ce qui reste après l'assurance
+// principale (pas la logique complète PBR/plafond par compagnie de la
+// version en ligne, qui a besoin des tarifs PBR par article — hors
+// périmètre de ce pilote, voir le plan).
+function calculerTotaux() {
+    const sousTotal = panier.reduce((s, a) => s + (a.prix || 0) * (a.quantite || 1), 0);
+    let priseEnCharge = 0, priseEnCharge2 = 0;
+    if (patientChoisi) {
+        const tauxPrincipal = parseFloat(patientChoisi.taux_prise_charge) || 0;
+        priseEnCharge = Math.round(sousTotal * tauxPrincipal / 100);
+        const resteApresPrincipal = sousTotal - priseEnCharge;
+        if (patientChoisi.assurance2_nom) {
+            const tauxCac = parseFloat(patientChoisi.taux_assurance2) || 0;
+            priseEnCharge2 = Math.round(resteApresPrincipal * tauxCac / 100);
+        }
+    }
+    const netAPayer = Math.max(0, sousTotal - priseEnCharge - priseEnCharge2);
+    return { sousTotal, priseEnCharge, priseEnCharge2, netAPayer };
+}
+
 function afficherPanier() {
     const zone = document.getElementById('panier');
-    if (!panier.length) { zone.innerHTML = '<p class="text-muted">Aucun article ajouté.</p>'; return; }
-    zone.innerHTML = '<table class="table table-sm"><tbody>' + panier.map((a, i) =>
-        `<tr><td>${a.nom}</td><td>${a.prix} FCFA</td><td><button class="btn btn-sm btn-outline-danger" onclick="retirerArticle(${i})">Retirer</button></td></tr>`
-    ).join('') + '</table>';
-    const total = panier.reduce((s, a) => s + (a.prix || 0), 0);
-    document.getElementById('netAPayer').value = total;
-    document.getElementById('montantDonne').value = total;
+    if (!panier.length) { zone.innerHTML = '<p class="text-muted">Aucun article ajouté.</p>'; }
+    else {
+        zone.innerHTML = '<table class="table table-sm"><tbody>' + panier.map((a, i) =>
+            `<tr><td>${a.nom}</td><td>${a.prix} FCFA</td><td><button class="btn btn-sm btn-outline-danger" onclick="retirerArticle(${i})">Retirer</button></td></tr>`
+        ).join('') + '</table>';
+    }
+
+    const t = calculerTotaux();
+    document.getElementById('ligneSousTotal').textContent = t.sousTotal.toLocaleString('fr-FR');
+    document.getElementById('ligneNetAPayer').textContent = t.netAPayer.toLocaleString('fr-FR') + ' FCFA';
+
+    const lignePEC = document.getElementById('lignePriseEnCharge');
+    if (t.priseEnCharge > 0) {
+        lignePEC.classList.remove('d-none');
+        document.getElementById('libellePriseEnCharge').textContent =
+            'Prise en charge ' + (LABELS_ASSURANCE[patientChoisi.type_assurance] || 'assurance');
+        document.getElementById('valeurPriseEnCharge').textContent = t.priseEnCharge.toLocaleString('fr-FR');
+    } else {
+        lignePEC.classList.add('d-none');
+    }
+
+    const lignePEC2 = document.getElementById('lignePriseEnCharge2');
+    if (t.priseEnCharge2 > 0) {
+        lignePEC2.classList.remove('d-none');
+        document.getElementById('libellePriseEnCharge2').textContent = 'Prise en charge CAC ' + patientChoisi.assurance2_nom;
+        document.getElementById('valeurPriseEnCharge2').textContent = t.priseEnCharge2.toLocaleString('fr-FR');
+    } else {
+        lignePEC2.classList.add('d-none');
+    }
+
+    document.getElementById('montantDonne').value = t.netAPayer;
 }
 function retirerArticle(i) { panier.splice(i, 1); afficherPanier(); }
 
 document.getElementById('btnValider').addEventListener('click', function() {
-    if (!patientChoisiUuid) { alert('Choisissez un patient.'); return; }
+    if (!patientChoisi) { alert('Choisissez un patient.'); return; }
     if (!panier.length) { alert('Ajoutez au moins un article.'); return; }
 
-    const netAPayer = parseFloat(document.getElementById('netAPayer').value || 0);
+    const t = calculerTotaux();
     const montantDonne = parseFloat(document.getElementById('montantDonne').value || 0);
+    const libelleAssurance = LABELS_ASSURANCE[patientChoisi.type_assurance] || null;
+
     const data = {
-        patient_uuid: patientChoisiUuid,
-        sous_total: netAPayer,
-        net_a_payer: netAPayer,
+        patient_uuid: patientChoisi.uuid,
+        patient_nom: `${patientChoisi.nom} ${patientChoisi.prenom}`.trim(),
+        sous_total: t.sousTotal,
+        net_a_payer: t.netAPayer,
         montant_donne: montantDonne,
-        rendu: Math.max(0, montantDonne - netAPayer),
+        rendu: Math.max(0, montantDonne - t.netAPayer),
         mode_paiement: document.getElementById('modePaiement').value,
+        assurance_nom: libelleAssurance,
+        taux_assurance: libelleAssurance ? patientChoisi.taux_prise_charge : 0,
+        prise_en_charge: t.priseEnCharge,
+        numero_assure: patientChoisi.numero_assure || null,
+        assurance2_nom: patientChoisi.assurance2_nom || null,
+        taux_assurance2: patientChoisi.assurance2_nom ? patientChoisi.taux_assurance2 : 0,
+        prise_en_charge2: t.priseEnCharge2,
+        societe_assurance2: patientChoisi.societe_assurance2 || null,
+        numero_assure2: patientChoisi.numero_assure2 || null,
     };
     data[typeVente] = panier;
 
@@ -166,16 +243,20 @@ document.getElementById('btnValider').addEventListener('click', function() {
     }).then(r => r.json()).then(d => {
         const msg = document.getElementById('messageVente');
         if (d.success) {
-            msg.className = 'ms-2 text-success';
-            msg.innerHTML = 'Vente enregistrée (n° ' + d.numero_local + ')' + (d.avertissement ? ' — ' + d.avertissement : '') +
-                ' — <a href="/recu/' + d.uuid + '" target="_blank" class="btn btn-sm btn-outline-primary ms-2">Imprimer le reçu</a>';
-            panier = []; afficherPanier();
+            msg.innerHTML = '<span class="text-success">Vente enregistrée (n° ' + d.numero_local + ')' +
+                (d.avertissement ? ' — ' + d.avertissement : '') + '</span><br>' +
+                '<a href="/recu/' + d.uuid + '?format=80mm" target="_blank" class="btn btn-sm btn-outline-primary mt-1 me-1">Imprimer (ticket 80mm)</a>' +
+                '<a href="/recu/' + d.uuid + '?format=A4" target="_blank" class="btn btn-sm btn-outline-secondary mt-1">Imprimer (A4)</a>';
+            panier = []; patientChoisi = null;
+            document.getElementById('patientChoisi').classList.add('d-none');
+            afficherPanier();
         } else {
-            msg.className = 'ms-2 text-danger';
-            msg.textContent = 'Erreur : ' + d.error;
+            msg.innerHTML = '<span class="text-danger">Erreur : ' + d.error + '</span>';
         }
     });
 });
+
+afficherPanier();
 </script>
 </body>
 </html>

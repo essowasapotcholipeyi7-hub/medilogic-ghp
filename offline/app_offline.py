@@ -171,13 +171,23 @@ def recu(vente_uuid):
     colonne_articles = 'actes' if vente['type'] == 'actes' else 'produits'
     articles = _json.loads(vente.get(colonne_articles) or '[]')
 
+    assurances = _json.loads(vente.get('assurances') or '{}') or {}
+    principale = assurances.get('principale') or {}
+    vente['assurance_nom'] = principale.get('nom')
+
+    format_impression = request.args.get('format', 'A4')
+    if format_impression not in ('A4', '80mm'):
+        format_impression = 'A4'
+
     return render_template(
         'offline_recu.html',
         vente=vente,
         patient_nom=f"{dechiffrer(patient.get('nom')) or ''} {dechiffrer(patient.get('prenom')) or ''}".strip(),
+        patient_numero_assure=patient.get('numero_assure'),
         structure=structure,
         articles=articles,
         deja_synchronise=bool(vente.get('neon_id')),
+        format=format_impression,
     )
 
 
