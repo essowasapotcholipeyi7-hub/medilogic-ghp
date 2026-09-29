@@ -14,6 +14,7 @@ from offline.config_offline import (
     CONNECTIVITY_CHECK_INTERVAL_SECONDS,
     CATALOG_REFRESH_INTERVAL_SECONDS,
     USERS_CACHE_REFRESH_INTERVAL_SECONDS,
+    BACKUP_INTERVAL_SECONDS,
     SEUIL_ECHECS_AVANT_BASCULE,
 )
 from offline.connectivity import app_en_ligne_joignable
@@ -53,6 +54,41 @@ def _cycle():
     echecs_consecutifs = getattr(_cycle, '_echecs', 0)
     dernier_refresh_catalogue = getattr(_cycle, '_dernier_refresh_catalogue', 0)
     dernier_refresh_users = getattr(_cycle, '_dernier_refresh_users', 0)
+    dernier_backup = getattr(_cycle, '_dernier_backup', 0)
+
+    # ⭐ Sauvegarde locale : tourne QUE le réseau soit bon ou coupé — c'est
+    # justement pendant une coupure que les ventes pas encore synchronisées
+    # ont le plus besoin d'être protégées d'une panne du poste (voir backup.py).
+    maintenant_ts_backup = time.time()
+    if maintenant_ts_backup - dernier_backup > BACKUP_INTERVAL_SECONDS:
+        from offline.backup import sauvegarder
+        try:
+            ok, erreur = sauvegarder()
+            if ok and not erreur:
+                conn.execute(
+                    "UPDATE offline_sync_state SET last_successful_backup_at = ? WHERE id = 1",
+                    (_maintenant(),)
+                )
+                conn.commit()
+            elif ok and erreur:
+                # Copie locale réussie, secondaire (USB/réseau) échouée
+                conn.execute(
+                    "UPDATE offline_sync_state SET last_successful_backup_at = ?, "
+                    "last_backup_error = ?, last_backup_error_at = ? WHERE id = 1",
+                    (_maintenant(), erreur, _maintenant())
+                )
+                conn.commit()
+                print(f"[offline-watchdog] {erreur}")
+            else:
+                conn.execute(
+                    "UPDATE offline_sync_state SET last_backup_error = ?, last_backup_error_at = ? WHERE id = 1",
+                    (erreur, _maintenant())
+                )
+                conn.commit()
+                print(f"[offline-watchdog] {erreur}")
+        except Exception as e:
+            print(f"[offline-watchdog] Sauvegarde impossible : {e}")
+        dernier_backup = maintenant_ts_backup
 
     joignable = app_en_ligne_joignable()
 
@@ -105,6 +141,7 @@ def _cycle():
     _cycle._echecs = echecs_consecutifs
     _cycle._dernier_refresh_catalogue = dernier_refresh_catalogue
     _cycle._dernier_refresh_users = dernier_refresh_users
+    _cycle._dernier_backup = dernier_backup
 
 
 def demarrer():

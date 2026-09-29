@@ -43,6 +43,17 @@ SPREADSHEET_ID = Config.SPREADSHEET_ID
 CATALOG_REFRESH_INTERVAL_SECONDS = int(os.environ.get('OFFLINE_CATALOG_REFRESH_SECONDS', 600))
 USERS_CACHE_REFRESH_INTERVAL_SECONDS = int(os.environ.get('OFFLINE_USERS_REFRESH_SECONDS', 600))
 CONNECTIVITY_CHECK_INTERVAL_SECONDS = int(os.environ.get('OFFLINE_CHECK_INTERVAL_SECONDS', 20))
+
+# ⭐ Sauvegarde locale périodique du fichier SQLite — voir offline/backup.py.
+# Tourne QUE le PC soit en ligne ou hors-ligne (c'est justement pendant une
+# coupure que les ventes non encore synchronisées ont le plus besoin d'être
+# protégées d'une panne du poste). OFFLINE_BACKUP_DIR est optionnelle : un
+# second emplacement (clé USB branchée en permanence, lecteur réseau...) en
+# plus du dossier local par défaut — utile si ce PC lui-même tombe en panne
+# (le dossier local seul ne protège que contre une corruption du fichier).
+BACKUP_INTERVAL_SECONDS = int(os.environ.get('OFFLINE_BACKUP_INTERVAL_SECONDS', 900))
+BACKUP_RETENTION = int(os.environ.get('OFFLINE_BACKUP_RETENTION', 40))
+BACKUP_DIR_SECONDAIRE = os.environ.get('OFFLINE_BACKUP_DIR')
 # Comme db_failover.py : plusieurs échecs consécutifs avant de déclarer
 # hors-ligne, pour ne pas basculer sur un simple hoquet réseau isolé.
 SEUIL_ECHECS_AVANT_BASCULE = 2

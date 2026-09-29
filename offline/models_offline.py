@@ -168,4 +168,23 @@ def initialiser_schema():
     conn.execute(
         "INSERT OR IGNORE INTO offline_sync_state (id, mode) VALUES (1, 'online')"
     )
+    _migrer_colonnes_manquantes(conn)
     conn.commit()
+
+
+def _migrer_colonnes_manquantes(conn):
+    """offline_sync_state existe déjà chez les installations antérieures à
+    l'ajout de la sauvegarde périodique (voir offline/backup.py) —
+    CREATE TABLE IF NOT EXISTS ne rajoute pas de colonne à une table déjà
+    créée. ALTER TABLE ADD COLUMN au coup par coup, en vérifiant d'abord via
+    PRAGMA table_info (plus portable qu'un ADD COLUMN IF NOT EXISTS, apparu
+    seulement en SQLite 3.35)."""
+    colonnes_existantes = {row[1] for row in conn.execute("PRAGMA table_info(offline_sync_state)")}
+    colonnes_a_ajouter = {
+        'last_successful_backup_at': "TEXT",
+        'last_backup_error': "TEXT",
+        'last_backup_error_at': "TEXT",
+    }
+    for nom, type_sql in colonnes_a_ajouter.items():
+        if nom not in colonnes_existantes:
+            conn.execute(f"ALTER TABLE offline_sync_state ADD COLUMN {nom} {type_sql}")

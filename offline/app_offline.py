@@ -90,6 +90,17 @@ try:
 except Exception as e:
     print(f"[offline] Rafraîchissement initial impossible (réseau coupé ?) : {e}")
 
+# Une première sauvegarde dès le lancement (pas seulement au premier cycle du
+# watchdog, ~15 min plus tard) — utile si l'appli est redémarrée juste avant
+# une coupure prolongée.
+try:
+    from offline.backup import sauvegarder
+    ok, erreur = sauvegarder()
+    if erreur:
+        print(f"[offline] {erreur}")
+except Exception as e:
+    print(f"[offline] Sauvegarde initiale impossible : {e}")
+
 watchdog_offline.demarrer()
 
 

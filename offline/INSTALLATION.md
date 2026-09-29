@@ -78,6 +78,23 @@ ONLINE_APP_URL=https://medilogic-ghp.onrender.com
 `OFFLINE_STRUCTURE_ID=1` : ce PC est dédié à la structure 1 (clinique
 pilote) — jamais une autre structure sur ce même PC.
 
+### Sauvegarde automatique (optionnelle mais recommandée)
+
+L'appli sauvegarde automatiquement son fichier local toutes les 15 minutes
+(en ligne comme hors-ligne) dans `backups\` à côté du fichier `.sqlite3` —
+ça protège contre un fichier corrompu, mais pas contre une panne totale du
+disque de ce PC. Si une clé USB reste branchée en permanence, ou qu'un
+dossier réseau est accessible depuis ce poste, ajouter dans `.env` :
+
+```
+OFFLINE_BACKUP_DIR=D:\Sauvegardes_MediLogic
+```
+
+(remplacer par le vrai chemin — clé USB ou dossier réseau). Les 40
+dernières sauvegardes sont conservées à chaque emplacement, les plus
+anciennes supprimées automatiquement. Sans cette variable, seule la
+sauvegarde locale (sur le disque du PC) est faite.
+
 ## Étape 5 — Tester manuellement avant d'automatiser
 
 Toujours dans `C:\medilogic_ghp`, avec le venv activé :
