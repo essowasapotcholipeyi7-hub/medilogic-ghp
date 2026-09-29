@@ -35,41 +35,123 @@
             <span id="messageCreation" class="text-success small"></span>
         </div>
         <div class="card-body">
-            <form id="formPatient" class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label">Nom *</label>
-                    <input type="text" name="nom" class="form-control" required>
+            <form id="formPatient">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Nom *</label>
+                        <input type="text" name="nom" class="form-control" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Prénom *</label>
+                        <input type="text" name="prenom" class="form-control" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Téléphone *</label>
+                        <input type="tel" name="telephone" class="form-control" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Adresse</label>
+                        <input type="text" name="adresse" class="form-control">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Date de naissance</label>
+                        <input type="date" name="date_naissance" class="form-control">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="email" class="form-control">
+                    </div>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label">Prénom</label>
-                    <input type="text" name="prenom" class="form-control">
+
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        Personne à prévenir <span class="badge bg-secondary">Optionnel</span>
+                    </div>
+                    <div class="card-body row g-3">
+                        <div class="col-md-5">
+                            <label class="form-label">Nom complet</label>
+                            <input type="text" name="personne_a_prevenir_nom" class="form-control" placeholder="Ex: Jean Dupont">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Téléphone</label>
+                            <input type="text" name="personne_a_prevenir_telephone" class="form-control" placeholder="90 00 00 00">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Lien de parenté</label>
+                            <select name="personne_a_prevenir_relation" class="form-select">
+                                <option value="">--</option>
+                                <option>Conjoint(e)</option>
+                                <option>Enfant</option>
+                                <option>Parent</option>
+                                <option>Frère/Sœur</option>
+                                <option>Ami(e)</option>
+                                <option>Collègue</option>
+                                <option>Voisin(e)</option>
+                                <option>Autre</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label">Téléphone</label>
-                    <input type="text" name="telephone" class="form-control">
+
+                <div class="card mb-3">
+                    <div class="card-header py-2">Assurance principale</div>
+                    <div class="card-body row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Type d'assurance *</label>
+                            <select name="type_assurance" id="typeAssurance" class="form-select">
+                                <option value="non_assure">Non assuré (0%)</option>
+                                <option value="amu_cnss">AMU-CNSS (80%)</option>
+                                <option value="amu_inam">AMU-INAM (80%)</option>
+                                <option value="amu_tns">AMU-TNS (80%)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Taux de prise en charge (%)</label>
+                            <input type="number" name="taux_prise_charge" id="tauxPriseCharge" class="form-control" value="0" readonly>
+                        </div>
+                        <div class="col-md-4" id="numeroAssureDiv" style="display:none;">
+                            <label class="form-label">N° Assuré *</label>
+                            <input type="text" name="numero_assure" id="numeroAssure" class="form-control">
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label">Type d'assurance</label>
-                    <select name="type_assurance" class="form-select">
-                        <option value="non_assure">Non assuré</option>
-                        <option value="amu">AMU</option>
-                        <option value="cnss">CNSS</option>
-                        <option value="privee">Assurance privée</option>
-                    </select>
+
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        Assurance complémentaire (CAC) <span class="badge bg-secondary">Optionnel</span>
+                    </div>
+                    <div class="card-body row g-3">
+                        <div class="col-md-4 position-relative">
+                            <label class="form-label">Nom de l'assurance</label>
+                            <input type="text" name="assurance2_nom" id="assurance2Nom" class="form-control" placeholder="-- Aucune --" autocomplete="off">
+                            <div id="assurance2Suggestions" class="list-group position-absolute" style="z-index:1000; width:100%;"></div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Taux (%)</label>
+                            <input type="number" name="taux_assurance2" id="tauxAssurance2" class="form-control" value="0" readonly>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">N° CAC</label>
+                            <input type="text" name="numero_assure2" class="form-control" placeholder="Numéro CAC">
+                        </div>
+                        <div class="col-md-4 position-relative" id="societeDiv" style="display:none;">
+                            <label class="form-label">Société souscriptrice *</label>
+                            <input type="text" name="societe_assurance2" id="societeAssurance2" class="form-control" autocomplete="off">
+                            <div id="societeSuggestions" class="list-group position-absolute" style="z-index:1000; width:100%;"></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label">N° assuré</label>
-                    <input type="text" name="numero_assure" class="form-control">
-                </div>
-                <div class="col-12">
-                    <button type="submit" class="btn btn-primary">Enregistrer le patient</button>
-                </div>
+
+                <button type="submit" class="btn btn-primary">Enregistrer le patient</button>
             </form>
         </div>
     </div>
 </div>
 
 <script>
+const TAUX_PAR_DEFAUT_AMU = 80;
+const TAUX_PAR_DEFAUT_CAC = 80;
+
 function afficherResultats(patients) {
     const zone = document.getElementById('resultats');
     if (!patients.length) {
@@ -94,8 +176,67 @@ function rechercher() {
 document.getElementById('rechercheInput').addEventListener('input', rechercher);
 rechercher();
 
+// ===== Assurance principale : taux + N° assuré obligatoire =====
+document.getElementById('typeAssurance').addEventListener('change', function() {
+    const taux = document.getElementById('tauxPriseCharge');
+    const div = document.getElementById('numeroAssureDiv');
+    if (this.value === 'non_assure') {
+        taux.value = 0; taux.readOnly = true;
+        div.style.display = 'none';
+    } else {
+        taux.value = TAUX_PAR_DEFAUT_AMU; taux.readOnly = false;
+        div.style.display = '';
+    }
+});
+
+// ===== Assurance complémentaire : suggestions + taux + société =====
+let compagniesConnues = [];
+fetch('/api/offline/patients/compagnies-complementaires').then(r => r.json()).then(d => {
+    compagniesConnues = d.items || [];
+});
+
+function filtrerSuggestions(valeur, liste, zoneId, champId) {
+    const zone = document.getElementById(zoneId);
+    const terme = valeur.trim().toLowerCase();
+    if (!terme) { zone.innerHTML = ''; return; }
+    const matches = liste.filter(x => x.toLowerCase().includes(terme)).slice(0, 6);
+    zone.innerHTML = matches.map(m =>
+        `<a href="#" class="list-group-item list-group-item-action py-1" onclick="event.preventDefault(); document.getElementById('${champId}').value='${m.replace(/'/g, "\\'")}'; document.getElementById('${champId}').dispatchEvent(new Event('input')); document.getElementById('${zoneId}').innerHTML='';">${m}</a>`
+    ).join('');
+}
+
+const assurance2Input = document.getElementById('assurance2Nom');
+assurance2Input.addEventListener('input', function() {
+    filtrerSuggestions(this.value, compagniesConnues, 'assurance2Suggestions', 'assurance2Nom');
+    const taux = document.getElementById('tauxAssurance2');
+    const societeDiv = document.getElementById('societeDiv');
+    if (this.value.trim()) {
+        if (parseFloat(taux.value) === 0) taux.value = TAUX_PAR_DEFAUT_CAC;
+        taux.readOnly = false;
+        societeDiv.style.display = '';
+        chargerSocietes(this.value.trim());
+    } else {
+        taux.value = 0; taux.readOnly = true;
+        societeDiv.style.display = 'none';
+    }
+});
+
+let societesConnues = {};
+function chargerSocietes(assuranceNom) {
+    fetch('/api/offline/patients/societes-assurance?assurance=' + encodeURIComponent(assuranceNom))
+        .then(r => r.json()).then(d => { societesConnues[assuranceNom] = d.items || []; });
+}
+document.getElementById('societeAssurance2').addEventListener('input', function() {
+    const liste = societesConnues[assurance2Input.value.trim()] || [];
+    filtrerSuggestions(this.value, liste, 'societeSuggestions', 'societeAssurance2');
+});
+
 document.getElementById('formPatient').addEventListener('submit', function(e) {
     e.preventDefault();
+    if (assurance2Input.value.trim() && !document.getElementById('societeAssurance2').value.trim()) {
+        alert('Veuillez préciser la société ayant souscrit l\'assurance complémentaire "' + assurance2Input.value.trim() + '".');
+        return;
+    }
     const data = Object.fromEntries(new FormData(e.target).entries());
     fetch('/api/offline/patients', {
         method: 'POST',
@@ -105,6 +246,8 @@ document.getElementById('formPatient').addEventListener('submit', function(e) {
         if (d.success) {
             document.getElementById('messageCreation').textContent = 'Patient enregistré (n° ' + d.numero_local + ')';
             e.target.reset();
+            document.getElementById('numeroAssureDiv').style.display = 'none';
+            document.getElementById('societeDiv').style.display = 'none';
             rechercher();
         } else {
             alert('Erreur : ' + d.error);

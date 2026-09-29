@@ -48,11 +48,12 @@ initialiser_schema()
 try:
     from offline.catalog_sync import (
         rafraichir_numeros_locaux, rafraichir_catalogue, rafraichir_utilisateurs,
-        rafraichir_patients_existants,
+        rafraichir_patients_existants, rafraichir_structure_info,
     )
     rafraichir_numeros_locaux()
     rafraichir_catalogue()
     rafraichir_utilisateurs()
+    rafraichir_structure_info()
     n = rafraichir_patients_existants()
     if n:
         print(f"[offline] {n} patient(s) existant(s) mis en cache au démarrage.")
@@ -143,6 +144,41 @@ def catalogue_produits():
     if not utilisateur_connecte():
         return jsonify({'success': False, 'error': 'Non connecté'}), 401
     return jsonify({'success': True, 'items': _chercher_catalogue('catalogue_produits', request.args.get('q', ''))})
+
+
+@app.route('/recu/<vente_uuid>')
+def recu(vente_uuid):
+    if not utilisateur_connecte():
+        return redirect('/login')
+
+    import json as _json
+    from crypto_helper import dechiffrer
+
+    vente = requeter(
+        "SELECT * FROM offline_ventes WHERE uuid = ? AND structure_id = ?",
+        (vente_uuid, OFFLINE_STRUCTURE_ID)
+    )
+    if not vente:
+        return "Vente introuvable", 404
+    vente = dict(vente[0])
+
+    patient = requeter("SELECT * FROM offline_patients WHERE uuid = ?", (vente['patient_uuid'],))
+    patient = dict(patient[0]) if patient else {}
+
+    structure = requeter("SELECT * FROM offline_structure_info WHERE id = 1")
+    structure = dict(structure[0]) if structure else {}
+
+    colonne_articles = 'actes' if vente['type'] == 'actes' else 'produits'
+    articles = _json.loads(vente.get(colonne_articles) or '[]')
+
+    return render_template(
+        'offline_recu.html',
+        vente=vente,
+        patient_nom=f"{dechiffrer(patient.get('nom')) or ''} {dechiffrer(patient.get('prenom')) or ''}".strip(),
+        structure=structure,
+        articles=articles,
+        deja_synchronise=bool(vente.get('neon_id')),
+    )
 
 
 @app.route('/api/offline/sync/status')

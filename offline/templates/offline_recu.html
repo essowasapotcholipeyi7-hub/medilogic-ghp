@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Reçu — {{ vente.numero_local }}</title>
+<style>
+body { font-family: 'Courier New', monospace; font-size: 12px; max-width: 320px; margin: 0 auto; padding: 10px; }
+.centre { text-align: center; }
+.ligne { border-top: 1px dashed #000; margin: 6px 0; }
+table { width: 100%; border-collapse: collapse; font-size: 11px; }
+td, th { padding: 2px 0; }
+.droite { text-align: right; }
+.total { font-weight: bold; font-size: 13px; }
+.no-print { margin-top: 15px; }
+.avertissement { background: #fff3cd; border: 1px solid #b45309; padding: 6px; margin-bottom: 8px; font-size: 10px; }
+@media print {
+    .no-print { display: none !important; }
+    body { max-width: 100%; }
+}
+</style>
+</head>
+<body>
+
+{% if not deja_synchronise %}
+<div class="avertissement">
+    ⚠ Reçu généré hors-ligne — sera synchronisé automatiquement au retour
+    du réseau. Le numéro pourrait différer légèrement du numéro définitif
+    si un autre poste a vendu pour cette structure pendant la coupure.
+</div>
+{% endif %}
+
+<div class="centre">
+    <strong>{{ structure.nom or 'Structure' }}</strong><br>
+    {% if structure.adresse %}{{ structure.adresse }}<br>{% endif %}
+    {% if structure.telephone %}Tél: {{ structure.telephone }}<br>{% endif %}
+</div>
+<div class="ligne"></div>
+
+<div class="centre">
+    <strong>REÇU {{ 'PHARMACIE' if vente.type == 'pharmacie' else 'ACTES MÉDICAUX' }}</strong><br>
+    N° {{ '%06d' % (vente.numero_local or 0) }} — {{ vente.date_vente[:16] if vente.date_vente else '' }}
+</div>
+<div class="ligne"></div>
+
+<p>
+    <strong>Patient :</strong> {{ patient_nom }}<br>
+    {% if vente.taux_assurance and vente.taux_assurance > 0 %}
+    Prise en charge : {{ vente.taux_assurance }}%<br>
+    {% else %}
+    Non assuré<br>
+    {% endif %}
+    {% if vente.assurance2_nom %}
+    CAC {{ vente.assurance2_nom }} ({{ vente.taux_assurance2 }}%)<br>
+    {% endif %}
+    Paiement : {{ vente.mode_paiement }}
+</p>
+<div class="ligne"></div>
+
+<table>
+    <thead>
+        <tr><th style="text-align:left;">Article</th><th class="droite">Qté</th><th class="droite">Total</th></tr>
+    </thead>
+    <tbody>
+        {% for a in articles %}
+        <tr>
+            <td>{{ a.nom }}</td>
+            <td class="droite">{{ a.quantite or 1 }}</td>
+            <td class="droite">{{ '{:,.0f}'.format((a.prix or a.prix_unitaire or 0) * (a.quantite or 1)).replace(',', ' ') }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<div class="ligne"></div>
+
+<table>
+    <tr><td>Sous-total</td><td class="droite">{{ '{:,.0f}'.format(vente.sous_total or 0).replace(',', ' ') }} FCFA</td></tr>
+    {% if vente.prise_en_charge %}
+    <tr><td>Prise en charge</td><td class="droite">-{{ '{:,.0f}'.format(vente.prise_en_charge).replace(',', ' ') }} FCFA</td></tr>
+    {% endif %}
+    <tr class="total"><td>NET À PAYER</td><td class="droite">{{ '{:,.0f}'.format(vente.net_a_payer or 0).replace(',', ' ') }} FCFA</td></tr>
+    <tr><td>Montant donné</td><td class="droite">{{ '{:,.0f}'.format(vente.montant_donne or 0).replace(',', ' ') }} FCFA</td></tr>
+    {% if vente.rendu %}
+    <tr><td>Rendu</td><td class="droite">{{ '{:,.0f}'.format(vente.rendu).replace(',', ' ') }} FCFA</td></tr>
+    {% endif %}
+    {% if vente.reste_a_payer %}
+    <tr class="total"><td>RESTE À PAYER</td><td class="droite">{{ '{:,.0f}'.format(vente.reste_a_payer).replace(',', ' ') }} FCFA</td></tr>
+    {% endif %}
+</table>
+<div class="ligne"></div>
+
+<p class="centre">Vendu par : {{ vente.created_by_nom }}<br>Bonne guérison !</p>
+
+<div class="no-print centre">
+    <button onclick="window.print()">Imprimer</button>
+</div>
+
+</body>
+</html>

@@ -119,6 +119,15 @@ CREATE TABLE IF NOT EXISTS offline_outbox (
     last_error TEXT
 );
 
+CREATE TABLE IF NOT EXISTS offline_structure_info (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    nom TEXT,
+    adresse TEXT,
+    telephone TEXT,
+    email TEXT,
+    refreshed_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS offline_sync_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     mode TEXT NOT NULL DEFAULT 'online',   -- online | offline

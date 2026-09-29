@@ -99,6 +99,20 @@ def creer_patient():
     if type_assurance and type_assurance != 'non_assure' and not (data.get('numero_assure') or '').strip():
         return jsonify({'success': False, 'error': "Le numéro d'assuré est obligatoire pour l'assurance sélectionnée."}), 400
 
+    assurance2_nom = (data.get('assurance2_nom') or '').strip()
+    if assurance2_nom and not (data.get('societe_assurance2') or '').strip():
+        return jsonify({'success': False, 'error': f'Veuillez préciser la société ayant souscrit l\'assurance complémentaire "{assurance2_nom}".'}), 400
+
+    # ⭐ Défense en profondeur (même principe qu'ailleurs dans ce dépôt) :
+    # les taux par défaut sont déjà posés côté JS, revérifiés ici au cas où
+    # l'appel arrive directement sans passer par le formulaire.
+    taux_prise_charge = data.get('taux_prise_charge', 0) or 0
+    if type_assurance != 'non_assure' and not taux_prise_charge:
+        taux_prise_charge = 80
+    taux_assurance2 = data.get('taux_assurance2', 0) or 0
+    if assurance2_nom and not taux_assurance2:
+        taux_assurance2 = 80
+
     patient_uuid = str(uuid_module.uuid4())
     numero_local = _prochain_numero_local_offline()
     horodatage = _maintenant()
@@ -116,10 +130,10 @@ def creer_patient():
         'adresse': data.get('adresse', ''),
         'date_naissance': data.get('date_naissance') or None,
         'type_assurance': type_assurance,
-        'taux_prise_charge': data.get('taux_prise_charge', 0),
+        'taux_prise_charge': taux_prise_charge,
         'numero_assure': data.get('numero_assure', ''),
-        'assurance2_nom': data.get('assurance2_nom'),
-        'taux_assurance2': data.get('taux_assurance2', 0),
+        'assurance2_nom': assurance2_nom or None,
+        'taux_assurance2': taux_assurance2,
         'numero_assure2': data.get('numero_assure2'),
         'societe_assurance2': data.get('societe_assurance2'),
         'personne_a_prevenir_nom': data.get('personne_a_prevenir_nom'),
@@ -149,10 +163,10 @@ def creer_patient():
         'adresse': data.get('adresse', ''),
         'date_naissance': data.get('date_naissance') or None,
         'type_assurance': type_assurance,
-        'taux_prise_charge': data.get('taux_prise_charge', 0),
+        'taux_prise_charge': taux_prise_charge,
         'numero_assure': data.get('numero_assure', ''),
-        'assurance2_nom': data.get('assurance2_nom'),
-        'taux_assurance2': data.get('taux_assurance2', 0),
+        'assurance2_nom': assurance2_nom or None,
+        'taux_assurance2': taux_assurance2,
         'numero_assure2': data.get('numero_assure2'),
         'societe_assurance2': data.get('societe_assurance2'),
         'personne_a_prevenir_nom': data.get('personne_a_prevenir_nom'),
@@ -175,3 +189,40 @@ def creer_patient():
     ])
 
     return jsonify({'success': True, 'uuid': patient_uuid, 'numero_local': numero_local})
+
+
+@bp_patients.route('/api/offline/patients/compagnies-complementaires')
+def compagnies_complementaires():
+    """Suggestions pour le champ assurance2_nom — même principe que
+    /api/compagnies-complementaires en ligne (app.py:2221-2267) : pas une
+    liste figée, juste les noms déjà rencontrés pour cette structure
+    (patients déjà en cache, existants ou créés hors-ligne)."""
+    if not utilisateur_connecte():
+        return jsonify({'success': False, 'error': 'Non connecté'}), 401
+    lignes = requeter(
+        """SELECT DISTINCT assurance2_nom FROM offline_patients
+           WHERE structure_id = ? AND assurance2_nom IS NOT NULL AND assurance2_nom != ''
+           ORDER BY assurance2_nom""",
+        (OFFLINE_STRUCTURE_ID,)
+    )
+    return jsonify({'success': True, 'items': [l['assurance2_nom'] for l in lignes]})
+
+
+@bp_patients.route('/api/offline/patients/societes-assurance')
+def societes_assurance():
+    """Suggestions pour societe_assurance2, filtrées par le nom d'assurance
+    complémentaire déjà saisi — même principe que /api/societes-assurance
+    en ligne (app.py:2286-2305)."""
+    if not utilisateur_connecte():
+        return jsonify({'success': False, 'error': 'Non connecté'}), 401
+    assurance_nom = (request.args.get('assurance') or '').strip()
+    if not assurance_nom:
+        return jsonify({'success': True, 'items': []})
+    lignes = requeter(
+        """SELECT DISTINCT societe_assurance2 FROM offline_patients
+           WHERE structure_id = ? AND assurance2_nom = ?
+                 AND societe_assurance2 IS NOT NULL AND societe_assurance2 != ''
+           ORDER BY societe_assurance2""",
+        (OFFLINE_STRUCTURE_ID, assurance_nom)
+    )
+    return jsonify({'success': True, 'items': [l['societe_assurance2'] for l in lignes]})

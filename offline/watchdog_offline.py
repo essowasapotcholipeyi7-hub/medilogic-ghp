@@ -42,7 +42,7 @@ def _cycle():
     from offline.outbox import push_pending
     from offline.catalog_sync import (
         rafraichir_catalogue, rafraichir_utilisateurs, rafraichir_numeros_locaux,
-        rafraichir_patients_existants,
+        rafraichir_patients_existants, rafraichir_structure_info,
     )
 
     conn = get_connection()
@@ -86,6 +86,7 @@ def _cycle():
                 try:
                     rafraichir_catalogue()
                     rafraichir_numeros_locaux()
+                    rafraichir_structure_info()
                     n = rafraichir_patients_existants()
                     if n:
                         print(f"[offline-watchdog] {n} patient(s) existant(s) mis en cache.")

@@ -205,6 +205,39 @@ def rafraichir_patients_existants():
     return n
 
 
+def rafraichir_structure_info():
+    """Cache le nom/adresse/téléphone de cette structure — nécessaire pour
+    l'en-tête du reçu imprimé hors-ligne (offline_recu.html), qui ne peut
+    pas interroger Google Sheets/Neon en direct comme le fait la vraie
+    page recu_client.html."""
+    if OFFLINE_FORCE:
+        raise ReseauSimuleCoupe()
+    import psycopg2
+    import psycopg2.extras
+    conn_pg = psycopg2.connect(DATABASE_URL, connect_timeout=6)
+    try:
+        with conn_pg.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT nom, adresse, telephone, email FROM structures WHERE id = %s",
+                (OFFLINE_STRUCTURE_ID,)
+            )
+            ligne = cur.fetchone()
+    finally:
+        conn_pg.close()
+    if not ligne:
+        return
+
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO offline_structure_info (id, nom, adresse, telephone, email, refreshed_at)
+           VALUES (1, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET nom=excluded.nom, adresse=excluded.adresse,
+               telephone=excluded.telephone, email=excluded.email, refreshed_at=excluded.refreshed_at""",
+        (ligne['nom'], ligne['adresse'], ligne['telephone'], ligne['email'], _maintenant())
+    )
+    conn.commit()
+
+
 def rafraichir_utilisateurs():
     """Cache email + hash de mot de passe + rôle des comptes de cette
     structure — jamais le mot de passe en clair. Même source que la vraie

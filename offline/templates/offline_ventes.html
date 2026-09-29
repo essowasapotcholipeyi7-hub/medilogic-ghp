@@ -167,7 +167,8 @@ document.getElementById('btnValider').addEventListener('click', function() {
         const msg = document.getElementById('messageVente');
         if (d.success) {
             msg.className = 'ms-2 text-success';
-            msg.textContent = 'Vente enregistrée (n° ' + d.numero_local + ')' + (d.avertissement ? ' — ' + d.avertissement : '');
+            msg.innerHTML = 'Vente enregistrée (n° ' + d.numero_local + ')' + (d.avertissement ? ' — ' + d.avertissement : '') +
+                ' — <a href="/recu/' + d.uuid + '" target="_blank" class="btn btn-sm btn-outline-primary ms-2">Imprimer le reçu</a>';
             panier = []; afficherPanier();
         } else {
             msg.className = 'ms-2 text-danger';
