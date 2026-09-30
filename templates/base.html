@@ -2523,6 +2523,11 @@
                     Historique Annulations
                 </a>
                 {% endif %}
+                {% if a_acces('journal') and not onglet_cache('journal') and not _bloq %}
+                <a class="menu-item" href="{{ url_for('journal.page_journal') }}">
+                    Journal des mouvements
+                </a>
+                {% endif %}
                 {% if session.is_admin %}
                 <a class="menu-item" href="{{ url_for('sync_gestion_patients_config') }}">
                     Synchronisation gestion_patients
@@ -2594,6 +2599,22 @@
         {% endif %}
 
         {% endif %} {# fin restriction laborantin/radiologue #}
+
+        <!-- ⭐ Guide d'utilisation & FAQ — visibles à TOUS les rôles sans
+             exception dans sidebar_menu.html (placés hors de toute
+             restriction) mais absents du menu horizontal. Mêmes liens ici,
+             en dehors du bloc laborantin/radiologue ci-dessus, pour un
+             comportement identique. -->
+        <li class="nav-item">
+            <a class="nav-link-top" href="{{ url_for('guide_utilisation') }}">
+                <i class="fas fa-book-open"></i> Guide d'utilisation
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link-top" href="{{ url_for('page_faq') }}">
+                <i class="fas fa-circle-question"></i> FAQ
+            </a>
+        </li>
 
         {% if session.role == 'laborantin' %}
         <li class="nav-item">
