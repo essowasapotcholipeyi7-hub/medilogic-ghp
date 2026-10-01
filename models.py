@@ -1,12 +1,8 @@
 # models.py - GHP
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, date, time, timedelta
-from utils.db_failover import FailoverSession
 # ⭐ Créer db pour les modèles
-# session_options : voir utils/db_failover.py — route chaque requête vers
-# Neon ou le Postgres local selon l'état de la bascule (inactif si
-# DATABASE_URL_LOCAL n'est pas définie, donc aucun changement sur Render).
-db = SQLAlchemy(session_options={'class_': FailoverSession})
+db = SQLAlchemy()
 
 # ============================================================
 # STRUCTURE
@@ -2623,6 +2619,14 @@ class Hospitalisation(db.Model):
     vente_id = db.Column(db.Integer)
     created_by = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # ⭐ Recettes par service (patron, 2026-09-30) : service RÉEL du séjour
+    # (ServiceHospitalisation), pour attribuer TOUTE la recette du séjour à
+    # ce service à la facturation — indépendant de lit_id (un séjour sans
+    # lit/chambre assigné doit quand même pouvoir être rattaché à un
+    # service). Choisi à l'admission ; dérivé automatiquement du service de
+    # la chambre si un lit est choisi, mais toujours modifiable/forçable.
+    # Voir services/service_acte_service.py.
+    service_id = db.Column(db.Integer)
 
     @property
     def nombre_jours(self):
@@ -2911,6 +2915,78 @@ class ClassificationActe(db.Model):
     nom_acte = db.Column(db.String(255), nullable=False)
     type_prestation = db.Column(db.String(20), nullable=False)  # 'analyse' | 'examen'
     created_by = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# ============================================================
+# ⭐ RECETTES PAR SERVICE (patron, 2026-09-30) : "à la fin d'année on doit
+# [évaluer] les efforts de chaque service... pour décider de ristourne ou
+# pas". Réutilise la liste de services déjà réelle et déjà peuplée
+# (ServiceHospitalisation, Service > Chambre > Lit) comme référentiel
+# unique plutôt que d'en créer une deuxième — voir
+# services/service_acte_service.py pour la résolution à 3 niveaux (choix
+# explicite à la vente > classification manuelle ci-dessous > détection
+# automatique depuis le code de nomenclature dans le nom de l'acte).
+# ============================================================
+class ParametrageService(db.Model):
+    """Active/désactive, pour CETTE structure, le sélecteur "Service" au
+    moment de la vente — patron : "chaque structure décide de le faire
+    ainsi ou pas, parce que certains centres n'ont pas besoin de ça".
+    Désactivé par défaut ; la classification manuelle et la détection
+    automatique restent actives dans tous les cas, même désactivé."""
+    __tablename__ = 'parametrage_service'
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False, unique=True)
+    choix_service_actif = db.Column(db.Boolean, default=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @classmethod
+    def get_ou_creer(cls, structure_id):
+        param = cls.query.filter_by(structure_id=structure_id).first()
+        if not param:
+            param = cls(structure_id=structure_id)
+            db.session.add(param)
+            db.session.commit()
+        return param
+
+
+class ClassificationServiceActe(db.Model):
+    """Service attribué manuellement à un acte précis — même forme que
+    ClassificationActe ci-dessus (structure_id + nom_acte, upsert) : pour
+    les cas que la détection automatique ne peut pas trancher seule (ex.
+    un acte chirurgical sur l'appareil génital doit aller en
+    Gynéco-Obstétrique, pas en Chirurgie générale — indiscernable depuis
+    le seul nom de l'acte)."""
+    __tablename__ = 'classification_service_actes'
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    nom_acte = db.Column(db.String(255), nullable=False)
+    service_id = db.Column(db.Integer, nullable=False)
+    created_by = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class RecetteService(db.Model):
+    """Une ligne facturée attribuée à un service — créée automatiquement à
+    la vente (même principe que PrestationMedecin). Rapport de GESTION
+    pour comparer l'activité des services (décision de ristourne en fin
+    d'année) : ne touche jamais aux écritures comptables SYSCOHADA
+    elles-mêmes, qui restent scopées par compte, pas par service.
+    service_id/service_nom restent NULL (service_nom='Non classé') quand
+    aucun des 3 niveaux de résolution n'a pu trancher — jamais de ligne
+    silencieusement absente du rapport."""
+    __tablename__ = 'recettes_service'
+    id = db.Column(db.Integer, primary_key=True)
+    structure_id = db.Column(db.Integer, nullable=False)
+    service_id = db.Column(db.Integer)
+    service_nom = db.Column(db.String(255))  # dénormalisé, figé au moment de la vente
+    vente_id = db.Column(db.Integer)
+    nom_acte = db.Column(db.String(255), nullable=False)
+    type_source = db.Column(db.String(20))  # 'acte' | 'produit' | 'hospitalisation'
+    origine = db.Column(db.String(20))  # 'choix_manuel' | 'classification' | 'auto' | 'non_classe'
+    prix = db.Column(db.Numeric, nullable=False)
+    quantite = db.Column(db.Integer, default=1)
+    montant = db.Column(db.Numeric, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -3342,6 +3418,9 @@ class SoinsAmbulatoires(db.Model):
     vente_id = db.Column(db.Integer)
     created_by = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # ⭐ Recettes par service — même principe que Hospitalisation.service_id
+    # (voir son commentaire équivalent).
+    service_id = db.Column(db.Integer)
 
     # ⭐ Mêmes propriétés "effectives", mot pour mot, que Hospitalisation
     # (models.py) — y compris le garde-fou taux > 0, sans quoi un patient
@@ -3973,75 +4052,6 @@ class Paie(db.Model):
         mois_noms = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
                      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
         return f"{mois_noms[self.mois]} {self.annee}"
-
-
-# ============================================================================
-# BASCULE HORS-LIGNE — synchronisation base locale <-> Neon (voir utils/db_failover.py)
-# __bind_key__ = 'local' : ces 2 tables ne vivent QUE sur Postgres local,
-# jamais sur Neon (Neon n'a pas ce bind). Elles ne sont donc jamais écrasées
-# par un rapatriement (pg_restore) des données de Neon vers le local.
-# ============================================================================
-
-class SyncState(db.Model):
-    """État courant de la bascule (une seule ligne, id=1)."""
-    __tablename__ = 'sync_state'
-    __bind_key__ = 'local'
-
-    id = db.Column(db.Integer, primary_key=True)
-    mode = db.Column(db.String(10), default='online')  # 'online' (Neon) | 'offline' (local)
-    derniere_bascule_offline = db.Column(db.DateTime)
-    dernier_sync_reussi = db.Column(db.DateTime)
-    derniere_erreur_sync = db.Column(db.Text)
-    derniere_erreur_sync_at = db.Column(db.DateTime)
-    dernier_sync_sheets = db.Column(db.DateTime)  # dernier rafraîchissement du miroir Google Sheets
-
-    @classmethod
-    def get_ou_creer(cls):
-        etat = cls.query.get(1)
-        if not etat:
-            etat = cls(id=1, mode='online')
-            db.session.add(etat)
-            db.session.commit()
-        return etat
-
-
-class SyncChangelog(db.Model):
-    """Journal des écritures faites en local pendant une coupure Neon,
-    à rejouer vers Neon dès que la connexion revient."""
-    __tablename__ = 'sync_changelog'
-    __bind_key__ = 'local'
-
-    id = db.Column(db.Integer, primary_key=True)
-    table_name = db.Column(db.String(100), nullable=False)
-    operation = db.Column(db.String(10), nullable=False)  # insert | update | delete
-    pk_value = db.Column(db.Integer, nullable=False)
-    payload = db.Column(db.JSON)  # snapshot complet de la ligne (insert/update) ; null pour delete
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    synced = db.Column(db.Boolean, default=False)
-    synced_at = db.Column(db.DateTime)
-
-
-class SheetsMirror(db.Model):
-    """Miroir local, en LECTURE SEULE, de certaines feuilles Google Sheets
-    (actes, produits/médicaments, users, lunettes — par structure — et la
-    feuille globale 'structures'). Permet à l'appli (y compris la connexion)
-    de continuer à fonctionner quand Google Sheets est injoignable.
-    Alimenté par utils/sheets_mirror.py — ne jamais modifier à la main,
-    ce n'est pas la source de vérité (contrairement à sync_changelog qui,
-    lui, part du local vers Neon)."""
-    __tablename__ = 'sheets_mirror'
-    __bind_key__ = 'local'
-
-    id = db.Column(db.Integer, primary_key=True)
-    structure_id = db.Column(db.Integer, nullable=False)
-    sheet_type = db.Column(db.String(30), nullable=False)  # actes | produits | users | lunettes | structures
-    row_key = db.Column(db.String(50), nullable=False)     # colonne "ID" de la feuille
-    data = db.Column(db.JSON, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    __table_args__ = (
-        db.UniqueConstraint('structure_id', 'sheet_type', 'row_key', name='uq_sheets_mirror_row'),
-    )
 
 
 # ============================================================================

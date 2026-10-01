@@ -25,20 +25,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        /* ⭐ FIX : #offlineBanner porte aussi la classe utilitaire Bootstrap
-           .d-flex (display:flex !important) pour sa mise en page interne.
-           Le navigateur cache normalement un élément [hidden] via une règle
-           UA "display:none" — mais celle-ci n'est PAS !important, donc le
-           !important de .d-flex gagnait toujours et la bannière restait
-           visible en permanence, quoi que fasse le JS (qui ne fait
-           qu'ajouter/retirer l'attribut hidden). D'où le bandeau "Mode
-           hors-ligne" affiché en continu même quand tout était en ligne.
-           Cette règle, plus spécifique (#id[hidden]) et elle aussi
-           !important, reprend la main quand hidden est présent. */
-        #offlineBanner[hidden] {
-            display: none !important;
-        }
-
         /* ============================================
            BASE - CONSERVÉE
            ============================================ */
@@ -1943,40 +1929,6 @@
     transform-origin: top center;
 }
 
-/* ⭐ Indicateur "connecté" — pulsation violette chic à côté de l'horloge,
-   voir verifierEtatSynchro() (JS) pour ce qui pilote .offline. Le halo qui
-   se dilate en s'effaçant (::after) donne l'effet "battement" plutôt qu'un
-   clignotement brut, moins fatigant à l'œil en continu toute la journée. */
-.statut-connexion-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #4C2A85;
-    display: inline-block;
-    position: relative;
-    flex-shrink: 0;
-}
-.statut-connexion-dot::after {
-    content: '';
-    position: absolute;
-    inset: -6px;
-    border-radius: 50%;
-    border: 1.5px solid #4C2A85;
-    opacity: 0.65;
-    animation: statutConnexionPulse 1.8s ease-out infinite;
-}
-@keyframes statutConnexionPulse {
-    0%   { transform: scale(0.5); opacity: 0.65; }
-    70%  { transform: scale(1.8); opacity: 0; }
-    100% { transform: scale(1.8); opacity: 0; }
-}
-.statut-connexion-dot.hors-ligne {
-    background: #9AA3AB;
-}
-.statut-connexion-dot.hors-ligne::after {
-    display: none;
-}
-
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -2203,7 +2155,6 @@
                      "..." — le bouton tient TOUJOURS dans la navbar, et le
                      nom complet reste lisible via l'infobulle (title). -->
                 <button class="btn btn-light rounded-pill dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" title="{{ session.user_name|default('Utilisateur') }}">
-                    <span class="statut-connexion-dot" id="statutConnexionDot" title="Connecté au serveur principal"></span>
                     <i class="fas fa-user-circle"></i>
                     <span class="user-name-text">{{ session.user_name|default('Utilisateur') }}</span>
                 </button>
@@ -2295,22 +2246,49 @@
         {% if not _bloq %}
         <li class="nav-item nav-item-soins">
             <a class="nav-link-top" href="#" onclick="return false;">
-                Soins&actes&vente <i class="fas fa-chevron-down arrow"></i>
+                Actes <i class="fas fa-chevron-down arrow"></i>
             </a>
             <!-- ⭐ "large" (grille 2 colonnes) retirée — seul ce menu
                  l'utilisait, ce qui le désalignait visuellement de tous les
                  autres (Finances, Pharmacie...), en simple colonne — patron :
                  "il faut aligner les onglets... telle que c'est dans finance
                  par exemple". -->
+            <!-- ⭐ Ordre revu (patron, 2026-10-01 : "range bien les choses,
+                 commence par labo radio, hospitalisation, soins ambulatoire,
+                 ainsi de suite") — parcours clinique d'abord (examens, séjour,
+                 consultation, prescriptions), opérationnel/stock ensuite. -->
             <div class="mega-menu">
+                {% if not onglet_cache('actes_vente') %}
+                <a class="menu-item" href="{{ url_for('actes_vente') }}">
+                    Labo/Radio/Hospi/Actes
+                </a>
+                {% endif %}
+                {% if not onglet_cache('hospitalisation') %}
+                <a class="menu-item" href="{{ url_for('page_hospitalisation') }}">
+                    Hospitalisation (suivi de séjour)
+                </a>
+                {% endif %}
+                <!-- ⭐ Sous-onglet "Soins ambulatoires" — même patron/gate que
+                     sidebar_menu.html (onglet_cache('soins_ambulatoires')),
+                     manquait du menu horizontal. -->
+                {% if not onglet_cache('soins_ambulatoires') and not _bloq %}
+                <a class="menu-item" href="{{ url_for('page_soins_ambulatoires') }}">
+                    Soins ambulatoires
+                </a>
+                {% endif %}
                 {% if not onglet_cache('consultation') %}
                 <a class="menu-item" href="{{ url_for('consultation') }}">
                     Consultation
                 </a>
                 {% endif %}
-                {% if not onglet_cache('actes_vente') %}
-                <a class="menu-item" href="{{ url_for('actes_vente') }}">
-                    Labo/Radio/Hospi/Actes
+                {% if a_acces('protocoles') and not onglet_cache('protocoles') and not _bloq %}
+                <a class="menu-item" href="{{ url_for('protocoles.page_protocoles') }}">
+                    Protocoles et Modèles
+                </a>
+                {% endif %}
+                {% if a_acces('prescriptions_recues') and not onglet_cache('prescriptions_recues') %}
+                <a class="menu-item" href="{{ url_for('prescriptions_recues') }}">
+                    Prescriptions reçues
                 </a>
                 {% endif %}
                 <!-- ⭐ Raccourci "Gestion des actes et stocks de produits" ici
@@ -2331,24 +2309,6 @@
                 <a class="menu-item" href="{{ url_for('page_ventes_en_attente') }}">
                     <i class="fas fa-clock"></i> Ventes en attente
                     <span class="badge bg-danger ms-1 vente-attente-badge" style="display:none;">0</span>
-                </a>
-                {% endif %}
-                {% if not onglet_cache('hospitalisation') %}
-                <a class="menu-item" href="{{ url_for('page_hospitalisation') }}">
-                    Hospitalisation (suivi de séjour)
-                </a>
-                {% endif %}
-                <!-- ⭐ Sous-onglet "Soins ambulatoires" — même patron/gate que
-                     sidebar_menu.html (onglet_cache('soins_ambulatoires')),
-                     manquait du menu horizontal. -->
-                {% if not onglet_cache('soins_ambulatoires') and not _bloq %}
-                <a class="menu-item" href="{{ url_for('page_soins_ambulatoires') }}">
-                    Soins ambulatoires
-                </a>
-                {% endif %}
-                {% if a_acces('prescriptions_recues') and not onglet_cache('prescriptions_recues') %}
-                <a class="menu-item" href="{{ url_for('prescriptions_recues') }}">
-                    Prescriptions reçues
                 </a>
                 {% endif %}
             </div>
@@ -2426,19 +2386,18 @@
                     Finances&Caisse&Charges
                 </a>
                 {% endif %}
-                <!-- ⭐ Rétrocession au médecin réalisateur — patron : "un
-                     sous-onglet dans le menu horizontal dans finance".
-                     "Configurer les taux" déplacé dans Paramètres (patron :
-                     "je ne veux pas que xa soit touffu") — seul le paiement
-                     lui-même reste ici. -->
-                {% if not onglet_cache('part_medecin') and not _bloq and session.role in ['admin', 'secretaire', 'caissier', 'gestionnaire', 'comptable'] %}
-                <a class="menu-item" href="{{ url_for('page_part_medecin') }}">
-                    Part Médecin
-                </a>
-                {% endif %}
                 {% if a_acces('statistiques') and not onglet_cache('statistiques') and not _bloq %}
                 <a class="menu-item" href="{{ url_for('statistiques_ventes') }}">
                     Statistiques des ventes
+                </a>
+                {% endif %}
+                <!-- ⭐ Recettes par service (patron, 2026-09-30) : "affiche le
+                     lien recette par service dans onglet finance du menu
+                     horizontal" — comparaison des recettes par département,
+                     pour la décision de ristourne de fin d'année. -->
+                {% if session.is_admin and not _bloq %}
+                <a class="menu-item" href="{{ url_for('page_rapport_recettes_service') }}">
+                    Recettes par service
                 </a>
                 {% endif %}
                 <!-- Demandes en attente : jamais masqué, c'est là qu'on valide sa propre charge d'abonnement.
@@ -2451,10 +2410,38 @@
                 {% endif %}
             </div>
         </li>
+
+        <!-- ⭐ Onglet "Médecins" — patron : "je trouve anormal qu'il y ait
+             Médecins & Activités dans Finances" (2026-10-01). Regroupe les 3
+             liens qui vivaient éparpillés (Finances, Paramètres) sous un seul
+             onglet dédié, comme c'était déjà le cas dans l'ex-menu latéral. -->
+        {% if a_acces('medecins_activites') and not onglet_cache('medecins_activites') and not _bloq %}
+        <li class="nav-item nav-item-medecins">
+            <span class="nav-link-top">
+                Médecins <i class="fas fa-chevron-down arrow"></i>
+            </span>
+            <div class="mega-menu">
+                <a class="menu-item" href="{{ url_for('gestion_medecins') }}">
+                    Médecins &amp; Activités
+                </a>
+                {% if not onglet_cache('part_medecin') and not _bloq and session.role in ['admin', 'secretaire', 'caissier', 'gestionnaire', 'comptable'] %}
+                <a class="menu-item" href="{{ url_for('page_part_medecin') }}">
+                    Part Médecin
+                </a>
+                {% endif %}
+                {% if session.is_admin or session.role == 'gestionnaire' %}
+                <a class="menu-item" href="{{ url_for('page_taux_part_medecin') }}">
+                    Configurer les taux
+                </a>
+                {% endif %}
+            </div>
+        </li>
+        {% endif %}
+
         {% if not onglet_cache('historique_ventes') and not _bloq %}
         <li class="nav-item nav-item-historique">
             <a class="nav-link-top" href="{{ url_for('historique_ventes') }}">
-                Historique des ventes
+                Historique
             </a>
         </li>
         {% endif %}
@@ -2464,7 +2451,7 @@
         {% if not onglet_cache('laboratoire_radiologie') and not _bloq %}
         <li class="nav-item nav-item-labo-radio">
             <span class="nav-link-top">
-                Laboratoire &amp; Radiologie <i class="fas fa-chevron-down arrow"></i>
+                Labo/Radio <i class="fas fa-chevron-down arrow"></i>
             </span>
             <div class="mega-menu">
                 {% if session.role == 'laborantin' or a_acces('demandes_laboratoire') %}
@@ -2511,7 +2498,7 @@
         {% if not _bloq %}
         <li class="nav-item nav-item-referentiels">
             <span class="nav-link-top">
-                Référentiels AMU <i class="fas fa-chevron-down arrow"></i>
+                AMU <i class="fas fa-chevron-down arrow"></i>
             </span>
             <div class="mega-menu">
                 <a class="menu-item" href="https://referentiels.amu.tg/#/providers" target="_blank">
@@ -2553,6 +2540,11 @@
                     Historique Annulations
                 </a>
                 {% endif %}
+                {% if a_acces('journal') and not onglet_cache('journal') and not _bloq %}
+                <a class="menu-item" href="{{ url_for('journal.page_journal') }}">
+                    Journal des mouvements
+                </a>
+                {% endif %}
                 {% if session.is_admin %}
                 <a class="menu-item" href="{{ url_for('sync_gestion_patients_config') }}">
                     Synchronisation gestion_patients
@@ -2588,8 +2580,19 @@
                 </a>
                 {% endif %}
                 {% if session.is_admin or session.role == 'gestionnaire' %}
-                <a class="menu-item" href="{{ url_for('page_taux_part_medecin') }}">
-                    Taux Part Médecin
+                <a class="menu-item" href="{{ url_for('page_hospitalisation_configuration') }}">
+                    Configuration des services
+                </a>
+                {% endif %}
+                <!-- ⭐ Recettes par service (patron, 2026-09-30) : "dans
+                     paramètre du menu horizontal fait afficher le lien de
+                     classification par service et recette par service". -->
+                {% if session.is_admin %}
+                <a class="menu-item" href="{{ url_for('page_classification_services') }}">
+                    Classification par service
+                </a>
+                <a class="menu-item" href="{{ url_for('page_rapport_recettes_service') }}">
+                    Recettes par service
                 </a>
                 {% endif %}
                 {% if session.role in ['laborantin', 'radiologue', 'secretaire'] %}
@@ -2610,6 +2613,17 @@
         {% endif %}
 
         {% endif %} {# fin restriction laborantin/radiologue #}
+
+        <!-- ⭐ FAQ — visible à TOUS les rôles sans exception dans
+             sidebar_menu.html (placé hors de toute restriction). "Guide
+             d'utilisation" retiré d'ici (patron, 2026-10-01 : "pour avoir de
+             l'espace vu qu'il y a FAQ") — la page reste accessible par son
+             URL, juste plus listée dans ce menu déjà chargé. -->
+        <li class="nav-item">
+            <a class="nav-link-top" href="{{ url_for('page_faq') }}">
+                <i class="fas fa-circle-question"></i> FAQ
+            </a>
+        </li>
 
         {% if session.role == 'laborantin' %}
         <li class="nav-item">
@@ -2661,47 +2675,14 @@
      ============================================ -->
 
 {% if session.user_id %}
+<!-- ⭐ Menu latéral retiré (patron, 2026-10-01) : le menu horizontal
+     contient désormais tout ce que le menu latéral proposait (voir commit
+     précédent "Menu horizontal : ajoute les onglets manquants"), il devient
+     donc la seule navigation. .main-content (flex:1 dans .app-wrapper, lui
+     resté en display:flex) prend naturellement toute la largeur disponible
+     une fois le sidebar retiré, aucun ajustement CSS nécessaire. -->
 <div class="app-wrapper">
 
-    <!-- ===== SIDEBAR ===== -->
-    <div class="sidebar" id="sidebar">
-        
-        <!-- ===== HEADER ===== -->
-        <div class="sidebar-header">
-            <div class="logo-area">
-                <span> =============== </span>
-            </div>
-            <button class="sidebar-toggle" onclick="toggleSidebar()" title="Masquer le menu">
-                <i class="fas fa-chevron-left" id="sidebarToggleIcon"></i>
-            </button>
-        </div>
-        
-        <!-- ===== NAVIGATION ===== -->
-        <nav class="sidebar-nav">
-            {% include 'sidebar_menu.html' %}
-        </nav>
-        
-        <!-- ===== FOOTER ===== -->
-        <div class="sidebar-footer">
-            <div id="structureNomSidebar">SSoftOne</div>
-            <div style="font-size: 9px; margin-top: 2px;">V10</div>
-        </div>
-    </div>
-
-    <!-- ===== BOUTON TOGGLE GLOBAL (toujours visible) ===== -->
-    <!-- 🔥 Placé APRÈS .sidebar (position:fixed, donc sans effet sur la mise
-         en page flex de .app-wrapper) pour que le sélecteur CSS
-         ".sidebar:not(.hidden) ~ .global-toggle-btn" fonctionne enfin — le
-         combinateur ~ ne matche que des frères qui suivent dans le DOM ;
-         placé avant .sidebar comme avant, cette règle ne s'appliquait
-         jamais (mort depuis le début). -->
-    <button class="global-toggle-btn" onclick="toggleSidebar()" title="Afficher/Masquer le menu" id="globalToggleBtn">
-        <i class="fas fa-bars" id="globalToggleIcon"></i>
-    </button>
-
-    <!-- ===== OVERLAY (mobile) ===== -->
-    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
-    
     <!-- ===== CONTENU PRINCIPAL ===== -->
     <main class="main-content" id="mainContent">
 
@@ -2718,17 +2699,6 @@
             <a href="{{ url_for('page_depenses_saisie') }}" class="btn btn-sm btn-dark">Régulariser maintenant</a>
         </div>
         {% endif %}
-
-        <!-- ===== BANNIÈRE MODE HORS-LIGNE (bascule Neon <-> local) ===== -->
-        <div id="offlineBanner" class="alert alert-warning d-flex align-items-center justify-content-between shadow-sm mb-2" role="alert" hidden>
-            <span><i class="fas fa-plug-circle-xmark me-2"></i><span id="offlineBannerText">Mode hors-ligne — travail en cours sur la base locale.</span></span>
-            <span class="d-flex align-items-center gap-2">
-                <span id="offlineBannerPending" class="badge bg-warning text-dark"></span>
-                {% if session.get('is_admin') %}
-                <button type="button" class="btn btn-sm btn-outline-dark" onclick="forcerSynchro()"><i class="fas fa-sync"></i> Forcer la synchro</button>
-                {% endif %}
-            </span>
-        </div>
 
         <!-- ===== FLASH MESSAGES ===== -->
         <div class="container-fluid px-0">
@@ -2830,6 +2800,48 @@ document.addEventListener('show.bs.modal', function(e) {
 });
 
 // ============================================
+// FIX GLOBAL : barre d'action collante en bas d'écran
+// ============================================
+// ⭐ Même cause que le fix modales juste au-dessus (patron, 2026-09-30 :
+// "le bouton finaliser remonte pour un accès facile... il faut scroller
+// soit même") : .main-content a un backdrop-filter, qui en fait la
+// containing block de tout descendant position:fixed — une barre d'action
+// "fixed" y resterait ancrée au bas du CONTENU défilable (elle défilerait
+// avec le panier) plutôt qu'au bas de l'ÉCRAN. Même parade : sortir la
+// barre vers <body>, elle redevient fixe par rapport à la fenêtre comme
+// attendu. Réutilisable par toute page posant `id="<barId>"` sur sa barre
+// d'action et, optionnellement, `id="<espaceId>"` sur un div vide juste
+// après (pour ne pas laisser un trou une fois la barre sortie du flux) —
+// voir actes_vente.html, pharma_vente.html.
+function activerBarreActionCollante(barId, espaceId) {
+    const bar = document.getElementById(barId);
+    if (!bar) return;
+    const espace = espaceId ? document.getElementById(espaceId) : null;
+
+    document.body.appendChild(bar);
+    bar.style.position = 'fixed';
+    bar.style.bottom = '0';
+    bar.style.zIndex = '1030';
+
+    function synchroniser() {
+        const mainContent = document.querySelector('.main-content');
+        if (!mainContent) return;
+        const rect = mainContent.getBoundingClientRect();
+        bar.style.left = rect.left + 'px';
+        bar.style.width = rect.width + 'px';
+        if (espace) espace.style.height = bar.offsetHeight + 'px';
+    }
+
+    synchroniser();
+    window.addEventListener('resize', synchroniser);
+    // ⭐ transitionend rattrape toute transition CSS qui changerait la
+    // largeur de .main-content, sans dépendre du nom de la fonction qui
+    // l'a déclenché (le menu latéral qui justifiait ce filet de sécurité
+    // a été retiré, mais ça reste une protection peu coûteuse).
+    window.addEventListener('transitionend', synchroniser);
+}
+
+// ============================================
 // HORLOGE - CONSERVÉE
 // ============================================
 function updateHorloge() {
@@ -2861,65 +2873,6 @@ function updateHorloge() {
     
 setInterval(updateHorloge, 1000);
 updateHorloge();
-
-// ============================================
-// BASCULE HORS-LIGNE — bannière Neon <-> local
-// ============================================
-let syncPollingActif = null;
-
-// ⭐ Pilote le petit point pulsant à côté de l'horloge (desktop + mobile) —
-// violet et animé tant que la connexion au serveur principal est confirmée,
-// gris et statique dès qu'on bascule sur la copie locale (voir CSS
-// .statut-connexion-dot). Un seul point de vérité pour les deux variantes
-// (desktop/mobile) appelées depuis les 3 issues possibles de la requête
-// ci-dessous (ok / bascule non configurée / requête en échec).
-function mettreAJourStatutConnexionDot(horsLigne) {
-    document.querySelectorAll('.statut-connexion-dot').forEach(dot => {
-        dot.classList.toggle('hors-ligne', horsLigne);
-        dot.title = horsLigne ? 'Hors-ligne — travail sur la copie locale' : 'Connecté au serveur principal';
-    });
-}
-
-function verifierEtatSynchro() {
-    fetch('/api/sync/status').then(r => r.ok ? r.json() : null).then(etat => {
-        if (!etat || !etat.enabled) {
-            // Bascule non configurée sur ce serveur (ex: Render, sans base
-            // locale de secours) : inutile de re-sonder toutes les 15s.
-            // La requête elle-même a réussi -> bien connecté au serveur.
-            mettreAJourStatutConnexionDot(false);
-            if (syncPollingActif) { clearInterval(syncPollingActif); syncPollingActif = null; }
-            return;
-        }
-        const banniere = document.getElementById('offlineBanner');
-        const texte = document.getElementById('offlineBannerText');
-        const badge = document.getElementById('offlineBannerPending');
-        mettreAJourStatutConnexionDot(etat.is_offline);
-        if (etat.is_offline) {
-            banniere.hidden = false;
-            texte.textContent = "Mode hors-ligne — connexion au serveur principal indisponible, vous travaillez sur la copie locale. La synchronisation se fera automatiquement au retour de la connexion.";
-            badge.textContent = etat.changements_en_attente + ' en attente';
-        } else if (etat.changements_en_attente > 0) {
-            banniere.hidden = false;
-            texte.textContent = "Synchronisation en cours avec le serveur principal...";
-            badge.textContent = etat.changements_en_attente + ' en attente';
-        } else {
-            banniere.hidden = true;
-        }
-    }).catch(() => {
-        // La requête de vérification elle-même a échoué -> signal fiable
-        // que la connexion au serveur principal a un problème.
-        mettreAJourStatutConnexionDot(true);
-    });
-}
-verifierEtatSynchro();
-syncPollingActif = setInterval(verifierEtatSynchro, 15000);
-
-function forcerSynchro() {
-    fetch('/api/sync/forcer', {method: 'POST'})
-        .then(r => r.json())
-        .then(res => { alert(res.message || (res.success ? 'OK' : 'Echec')); verifierEtatSynchro(); })
-        .catch(() => alert('Erreur réseau lors de la synchronisation.'));
-}
 
 // Stocker les infos de la structure
 {% if session.structure_nom %}
@@ -3244,70 +3197,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 // ============================================================
-// TOGGLE SIDEBAR (avec bouton global toujours visible)
-// ============================================================
-
-function toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebarOverlay');
-    const icon = document.getElementById('sidebarToggleIcon');    // Icône dans le sidebar
-    const globalIcon = document.getElementById('globalToggleIcon'); // Icône globale
-    
-    if (!sidebar) return;
-    
-    sidebar.classList.toggle('hidden');
-    
-    if (overlay) {
-        overlay.classList.toggle('active');
-    }
-    
-    // Changer les icônes
-    if (sidebar.classList.contains('hidden')) {
-        if (icon) icon.className = 'fas fa-chevron-right';
-        if (globalIcon) globalIcon.className = 'fas fa-bars';
-        localStorage.setItem('sidebarHidden', 'true');
-    } else {
-        if (icon) icon.className = 'fas fa-chevron-left';
-        if (globalIcon) globalIcon.className = 'fas fa-times';
-        localStorage.setItem('sidebarHidden', 'false');
-    }
-}
-
-// ============================================================
-// RESTAURER L'ÉTAT DU SIDEBAR
-// ============================================================
-
-function restoreSidebarState() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebarOverlay');
-    const icon = document.getElementById('sidebarToggleIcon');
-    const globalIcon = document.getElementById('globalToggleIcon');
-
-    if (!sidebar) return;
-
-    let hidden = localStorage.getItem('sidebarHidden');
-    // ⭐ Tant que l'utilisateur n'a jamais touché au bouton (aucune
-    // préférence enregistrée), le menu démarre replié par défaut — sur
-    // desktop comme sur mobile/tablette — pour laisser plus d'espace à
-    // l'écran (même logique que gestion_patients). Un utilisateur qui a
-    // déjà choisi (ouvert ou fermé) garde son choix via localStorage.
-    if (hidden === null) {
-        hidden = 'true';
-    }
-
-    if (hidden === 'true') {
-        sidebar.classList.add('hidden');
-        if (overlay) overlay.classList.remove('active');
-        if (icon) icon.className = 'fas fa-chevron-right';
-        if (globalIcon) globalIcon.className = 'fas fa-bars';
-    } else {
-        sidebar.classList.remove('hidden');
-        if (icon) icon.className = 'fas fa-chevron-left';
-        if (globalIcon) globalIcon.className = 'fas fa-times';
-    }
-}
-
-// ============================================================
 // TOGGLE DROPDOWN
 // ============================================================
 
@@ -3484,7 +3373,6 @@ document.addEventListener('click', function(e) {
 // ============================================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    restoreSidebarState();
     chargerProformaBadge();
     chargerVenteAttenteBadge();
 
