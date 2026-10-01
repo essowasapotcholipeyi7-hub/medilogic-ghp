@@ -2565,6 +2565,15 @@
                 <a class="menu-item" href="{{ url_for('static', filename='documents/amu_cnss/regles_delivrance_soins_amu.pdf') }}" target="_blank" rel="noopener">
                     Règles de délivrance de soins AMU
                 </a>
+                <!-- ⭐ Entente Préalable (patron, 2026-10-01) : remplissage +
+                     approbation médecin + impression depuis l'appli — voir
+                     page_amu_entente_prealable (app.py). -->
+                {% if a_acces('entente_prealable') %}
+                <div class="menu-divider"></div>
+                <a class="menu-item" href="{{ url_for('page_amu_entente_prealable') }}">
+                    <i class="fas fa-file-medical"></i> Entente Préalable
+                </a>
+                {% endif %}
             </div>
         </li>
         {% endif %}
@@ -2751,12 +2760,12 @@
 
         <!-- ===== BANNIÈRE ABONNEMENT SSOFTONEV10 (jaune/rouge/bloqué) ===== -->
         {% set _ab_banner = abonnement() %}
-        {% if _ab_banner.niveau_alerte in ('jaune', 'rouge') %}
+        {% if not (cacher_navigation is defined and cacher_navigation) and _ab_banner.niveau_alerte in ('jaune', 'rouge') %}
         <div class="alert {{ 'alert-warning' if _ab_banner.niveau_alerte == 'jaune' else 'alert-danger' }} d-flex align-items-center justify-content-between shadow-sm mb-2" role="alert">
             <span><i class="fas fa-triangle-exclamation me-2"></i>{{ _ab_banner.message }}</span>
             <a href="{{ url_for('page_depenses_saisie') }}" class="btn btn-sm btn-dark">Régulariser maintenant</a>
         </div>
-        {% elif _ab_banner.bloque_effectif %}
+        {% elif not (cacher_navigation is defined and cacher_navigation) and _ab_banner.bloque_effectif %}
         <div class="alert alert-danger d-flex align-items-center justify-content-between shadow-sm mb-2" role="alert">
             <span><i class="fas fa-lock me-2"></i>{{ _ab_banner.message }}</span>
             <a href="{{ url_for('page_depenses_saisie') }}" class="btn btn-sm btn-dark">Régulariser maintenant</a>
