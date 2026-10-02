@@ -958,7 +958,13 @@ def api_amu_ep_patients():
     # autres routes EP — sans ça, n'importe quel compte connecté de la
     # structure pouvait interroger cette recherche (nom/tél/n° AMU) même
     # sans la permission 'entente_prealable'.
-    if not a_acces('entente_prealable'):
+    # ⭐⭐ (2026-10-02) Réutilisée telle quelle par la page TPC (voir
+    # templates/amu_tpc.html, patron : "même logique que les EP" —
+    # /api/amu/entente-prealable/patients, même filtre régime exact, pas de
+    # duplication). Sans le `or a_acces('tpc')`, un utilisateur habilité
+    # UNIQUEMENT sur 'tpc' (pas 'entente_prealable') pouvait ouvrir /amu/tpc
+    # mais la recherche patient y échouait silencieusement (403).
+    if not (a_acces('entente_prealable') or a_acces('tpc')):
         return jsonify({'data': [], 'error': 'Accès non autorisé'}), 403
     structure_id = session.get('structure_id')
     q = (request.args.get('search') or '').strip().lower()
@@ -1055,6 +1061,25 @@ def _valider_champs_ep(data, structure_id):
             id=data.get('hospitalisation_id'), structure_id=structure_id, patient_id=patient.id
         ).first()
         if h:
+            # ⭐⭐ Trouvé en revue de code (2026-10-02) : rien n'empêchait de
+            # lier plusieurs EP au MÊME séjour (double soumission) — l'EP la
+            # plus ancienne devenait alors invisible depuis la page
+            # Hospitalisation (qui ne prend que la plus récente). Un même
+            # PATIENT peut tout à fait avoir plusieurs EP dans le mois
+            # (patron : "on peut demander l'EP à un patient plusieurs fois
+            # dans le mois [...] on le libère, il revient, on l'hospitalise
+            # à nouveau") — mais chaque hospitalisation redonne un NOUVEL
+            # hospitalisation_id, donc ce verrou (scopé au séjour précis, pas
+            # au patient) n'empêche jamais ce cas normal. 'refusee' n'est PAS
+            # bloquant : une EP refusée doit pouvoir être refaite pour le
+            # même séjour (bouton "Refaire une demande" côté Hospitalisation).
+            deja_liee = DemandeEntentePrealable.query.filter(
+                DemandeEntentePrealable.structure_id == structure_id,
+                DemandeEntentePrealable.hospitalisation_id == h.id,
+                DemandeEntentePrealable.statut.in_(('en_attente', 'approuvee')),
+            ).first()
+            if deja_liee:
+                return None, ('Une Entente Préalable est déjà en cours ou approuvée pour ce séjour', 400)
             hospitalisation_id = h.id
 
     return {
@@ -1602,7 +1627,19 @@ def api_amu_tpc_modifier(demande_id):
     if demande.statut != 'en_attente':
         return jsonify({'success': False, 'error': 'Seule une demande en attente peut être modifiée'}), 400
 
-    champs, erreur = _valider_champs_tpc(request.json or {}, structure_id)
+    # ⭐⭐ SÉCURITÉ (2026-10-02) : type_demande vient TOUJOURS de la demande
+    # déjà en base, jamais du corps de la requête — _valider_champs_tpc
+    # branche entièrement sur ce champ pour décider quels champs sont
+    # exigés/acceptés (ex. date_prochain_rdv, affections_ald réservés à
+    # 'identification'). Sans ce verrou, envoyer type_demande='identification'
+    # ici (alors que la demande stockée est un renouvellement/modification)
+    # faisait accepter et écrire ces champs réservés sur l'enregistrement,
+    # sans jamais changer son vrai type_demande (toujours retiré de `champs`
+    # juste en dessous) — contournait la portée "Identification uniquement"
+    # de date_prochain_rdv (commit 09ab156).
+    data = dict(request.json or {})
+    data['type_demande'] = demande.type_demande
+    champs, erreur = _valider_champs_tpc(data, structure_id)
     if erreur:
         return jsonify({'success': False, 'error': erreur[0]}), erreur[1]
     if champs.get('patient_id') != demande.patient_id:
