@@ -307,9 +307,15 @@ def recu(vente_uuid):
     principale = assurances.get('principale') or {}
     vente['assurance_nom'] = principale.get('nom')
 
-    format_impression = request.args.get('format', 'A4')
+    # ⭐ FIX : repli à 'A4' au lieu de '80mm' — incohérent avec l'appli en
+    # ligne (app.py), qui utilise toujours '80mm' par défaut quand le
+    # format n'est pas précisé dans l'URL. Les boutons de offline_ventes.html/
+    # offline_historique.html précisent déjà explicitement le format, donc
+    # ça ne les touchait pas, mais tout lien ouvert sans paramètre (vieux
+    # favori, lien partagé...) sortait en grand format par erreur.
+    format_impression = request.args.get('format', '80mm')
     if format_impression not in ('A4', '80mm'):
-        format_impression = 'A4'
+        format_impression = '80mm'
 
     return render_template(
         'offline_recu.html',
