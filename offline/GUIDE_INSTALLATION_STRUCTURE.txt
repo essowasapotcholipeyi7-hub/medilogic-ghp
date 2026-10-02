@@ -175,9 +175,23 @@ Deux méthodes selon les droits disponibles sur ce PC.
 ----------------------------------------------------------------
 
 Remplacer le favori/raccourci habituel par http://127.0.0.1:5100/ sur
-ce poste. Un seul lien à utiliser tout le temps — pas de bascule
-manuelle à faire : ce lien redirige tout seul vers le site normal
-quand internet marche, et sert la version locale sinon.
+ce poste. Un seul lien à utiliser tout le temps.
+
+⚠️ LIMITE IMPORTANTE À EXPLIQUER AU PERSONNEL (constatée le 2026-10-02) :
+ce lien ne fait l'aiguillage QU'AU MOMENT où on l'ouvre. Si internet
+marche à cet instant, il redirige VRAIMENT vers le site en ligne — une
+fois là-bas, le navigateur est sur l'adresse du site en ligne, et le
+programme local n'est plus du tout dans la boucle. Si la connexion
+internet tombe APRÈS ce moment-là (pendant que la personne travaille
+déjà dans le site), rien ne la ramène automatiquement en mode
+hors-ligne : la page se bloque simplement, comme une coupure internet
+normale sur n'importe quel site.
+
+CONSIGNE À DONNER AU PERSONNEL : si une page semble bloquée, ne charge
+plus, ou affiche une erreur de connexion en cours de travail, RETOURNER
+SUR LE FAVORI http://127.0.0.1:5100/ (pas insister sur la page bloquée).
+En rouvrant ce lien, l'aiguillage se refait, détecte que ça ne répond
+plus, et bascule correctement en mode hors-ligne.
 
 
 ================================================================
@@ -258,9 +272,11 @@ prévenir pour qu'ils soient supprimés de la vraie base ensuite.
   1. Redémarrer le PC — vérifier que http://127.0.0.1:5100/ répond
      bien après redémarrage, sans rien relancer à la main.
   2. Simuler une coupure (débrancher le câble réseau / couper le
-     Wi-Fi) — vérifier que la page de connexion hors-ligne apparaît
-     après quelques secondes, se connecter, créer un patient TEST, une
-     vente TEST.
+     Wi-Fi), PUIS recharger http://127.0.0.1:5100/ (voir limite
+     expliquée à l'étape 7 — une page déjà ouverte sur le site en ligne
+     ne bascule pas toute seule, il faut revenir sur ce lien) — vérifier
+     que la page de connexion hors-ligne apparaît, se connecter, créer
+     un patient TEST, une vente TEST.
   3. Rebrancher le réseau — attendre ~1 minute, vérifier dans
      http://127.0.0.1:5100/api/offline/sync/status que la
      synchronisation s'est faite ("en_attente": 0, "erreurs": 0).
