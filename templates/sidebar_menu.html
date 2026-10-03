@@ -98,6 +98,30 @@
                 </a>
                 {% endif %}
 
+                <!-- ⭐ Mis à jour le 2026-10-03 (retour du menu latéral) : ces
+                     4 liens existaient déjà dans le menu horizontal (base.html,
+                     dropdown Finances) mais manquaient ici. -->
+                {% if session.role in ['caissier', 'secretaire'] and not _bloq %}
+                <a class="nav-link {% if request.endpoint == 'page_factures_assurances' %}active{% endif %}" href="{{ url_for('page_factures_assurances') }}">
+                    <span class="menu-text">Factures assurances</span>
+                </a>
+                {% endif %}
+
+                {% if not onglet_cache('factures_amu') and not _bloq %}
+                <a class="nav-link {% if request.endpoint == 'page_facture_amu_cnss' and request.args.get('type_amu') != 'tns' %}active{% endif %}" href="{{ url_for('page_facture_amu_cnss') }}">
+                    <span class="menu-text">Facture AMU CNSS (mensuelle)</span>
+                </a>
+                <a class="nav-link {% if request.endpoint == 'page_facture_amu_cnss' and request.args.get('type_amu') == 'tns' %}active{% endif %}" href="{{ url_for('page_facture_amu_cnss', type_amu='tns') }}">
+                    <span class="menu-text">Facture AMU TNS (mensuelle)</span>
+                </a>
+                <a class="nav-link {% if request.endpoint == 'page_facture_amu_inam' %}active{% endif %}" href="{{ url_for('page_facture_amu_inam') }}">
+                    <span class="menu-text">Facture AMU INAM (mensuelle)</span>
+                </a>
+                <a class="nav-link {% if request.endpoint == 'historique_factures_amu' %}active{% endif %}" href="{{ url_for('historique_factures_amu') }}">
+                    <span class="menu-text">Historique factures AMU</span>
+                </a>
+                {% endif %}
+
 
                 <!-- ===== RÉFÉRENTIELS AMU ===== -->
                 {% if not _bloq %}
@@ -116,6 +140,44 @@
                                 <i class="fas fa-external-link-alt me-2"></i> AMU-INAM
                             </a>
                         </li>
+                        <!-- ⭐ Mis à jour le 2026-10-03 : complète avec les
+                             entrées déjà présentes dans le menu horizontal. -->
+                        <li>
+                            <a class="dropdown-item" href="https://tns.cnss.tg" target="_blank">
+                                <i class="fas fa-external-link-alt me-2"></i> AMU-TNS
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="{{ url_for('page_amu_supports', type_amu='cnss') }}">
+                                <i class="fas fa-file-medical me-2"></i> Support AMU CNSS
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{{ url_for('page_amu_supports', type_amu='inam') }}">
+                                <i class="fas fa-file-medical me-2"></i> Support AMU INAM
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{{ url_for('static', filename='documents/amu_cnss/regles_delivrance_soins_amu.pdf') }}" target="_blank">
+                                <i class="fas fa-file-pdf me-2"></i> Règles de délivrance de soins AMU
+                            </a>
+                        </li>
+                        {% if a_acces('entente_prealable') and not onglet_cache('entente_prealable') and not _bloq %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="{{ url_for('page_amu_entente_prealable') }}">
+                                <i class="fas fa-file-signature me-2"></i> Entente Préalable
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if a_acces('tpc') and not onglet_cache('tpc') and not _bloq %}
+                        <li>
+                            <a class="dropdown-item" href="{{ url_for('page_amu_tpc') }}">
+                                <i class="fas fa-file-medical-alt me-2"></i> TPC
+                            </a>
+                        </li>
+                        {% endif %}
                     </ul>
                 </div>
                 {% endif %}
@@ -167,15 +229,22 @@
                 {% endif %}
 
 
-                <!-- ===== CONSULTATION ===== -->
-                {% if session.role in ['admin', 'medecin', 'paramedical'] and not onglet_cache('consultation') and not _bloq %}
+                <!-- ===== CONSULTATION =====
+                     ⭐ 2026-10-03 : garde alignée sur le menu horizontal
+                     (base.html), qui n'a jamais eu la restriction de rôle
+                     admin/medecin/paramedical — sinon un rôle autorisé par
+                     le menu horizontal (ex. secrétaire) ne voyait pas ce
+                     lien ici, incohérence entre les deux menus. -->
+                {% if not onglet_cache('consultation') and not _bloq %}
                     <a class="nav-link {% if request.endpoint == 'consultation' %}active{% endif %}" href="{{ url_for('consultation') }}">
                         <span class="menu-text">Consultation & Prise en charge</span>
                     </a>
                 {% endif %}
 
-                <!-- ===== GESTION DES STOCKS ===== -->
-                {% if session.role in ['admin', 'comptable', 'gestionnaire', 'pharmacien'] and not onglet_cache('pharmacie') and not _bloq %}
+                <!-- ===== GESTION DES STOCKS =====
+                     ⭐ 2026-10-03 : même alignement, le menu horizontal n'a
+                     pas de restriction de rôle sur ce lien. -->
+                {% if not onglet_cache('pharmacie') and not _bloq %}
                 <a class="nav-link {% if request.endpoint == 'gestion_stock' %}active{% endif %}" href="{{ url_for('gestion_stock') }}">
                     <span class="menu-text">Gestion des stocks</span>
                 </a>
@@ -355,6 +424,10 @@
                     {% endif %}
                     {% if session.is_admin %}
                     <a class="nav-link {% if request.endpoint == 'sync_gestion_patients_config' %}active{% endif %}" style="padding-left: 40px; font-size: 13px;" href="{{ url_for('sync_gestion_patients_config') }}"><i class="fas fa-sync me-2"></i>Synchronisation gestion_patients</a>
+                    {% endif %}
+                    <!-- ⭐ Ajouté le 2026-10-03 : présent dans le menu horizontal, manquait ici. -->
+                    {% if session.is_admin or session.role in ['gestionnaire', 'secretaire', 'caissier', 'pharmacien'] %}
+                    <a class="nav-link {% if request.endpoint == 'page_codes_barres' %}active{% endif %}" style="padding-left: 40px; font-size: 13px;" href="{{ url_for('page_codes_barres') }}"><i class="fas fa-barcode me-2"></i>Codes-barres</a>
                     {% endif %}
                 </div>
                 {% endif %}

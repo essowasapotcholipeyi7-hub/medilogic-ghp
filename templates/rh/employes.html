@@ -3,12 +3,11 @@
 {% block title %}Gestion du personnel{% endblock %}
 
 {% block content %}
+<!-- ⭐ 2026-10-03 : la colonne "sidebar_menu.html" locale a été retirée —
+     le menu latéral est désormais global (voir base.html,
+     menu_lateral_actif()), plus besoin de le dupliquer ici page par page. -->
 <div class="row">
-    <div class="col-md-3 mb-4">
-        {% include 'sidebar_menu.html' %}
-    </div>
-
-    <div class="col-md-9">
+    <div class="col-md-12">
         <div class="card">
             <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                 <h5><i class="fas fa-users"></i> Gestion du personnel</h5>

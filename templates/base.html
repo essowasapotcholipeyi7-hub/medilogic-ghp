@@ -2759,13 +2759,55 @@
      ============================================ -->
 
 {% if session.user_id %}
-<!-- ⭐ Menu latéral retiré (patron, 2026-10-01) : le menu horizontal
-     contient désormais tout ce que le menu latéral proposait (voir commit
-     précédent "Menu horizontal : ajoute les onglets manquants"), il devient
-     donc la seule navigation. .main-content (flex:1 dans .app-wrapper, lui
-     resté en display:flex) prend naturellement toute la largeur disponible
-     une fois le sidebar retiré, aucun ajustement CSS nécessaire. -->
+<!-- ⭐ Menu latéral retiré pour toutes les structures le 2026-10-01 (menu
+     horizontal devenu la seule navigation), remis le 2026-10-03 mais
+     cette fois contrôlable PAR STRUCTURE (patron : la structure 12 le
+     veut, d'autres non) — voir menu_lateral_actif() (app.py),
+     ParametrageAffichageStructure.menu_lateral_actif, et le bouton
+     correspondant dans /admin_global. Affiché EN PLUS du menu horizontal
+     quand actif, jamais à sa place. -->
 <div class="app-wrapper">
+
+    {% if menu_lateral_actif() %}
+    <!-- ===== SIDEBAR ===== -->
+    <div class="sidebar" id="sidebar">
+
+        <!-- ===== HEADER ===== -->
+        <div class="sidebar-header">
+            <div class="logo-area">
+                <span> =============== </span>
+            </div>
+            <button class="sidebar-toggle" onclick="toggleSidebar()" title="Masquer le menu">
+                <i class="fas fa-chevron-left" id="sidebarToggleIcon"></i>
+            </button>
+        </div>
+
+        <!-- ===== NAVIGATION ===== -->
+        <nav class="sidebar-nav">
+            {% include 'sidebar_menu.html' %}
+        </nav>
+
+        <!-- ===== FOOTER ===== -->
+        <div class="sidebar-footer">
+            <div id="structureNomSidebar">SSoftOne</div>
+            <div style="font-size: 9px; margin-top: 2px;">V10</div>
+        </div>
+    </div>
+
+    <!-- ===== BOUTON TOGGLE GLOBAL (toujours visible) ===== -->
+    <!-- 🔥 Placé APRÈS .sidebar (position:fixed, donc sans effet sur la mise
+         en page flex de .app-wrapper) pour que le sélecteur CSS
+         ".sidebar:not(.hidden) ~ .global-toggle-btn" fonctionne enfin — le
+         combinateur ~ ne matche que des frères qui suivent dans le DOM ;
+         placé avant .sidebar comme avant, cette règle ne s'appliquait
+         jamais (mort depuis le début). -->
+    <button class="global-toggle-btn" onclick="toggleSidebar()" title="Afficher/Masquer le menu" id="globalToggleBtn">
+        <i class="fas fa-bars" id="globalToggleIcon"></i>
+    </button>
+
+    <!-- ===== OVERLAY (mobile) ===== -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+    {% endif %}
 
     <!-- ===== CONTENU PRINCIPAL ===== -->
     <main class="main-content" id="mainContent">
@@ -3281,6 +3323,74 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 // ============================================================
+// TOGGLE SIDEBAR (avec bouton global toujours visible) — restauré le
+// 2026-10-03, voir menu_lateral_actif() : n'a d'effet que si le superadmin
+// a activé le menu latéral pour cette structure (sinon #sidebar n'existe
+// pas dans le DOM, chaque fonction ci-dessous se termine alors sans rien
+// faire via son "if (!sidebar) return;").
+// ============================================================
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const icon = document.getElementById('sidebarToggleIcon');    // Icône dans le sidebar
+    const globalIcon = document.getElementById('globalToggleIcon'); // Icône globale
+
+    if (!sidebar) return;
+
+    sidebar.classList.toggle('hidden');
+
+    if (overlay) {
+        overlay.classList.toggle('active');
+    }
+
+    // Changer les icônes
+    if (sidebar.classList.contains('hidden')) {
+        if (icon) icon.className = 'fas fa-chevron-right';
+        if (globalIcon) globalIcon.className = 'fas fa-bars';
+        localStorage.setItem('sidebarHidden', 'true');
+    } else {
+        if (icon) icon.className = 'fas fa-chevron-left';
+        if (globalIcon) globalIcon.className = 'fas fa-times';
+        localStorage.setItem('sidebarHidden', 'false');
+    }
+}
+
+// ============================================================
+// RESTAURER L'ÉTAT DU SIDEBAR
+// ============================================================
+
+function restoreSidebarState() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const icon = document.getElementById('sidebarToggleIcon');
+    const globalIcon = document.getElementById('globalToggleIcon');
+
+    if (!sidebar) return;
+
+    let hidden = localStorage.getItem('sidebarHidden');
+    // ⭐ Tant que l'utilisateur n'a jamais touché au bouton (aucune
+    // préférence enregistrée), le menu démarre replié par défaut — sur
+    // desktop comme sur mobile/tablette — pour laisser plus d'espace à
+    // l'écran (même logique que gestion_patients). Un utilisateur qui a
+    // déjà choisi (ouvert ou fermé) garde son choix via localStorage.
+    if (hidden === null) {
+        hidden = 'true';
+    }
+
+    if (hidden === 'true') {
+        sidebar.classList.add('hidden');
+        if (overlay) overlay.classList.remove('active');
+        if (icon) icon.className = 'fas fa-chevron-right';
+        if (globalIcon) globalIcon.className = 'fas fa-bars';
+    } else {
+        sidebar.classList.remove('hidden');
+        if (icon) icon.className = 'fas fa-chevron-left';
+        if (globalIcon) globalIcon.className = 'fas fa-times';
+    }
+}
+
+// ============================================================
 // TOGGLE DROPDOWN
 // ============================================================
 
@@ -3457,6 +3567,7 @@ document.addEventListener('click', function(e) {
 // ============================================================
 
 document.addEventListener('DOMContentLoaded', function() {
+    restoreSidebarState();
     chargerProformaBadge();
     chargerVenteAttenteBadge();
 

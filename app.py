@@ -177,6 +177,19 @@ def _abonnement_statut_session():
 
 app.jinja_env.globals['abonnement'] = _abonnement_statut_session
 app.jinja_env.globals['onglet_cache'] = lambda cle: onglet_cache(session.get('structure_id'), cle)
+
+# ⭐ Menu latéral gauche (en plus du menu horizontal) — interrupteur par
+# structure posé par le superadmin uniquement (voir toggle_menu_lateral(),
+# ParametrageAffichageStructure.menu_lateral_actif). Faux par défaut ;
+# structure 12 l'a explicitement, patron 2026-10-03.
+def _menu_lateral_actif_session():
+    structure_id = session.get('structure_id')
+    if not structure_id:
+        return False
+    param = ParametrageAffichageStructure.query.filter_by(structure_id=structure_id).first()
+    return bool(param and param.menu_lateral_actif)
+
+app.jinja_env.globals['menu_lateral_actif'] = _menu_lateral_actif_session
 app.jinja_env.globals['ABONNEMENT_WHATSAPP_NUMERO'] = ABONNEMENT_WHATSAPP_NUMERO
 # ⭐ Variante prenant un structure_id explicite — pour admin_global.html
 # (session super-admin, pas de session structure) : un badge de statut par
@@ -4670,10 +4683,9 @@ def admin_global():
     # template appelait statut_abonnement_pour('') pour son badge.
     structures = [s for s in sheets_helper.get_all_records('structures', use_prefix=False)
                   if str(s.get('ID') or '').strip()]
-    guide_pdf_autorisations = {
-        p.structure_id: p.guide_pdf_autorise
-        for p in ParametrageAffichageStructure.query.all()
-    }
+    _params_affichage = ParametrageAffichageStructure.query.all()
+    guide_pdf_autorisations = {p.structure_id: p.guide_pdf_autorise for p in _params_affichage}
+    menu_lateral_actifs = {p.structure_id: p.menu_lateral_actif for p in _params_affichage}
     # ⭐ Niveau de soins AMU (1/2/3), éditable depuis cette page — voir
     # admin_definir_niveau_soins() et utils/grille_amu_hospitalisation.py.
     niveaux_soins_par_structure = {
@@ -4683,6 +4695,7 @@ def admin_global():
     faq_en_attente_count = FaqQuestionUtilisateur.query.filter_by(statut='en_attente').count()
     return render_template('admin_global.html', structures=structures,
                             guide_pdf_autorisations=guide_pdf_autorisations,
+                            menu_lateral_actifs=menu_lateral_actifs,
                             niveaux_soins_par_structure=niveaux_soins_par_structure,
                             faq_en_attente_count=faq_en_attente_count)
 
@@ -4808,6 +4821,33 @@ def toggle_guide_pdf_autorisation(structure_id):
         db.session.commit()
         flash(
             f"Téléchargement du guide PDF {'autorisé' if param.guide_pdf_autorise else 'désactivé'} pour la structure {structure_id}",
+            'success'
+        )
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'danger')
+    return redirect(url_for('admin_global'))
+
+@app.route('/admin/menu-lateral/<int:structure_id>/toggle', methods=['POST'])
+def toggle_menu_lateral(structure_id):
+    """Affiche/masque le menu latéral (en plus du menu horizontal) pour UNE
+    structure précise — décision du SUPERADMIN uniquement. Patron,
+    2026-10-03 : "on doit pouvoir toggler et detoggler ce menu... depuis mon
+    espace admin global j'active ou désactive pour une structure donnée,
+    parce qu'il y a d'autres structures qui ne veulent pas ça". Désactivé
+    par défaut pour toute structure (voir models.py) ; activé explicitement
+    pour la structure 12 qui le demandait."""
+    if 'super_admin' not in session:
+        return redirect(url_for('admin_login'))
+    try:
+        param = ParametrageAffichageStructure.query.filter_by(structure_id=structure_id).first()
+        if not param:
+            param = ParametrageAffichageStructure(structure_id=structure_id)
+            db.session.add(param)
+        param.menu_lateral_actif = not param.menu_lateral_actif
+        db.session.commit()
+        flash(
+            f"Menu latéral {'activé' if param.menu_lateral_actif else 'désactivé'} pour la structure {structure_id}",
             'success'
         )
     except Exception as e:

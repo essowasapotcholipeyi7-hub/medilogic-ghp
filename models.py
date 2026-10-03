@@ -4534,6 +4534,13 @@ class ParametrageAffichageStructure(db.Model):
     # divulguent ce pdf". Faux par défaut : le bouton "Télécharger en PDF"
     # n'apparaît même pas tant que ce n'est pas activé ici.
     guide_pdf_autorise = db.Column(db.Boolean, nullable=False, default=False)
+    # ⭐ Menu latéral gauche (templates/sidebar_menu.html) — retiré pour
+    # toutes les structures le 2026-10-01 au profit du seul menu horizontal,
+    # remis le 2026-10-03 pour la structure 12 qui le voulait, mais pas
+    # pour les autres. Décision SUPERADMIN uniquement (/admin_global, voir
+    # toggle_menu_lateral()) — jamais par la structure elle-même. Les deux
+    # menus restent affichés ensemble quand actif (pas un remplacement).
+    menu_lateral_actif = db.Column(db.Boolean, nullable=False, default=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

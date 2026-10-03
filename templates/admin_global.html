@@ -117,6 +117,16 @@
                                     <i class="fas fa-file-pdf"></i>{% if pdf_autorise %} <i class="fas fa-check"></i>{% endif %}
                                 </a>
 
+                                <!-- ⭐ Menu latéral (en plus du menu horizontal) — désactivé par
+                                     défaut pour toute structure, patron 2026-10-03 : structure 12
+                                     le veut, d'autres non (voir toggle_menu_lateral, app.py). -->
+                                {% set menu_lateral_actif_structure = menu_lateral_actifs.get(structure.ID|int, False) %}
+                                <a href="#" onclick="postAction('{{ url_for('toggle_menu_lateral', structure_id=structure.ID) }}'); return false;"
+                                   class="btn btn-sm {{ 'btn-success' if menu_lateral_actif_structure else 'btn-outline-secondary' }}"
+                                   title="{{ 'Menu latéral activé — cliquer pour désactiver' if menu_lateral_actif_structure else 'Menu latéral désactivé — cliquer pour activer' }}">
+                                    <i class="fas fa-bars"></i>{% if menu_lateral_actif_structure %} <i class="fas fa-check"></i>{% endif %}
+                                </a>
+
                                 <a href="#" onclick="confirmDelete({{ structure.ID }})" class="btn btn-sm btn-danger" title="Supprimer">
                                     <i class="fas fa-trash"></i>
                                 </a>
