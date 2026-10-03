@@ -270,10 +270,17 @@
                 </a>
                 {% endif %}
 
-                <!-- ⭐ "Part Médecin" retiré d'ici (patron : "tu as laissé part
-                     médecin à l'air libre... enlève ça puisqu'il y a ça déjà
-                     dans médecins et activités") — reste accessible uniquement
-                     sous l'onglet Medecins&Activités (voir plus haut). -->
+                <!-- ===== PART MÉDECIN (rétrocession réalisateur) — sous Finance.
+                     ⭐ Retiré le 2026-09-27 (demande du patron, doublon avec le
+                     lien déjà présent sous Médecins&Activités), remis le
+                     2026-10-03 : la structure 12 le veut ici, d'autres non —
+                     contrôlé structure par structure via onglet_cache()
+                     (admin global, déjà en place pour 'part_medecin'). ===== -->
+                {% if not onglet_cache('part_medecin') and not _bloq and session.role in ['admin', 'secretaire', 'caissier', 'gestionnaire', 'comptable'] %}
+                <a class="nav-link {% if request.endpoint == 'page_part_medecin' %}active{% endif %}" href="{{ url_for('page_part_medecin') }}">
+                    <span class="menu-text"><i class="fas fa-user-md me-1"></i> Part Médecin</span>
+                </a>
+                {% endif %}
 
                 <!-- ===== ENREGISTRER UNE CHARGE (jamais masqué — échappatoire) ===== -->
                 <a class="nav-link {% if request.endpoint == 'page_depenses_saisie' %}active{% endif %}" href="{{ url_for('page_depenses_saisie') }}">
