@@ -123,62 +123,36 @@
                 {% endif %}
 
 
-                <!-- ===== RÉFÉRENTIELS AMU ===== -->
+                <!-- ===== RÉFÉRENTIELS AMU =====
+                     ⭐ FIX 2026-10-03 : ce bloc utilisait un dropdown Bootstrap
+                     flottant (position:absolute) — correct tant qu'il n'avait
+                     que 2 liens, mais une fois complété à 8 (mise à jour du
+                     même jour), le menu déroulant débordait par-dessus les
+                     liens voisins du sidebar (étroit, 260px, overflow:hidden)
+                     et devenait illisible ("les onglets viennent sur les
+                     autres onglets" — patron). Converti en accordéon intégré
+                     (collapse), même pattern déjà utilisé juste en dessous
+                     pour "Médecins&Activités" et "Laboratoire & Radiologie" :
+                     pousse le contenu suivant au lieu de flotter par-dessus. -->
                 {% if not _bloq %}
-                <div class="dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" id="amuDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                        <span class="menu-text">Référentiels AMU</span>
-                    </a>
-                    <ul class="dropdown-menu" aria-labelledby="amuDropdown">
-                        <li>
-                            <a class="dropdown-item" href="https://referentiels.amu.tg/#/providers" target="_blank">
-                                <i class="fas fa-external-link-alt me-2"></i> AMU-CNSS
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item" href="https://prestaplus.inam.tg/Vue/index.php" target="_blank">
-                                <i class="fas fa-external-link-alt me-2"></i> AMU-INAM
-                            </a>
-                        </li>
-                        <!-- ⭐ Mis à jour le 2026-10-03 : complète avec les
-                             entrées déjà présentes dans le menu horizontal. -->
-                        <li>
-                            <a class="dropdown-item" href="https://tns.cnss.tg" target="_blank">
-                                <i class="fas fa-external-link-alt me-2"></i> AMU-TNS
-                            </a>
-                        </li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li>
-                            <a class="dropdown-item" href="{{ url_for('page_amu_supports', type_amu='cnss') }}">
-                                <i class="fas fa-file-medical me-2"></i> Support AMU CNSS
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item" href="{{ url_for('page_amu_supports', type_amu='inam') }}">
-                                <i class="fas fa-file-medical me-2"></i> Support AMU INAM
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item" href="{{ url_for('static', filename='documents/amu_cnss/regles_delivrance_soins_amu.pdf') }}" target="_blank">
-                                <i class="fas fa-file-pdf me-2"></i> Règles de délivrance de soins AMU
-                            </a>
-                        </li>
-                        {% if a_acces('entente_prealable') and not onglet_cache('entente_prealable') and not _bloq %}
-                        <li><hr class="dropdown-divider"></li>
-                        <li>
-                            <a class="dropdown-item" href="{{ url_for('page_amu_entente_prealable') }}">
-                                <i class="fas fa-file-signature me-2"></i> Entente Préalable
-                            </a>
-                        </li>
-                        {% endif %}
-                        {% if a_acces('tpc') and not onglet_cache('tpc') and not _bloq %}
-                        <li>
-                            <a class="dropdown-item" href="{{ url_for('page_amu_tpc') }}">
-                                <i class="fas fa-file-medical-alt me-2"></i> TPC
-                            </a>
-                        </li>
-                        {% endif %}
-                    </ul>
+                {% set _amu_ref_actif = request.endpoint in ['page_amu_supports', 'page_amu_entente_prealable', 'page_amu_tpc'] %}
+                <a class="nav-link d-flex justify-content-between align-items-center {% if _amu_ref_actif %}active{% endif %}" href="#" data-bs-toggle="collapse" data-bs-target="#amuReferentielsCollapse" role="button" aria-expanded="{{ 'true' if _amu_ref_actif else 'false' }}" aria-controls="amuReferentielsCollapse">
+                    <span class="menu-text">Référentiels AMU</span>
+                    <i class="fas fa-chevron-down" style="font-size: 11px; opacity: 0.6;"></i>
+                </a>
+                <div class="collapse {% if _amu_ref_actif %}show{% endif %}" id="amuReferentielsCollapse">
+                    <a class="nav-link" style="padding-left: 40px; font-size: 13px;" href="https://referentiels.amu.tg/#/providers" target="_blank"><i class="fas fa-external-link-alt me-2"></i>AMU-CNSS</a>
+                    <a class="nav-link" style="padding-left: 40px; font-size: 13px;" href="https://prestaplus.inam.tg/Vue/index.php" target="_blank"><i class="fas fa-external-link-alt me-2"></i>AMU-INAM</a>
+                    <a class="nav-link" style="padding-left: 40px; font-size: 13px;" href="https://tns.cnss.tg" target="_blank"><i class="fas fa-external-link-alt me-2"></i>AMU-TNS</a>
+                    <a class="nav-link {% if request.endpoint == 'page_amu_supports' and request.args.get('type_amu') != 'inam' %}active{% endif %}" style="padding-left: 40px; font-size: 13px;" href="{{ url_for('page_amu_supports', type_amu='cnss') }}"><i class="fas fa-file-medical me-2"></i>Support AMU CNSS</a>
+                    <a class="nav-link {% if request.endpoint == 'page_amu_supports' and request.args.get('type_amu') == 'inam' %}active{% endif %}" style="padding-left: 40px; font-size: 13px;" href="{{ url_for('page_amu_supports', type_amu='inam') }}"><i class="fas fa-file-medical me-2"></i>Support AMU INAM</a>
+                    <a class="nav-link" style="padding-left: 40px; font-size: 13px;" href="{{ url_for('static', filename='documents/amu_cnss/regles_delivrance_soins_amu.pdf') }}" target="_blank"><i class="fas fa-file-pdf me-2"></i>Règles de délivrance de soins AMU</a>
+                    {% if a_acces('entente_prealable') and not onglet_cache('entente_prealable') and not _bloq %}
+                    <a class="nav-link {% if request.endpoint == 'page_amu_entente_prealable' %}active{% endif %}" style="padding-left: 40px; font-size: 13px;" href="{{ url_for('page_amu_entente_prealable') }}"><i class="fas fa-file-signature me-2"></i>Entente Préalable</a>
+                    {% endif %}
+                    {% if a_acces('tpc') and not onglet_cache('tpc') and not _bloq %}
+                    <a class="nav-link {% if request.endpoint == 'page_amu_tpc' %}active{% endif %}" style="padding-left: 40px; font-size: 13px;" href="{{ url_for('page_amu_tpc') }}"><i class="fas fa-file-medical-alt me-2"></i>TPC</a>
+                    {% endif %}
                 </div>
                 {% endif %}
 
