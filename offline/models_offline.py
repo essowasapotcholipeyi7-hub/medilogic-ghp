@@ -128,9 +128,19 @@ CREATE TABLE IF NOT EXISTS catalogue_pbr_complementaires (
     type TEXT NOT NULL,        -- 'acte' | 'produit'
     nom_acte TEXT NOT NULL,
     compagnie TEXT NOT NULL,
-    pbr_1 REAL NOT NULL,
+    pbr_1 REAL,                -- NULL = tarif privé seul, sans PBR (2026-10-04)
     pbr_2 REAL,
+    tarif_prive REAL,          -- tarif facturé aux assurés de cette compagnie
     PRIMARY KEY (type, nom_acte, compagnie)
+);
+
+-- Prix "non assuré" par acte/produit (prix_non_assure_actes côté Neon) :
+-- tarif des patients sans aucune assurance ; absent = prix de base.
+CREATE TABLE IF NOT EXISTS catalogue_prix_non_assure (
+    type TEXT NOT NULL,        -- 'acte' | 'produit'
+    nom_acte TEXT NOT NULL,
+    prix REAL NOT NULL,
+    PRIMARY KEY (type, nom_acte)
 );
 
 CREATE TABLE IF NOT EXISTS offline_structure_info (
@@ -188,3 +198,12 @@ def _migrer_colonnes_manquantes(conn):
     for nom, type_sql in colonnes_a_ajouter.items():
         if nom not in colonnes_existantes:
             conn.execute(f"ALTER TABLE offline_sync_state ADD COLUMN {nom} {type_sql}")
+
+    # ⭐ catalogue_pbr_complementaires : pbr_1 est devenu nullable et
+    # tarif_prive a été ajouté (2026-10-05). SQLite ne modifie pas une
+    # contrainte NOT NULL : ce cache se reconstruit depuis Neon au prochain
+    # rafraîchissement, on le recrée simplement avec la nouvelle forme.
+    colonnes_pbr = {row[1] for row in conn.execute("PRAGMA table_info(catalogue_pbr_complementaires)")}
+    if colonnes_pbr and 'tarif_prive' not in colonnes_pbr:
+        conn.execute("DROP TABLE catalogue_pbr_complementaires")
+        conn.executescript(SCHEMA)

@@ -76,7 +76,7 @@ initialiser_schema()
 from offline.catalog_sync import (
     rafraichir_numeros_locaux, rafraichir_catalogue, rafraichir_utilisateurs,
     rafraichir_patients_existants, rafraichir_structure_info,
-    rafraichir_pbr_complementaires,
+    rafraichir_pbr_complementaires, rafraichir_prix_non_assure,
 )
 
 
@@ -97,6 +97,7 @@ def _rafraichir_au_demarrage():
         ('utilisateurs', rafraichir_utilisateurs),
         ('infos structure', rafraichir_structure_info),
         ('plafonds PBR complémentaires (CAC)', rafraichir_pbr_complementaires),
+        ('prix non assuré', rafraichir_prix_non_assure),
         ('patients existants', rafraichir_patients_existants),
     ):
         try:
@@ -249,10 +250,23 @@ def pbr_complementaires():
     if not compagnie:
         return jsonify({'success': True, 'items': {}})
     lignes = requeter(
-        "SELECT nom_acte, pbr_1, pbr_2 FROM catalogue_pbr_complementaires WHERE type = ? AND compagnie = ?",
+        "SELECT nom_acte, pbr_1, pbr_2, tarif_prive FROM catalogue_pbr_complementaires WHERE type = ? AND compagnie = ?",
         (type_article, compagnie)
     )
-    return jsonify({'success': True, 'items': {l['nom_acte']: {'pbr_1': l['pbr_1'], 'pbr_2': l['pbr_2']} for l in lignes}})
+    return jsonify({'success': True, 'items': {
+        l['nom_acte']: {'pbr_1': l['pbr_1'], 'pbr_2': l['pbr_2'], 'tarif_prive': l['tarif_prive']} for l in lignes
+    }})
+
+
+@app.route('/api/offline/prix-non-assure')
+def prix_non_assure():
+    """Prix "non assuré" par acte/produit (cache de prix_non_assure_actes) —
+    tarif des patients sans aucune assurance (offline_ventes.html)."""
+    if not utilisateur_connecte():
+        return jsonify({'success': False, 'error': 'Non connecté'}), 401
+    type_article = request.args.get('type', 'acte')
+    lignes = requeter("SELECT nom_acte, prix FROM catalogue_prix_non_assure WHERE type = ?", (type_article,))
+    return jsonify({'success': True, 'items': {l['nom_acte']: l['prix'] for l in lignes}})
 
 
 @app.route('/historique')

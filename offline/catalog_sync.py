@@ -231,7 +231,7 @@ def rafraichir_pbr_complementaires():
     try:
         with conn_pg.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                "SELECT type, nom_acte, compagnie, pbr_1, pbr_2 FROM pbr_complementaires WHERE structure_id = %s",
+                "SELECT type, nom_acte, compagnie, pbr_1, pbr_2, tarif_prive FROM pbr_complementaires WHERE structure_id = %s",
                 (OFFLINE_STRUCTURE_ID,)
             )
             lignes = cur.fetchall()
@@ -242,11 +242,41 @@ def rafraichir_pbr_complementaires():
     conn.execute("DELETE FROM catalogue_pbr_complementaires")
     for ligne in lignes:
         conn.execute(
-            """INSERT OR REPLACE INTO catalogue_pbr_complementaires (type, nom_acte, compagnie, pbr_1, pbr_2)
-               VALUES (?, ?, ?, ?, ?)""",
+            """INSERT OR REPLACE INTO catalogue_pbr_complementaires (type, nom_acte, compagnie, pbr_1, pbr_2, tarif_prive)
+               VALUES (?, ?, ?, ?, ?, ?)""",
             tuple(_valeur_sqlite(v) for v in (
-                ligne['type'], ligne['nom_acte'], ligne['compagnie'], ligne['pbr_1'], ligne['pbr_2']
+                ligne['type'], ligne['nom_acte'], ligne['compagnie'], ligne['pbr_1'], ligne['pbr_2'], ligne['tarif_prive']
             ))
+        )
+    conn.commit()
+    return len(lignes)
+
+
+def rafraichir_prix_non_assure():
+    """Cache des prix "non assuré" par acte/produit (prix_non_assure_actes
+    côté Neon, patron 2026-10-04) : sans lui, un patient sans assurance
+    paierait hors-ligne le prix de base au lieu du tarif non assuré."""
+    if OFFLINE_FORCE:
+        raise ReseauSimuleCoupe()
+    import psycopg2
+    import psycopg2.extras
+    conn_pg = psycopg2.connect(DATABASE_URL, connect_timeout=10)
+    try:
+        with conn_pg.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT type, nom_acte, prix FROM prix_non_assure_actes WHERE structure_id = %s",
+                (OFFLINE_STRUCTURE_ID,)
+            )
+            lignes = cur.fetchall()
+    finally:
+        conn_pg.close()
+
+    conn = get_connection()
+    conn.execute("DELETE FROM catalogue_prix_non_assure")
+    for ligne in lignes:
+        conn.execute(
+            "INSERT OR REPLACE INTO catalogue_prix_non_assure (type, nom_acte, prix) VALUES (?, ?, ?)",
+            tuple(_valeur_sqlite(v) for v in (ligne['type'] or 'acte', ligne['nom_acte'], ligne['prix']))
         )
     conn.commit()
     return len(lignes)

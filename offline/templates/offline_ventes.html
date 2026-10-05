@@ -102,7 +102,8 @@ const LABELS_ASSURANCE = {amu_cnss: 'AMU-CNSS', amu_inam: 'AMU-INAM', amu_tns: '
 let patientChoisi = null;
 let typeVente = 'actes';
 let panier = [];
-let pbrCacTable = {}; // {nom_article: {pbr_1, pbr_2}}, pour la compagnie CAC du patient
+let pbrCacTable = {}; // {nom_article: {pbr_1, pbr_2, tarif_prive}}, pour la compagnie privée du patient
+let prixNonAssureTable = {}; // {nom_article: prix} — patients sans aucune assurance
 
 document.querySelectorAll('#ongletsType .nav-link').forEach(a => {
     a.addEventListener('click', function(e) {
@@ -112,6 +113,7 @@ document.querySelectorAll('#ongletsType .nav-link').forEach(a => {
         typeVente = this.dataset.type;
         panier = [];
         chargerPbrCacTable();
+        chargerPrixNonAssure();
         afficherPanier();
     });
 });
@@ -178,7 +180,7 @@ document.getElementById('articleInput').addEventListener('input', function() {
 function ajouterArticle(e, article) {
     e.preventDefault();
     panier.push({
-        nom: article.nom, prix: article.prix, prix_unitaire: article.prix,
+        nom: article.nom, prix: article.prix, prix_base: article.prix, prix_unitaire: article.prix,
         pbr: article.pbr || article.prix, quantite: 1, id: article.id,
         prise_en_charge_amu: true, prise_en_charge_cac: true,
     });
@@ -193,94 +195,118 @@ document.getElementById('btnArticleLibre').addEventListener('click', function() 
     const prix = parseFloat(prompt('Prix (FCFA) :', '0'));
     if (!prix || prix <= 0) { alert('Prix invalide.'); return; }
     panier.push({
-        nom, prix, prix_unitaire: prix, pbr: prix, quantite: 1, id: null,
-        prise_en_charge_amu: true, prise_en_charge_cac: true, libre: true,
+        nom, prix, prix_base: prix, prix_unitaire: prix, pbr: prix, quantite: 1, id: null,
+        prise_en_charge_amu: true, prise_en_charge_cac: true, libre: true, prix_modifie: true,
     });
     afficherPanier();
 });
 
-// ===== Calcul du plafond PBR-CAC — même formule que calculerTotal()
-// (templates/actes_vente.html) et calculer_repartition_assurance()
-// (services/hospitalisation_service.py) : plafond AMU = min(prix, pbr),
-// CAC calculée sur le reste après AMU puis elle-même plafonnée par
-// compagnie si applicable, un seul taux CAC appliqué à la base sommée,
-// arrondi une seule fois à la fin (jamais ligne par ligne). =====
+// ===== Tarification — miroir de services/tarification_service.py (MÊME
+// règle que la vente en ligne, patron 2026-10-04/05) :
+//   tarif : prix modifié à la main > tarif privé de la compagnie > prix non
+//           assuré (patient sans aucune assurance) > prix de base
+//   part AMU     = taux AMU x min(tarif, PBR AMU) x qté  — PBR AMU jamais modifié
+//   part privée  = taux privé x PBR privé x qté (plafonnée au reste après AMU)
+//                  si PBR privé (enregistré chez la compagnie, ou SAISI sur la
+//                  ligne quand il n'y en a pas d'enregistré), sinon taux x reste
+//   patient      = tarif - parts (jamais négatif) ; aide hospitalière ensuite.
+function chargerPrixNonAssure() {
+    const typeParam = typeVente === 'actes' ? 'acte' : 'produit';
+    fetch('/api/offline/prix-non-assure?type=' + typeParam).then(r => r.json())
+        .then(d => { prixNonAssureTable = d.items || {}; afficherPanier(); })
+        .catch(() => {});
+}
+
 function tauxAmuPourArticle(article) {
     if (!patientChoisi) return 0;
     const taux = parseFloat(patientChoisi.taux_prise_charge) || 0;
-    return (article.nom && article.nom.includes('P160')) ? 90 : taux;
+    if (article.nom && article.nom.includes('O101')) return 100;   // oxygène
+    return (article.nom && article.nom.includes('P160')) ? 90 : taux;   // chambre
+}
+
+function contexteTarificationOffline() {
+    const libelleAssurance = patientChoisi ? LABELS_ASSURANCE[patientChoisi.type_assurance] : null;
+    const amu = !!libelleAssurance;
+    const privee = !!(patientChoisi && patientChoisi.assurance2_nom);
+    return {
+        amu: amu, tauxAMU: amu ? (parseFloat(patientChoisi.taux_prise_charge) || 0) : 0,
+        privee: privee, tauxPrivee: privee ? (parseFloat(patientChoisi.taux_assurance2) || 0) : 0,
+        nomPrivee: privee ? patientChoisi.assurance2_nom : '',
+        appliquePbrPrive: document.getElementById('checkAppliquePbrCac').checked,
+        variante: document.getElementById('selectPbrCacVariante').value,
+    };
+}
+
+function pbrPriveEnregistre(entree, variante) {
+    if (!entree) return null;
+    if (variante === 'alternatif' && entree.pbr_2 !== null && entree.pbr_2 !== undefined) return parseFloat(entree.pbr_2);
+    if (entree.pbr_1 === null || entree.pbr_1 === undefined || parseFloat(entree.pbr_1) <= 0) return null;
+    return parseFloat(entree.pbr_1);
+}
+
+function tarifUnitaireOffline(a, ctx) {
+    const prixBase = parseFloat(a.prix_base !== undefined && a.prix_base !== null ? a.prix_base : a.prix) || 0;
+    if (a.prix_modifie) return { tarif: parseFloat(a.prix) || 0, source: 'base' };
+    const entree = ctx.privee ? pbrCacTable[a.nom] : undefined;
+    if (entree && parseFloat(entree.tarif_prive) > 0) return { tarif: parseFloat(entree.tarif_prive), source: 'prive' };
+    const prixNonAssure = parseFloat(prixNonAssureTable[a.nom]) || 0;
+    if (!ctx.amu && !ctx.privee && prixNonAssure > 0) return { tarif: prixNonAssure, source: 'non_assure' };
+    return { tarif: prixBase, source: 'base' };
+}
+
+function repartirLigneOffline(a, ctx) {
+    const qte = parseFloat(a.quantite) || 1;
+    const t = tarifUnitaireOffline(a, ctx);
+    const total = t.tarif * qte;
+    // PBR AMU absent = le tarif sert de base ; 0 explicite = pas de part AMU
+    const pbrAMU = (a.pbr === undefined || a.pbr === null || a.pbr === '') ? t.tarif : (parseFloat(a.pbr) || 0);
+    let baseAMU = 0, partAMU = 0;
+    if (ctx.amu && a.prise_en_charge_amu !== false && pbrAMU > 0) {
+        baseAMU = Math.min(t.tarif, pbrAMU) * qte;
+        const taux = tauxAmuPourArticle(a);
+        if (taux > 0) partAMU = baseAMU * taux / 100;
+    }
+    let partPrivee = 0, pbrPriveApplique = null;
+    const enregistre = ctx.privee ? pbrPriveEnregistre(pbrCacTable[a.nom], ctx.variante) : null;
+    if (ctx.privee && a.prise_en_charge_cac !== false && ctx.tauxPrivee > 0) {
+        const reste = Math.max(total - partAMU, 0);
+        const manuel = parseFloat(a.pbr_prive_modifie) || 0;
+        pbrPriveApplique = manuel > 0 ? manuel : (ctx.appliquePbrPrive ? enregistre : null);
+        if (pbrPriveApplique !== null && pbrPriveApplique !== undefined) {
+            partPrivee = Math.min(pbrPriveApplique * qte * ctx.tauxPrivee / 100, reste);
+        } else {
+            partPrivee = reste * ctx.tauxPrivee / 100;
+        }
+    }
+    return { tarif: t.tarif, source: t.source, total: total, baseAMU: baseAMU, partAMU: partAMU,
+             partPrivee: partPrivee, partPatient: Math.max(total - partAMU - partPrivee, 0),
+             pbrAMU: pbrAMU, pbrPriveEnregistre: enregistre };
 }
 
 function calculerTotaux() {
-    const libelleAssurance = patientChoisi ? LABELS_ASSURANCE[patientChoisi.type_assurance] : null;
-    const appliquePbrCac = document.getElementById('checkAppliquePbrCac').checked;
-    const pbrCacVariante = document.getElementById('selectPbrCacVariante').value;
-
-    let sousTotal = 0, totalAmu = 0, baseCac = 0, baseRemboursement = 0;
-    for (const a of panier) {
-        const prix = a.prix || 0, pbr = a.pbr || prix, qte = a.quantite || 1;
-        const total = prix * qte;
-        sousTotal += total;
-
-        let partAmu = 0;
-        const aAmu = libelleAssurance && a.prise_en_charge_amu;
-        if (aAmu) {
-            const baseAmu = Math.min(prix, pbr) * qte;
-            // ⭐ "PBR" affiché dans l'historique des ventes en ligne après
-            // synchro (historique_ventes.html:904, v.base_remboursement) —
-            // même définition que calculerTotal() (templates/actes_vente.html
-            // :1548, pbrTotalAMU) : la somme des bases plafonnées, PAS le
-            // montant de prise en charge. Champ oublié jusqu'ici (jamais
-            // calculé ni envoyé), d'où "PBR" toujours à 0 après synchro
-            // (signalé par le patron le 2026-09-29).
-            baseRemboursement += baseAmu;
-            partAmu = baseAmu * tauxAmuPourArticle(a) / 100;
-            totalAmu += partAmu;
-        }
-
-        if (patientChoisi && patientChoisi.assurance2_nom && a.prise_en_charge_cac) {
-            let reste = aAmu ? (total - partAmu) : total;
-            if (appliquePbrCac && pbrCacTable[a.nom]) {
-                const entree = pbrCacTable[a.nom];
-                const plafondUnitaire = (pbrCacVariante === 'alternatif' && entree.pbr_2 != null) ? entree.pbr_2 : entree.pbr_1;
-                reste = Math.min(reste, plafondUnitaire * qte);
-            }
-            baseCac += Math.max(reste, 0);
-        }
-    }
-    const tauxCac = (patientChoisi && patientChoisi.assurance2_nom) ? (parseFloat(patientChoisi.taux_assurance2) || 0) : 0;
-    const totalCac = baseCac * tauxCac / 100;
-
-    // ===== Aide hospitalière — même 3 cas que calculerTotal()
-    // (templates/actes_vente.html:1652-1693), le 4e cas ("assurance
-    // principale désactivée pour cette vente") ne s'applique pas ici : ce
-    // pilote n'a pas de bascule pour désactiver l'AMU au cas par cas, donc
-    // un patient assuré l'a toujours (cas 1). Appliquée APRÈS AMU+CAC,
-    // jamais soumise au plafond PBR-CAC (couche indépendante). =====
-    const estAssure = !!libelleAssurance;
-    const aCac = !!(patientChoisi && patientChoisi.assurance2_nom);
-    let baseAide;
-    if (estAssure) {
-        baseAide = Math.max(sousTotal - totalAmu - totalCac, 0);           // cas 1
-    } else if (aCac) {
-        baseAide = Math.max(sousTotal - totalCac, 0);                     // cas 2
-    } else {
-        baseAide = sousTotal;                                              // cas 3
+    const ctx = contexteTarificationOffline();
+    const lignes = panier.map(a => repartirLigneOffline(a, ctx));
+    let sousTotal = 0, totalAmu = 0, totalCac = 0, baseRemboursement = 0;
+    for (const l of lignes) {
+        sousTotal += l.total; totalAmu += l.partAMU; totalCac += l.partPrivee; baseRemboursement += l.baseAMU;
     }
 
+    // ===== Aide hospitalière : sur le reste après AMU et privée, en %
+    // (plafonné à 100) ou en montant (plafonné au reste) — même règle que
+    // repartir_panier() côté serveur. =====
+    const baseAide = Math.max(sousTotal - totalAmu - totalCac, 0);
     const typeAide = document.getElementById('typeAideHospitaliere').value;
     let tauxAide = parseFloat(document.getElementById('tauxAideHospitaliere').value) || 0;
     if (tauxAide < 0) tauxAide = 0;
     if (typeAide === 'pourcentage' && tauxAide > 100) tauxAide = 100;
-
     let aideHospitaliere = 0;
     if (tauxAide > 0 && baseAide > 0) {
         aideHospitaliere = (typeAide === 'montant') ? Math.min(tauxAide, baseAide) : (baseAide * tauxAide / 100);
     }
-
     const netAPayer = Math.max(0, baseAide - aideHospitaliere);
 
     return {
+        ctx: ctx, lignes: lignes,
         sousTotal: Math.round(sousTotal),
         priseEnCharge: Math.round(totalAmu),
         priseEnCharge2: Math.round(totalCac),
@@ -291,16 +317,51 @@ function calculerTotaux() {
     };
 }
 
+function fmt(n) { return Math.round(n).toLocaleString('fr-FR'); }
+
 function afficherPanier() {
     const zone = document.getElementById('panier');
+    const t = calculerTotaux();
+    const ctx = t.ctx;
     if (!panier.length) { zone.innerHTML = '<p class="text-muted">Aucun article ajouté.</p>'; }
     else {
-        zone.innerHTML = '<table class="table table-sm"><tbody>' + panier.map((a, i) =>
-            `<tr><td>${a.nom}${a.libre ? ' <span class="badge bg-secondary">libre</span>' : ''}</td><td>${a.prix} FCFA</td><td><button class="btn btn-sm btn-outline-danger" onclick="retirerArticle(${i})">Retirer</button></td></tr>`
-        ).join('') + '</table>';
+        let entete = '<tr><th>Article</th><th class="text-center">Prix</th><th class="text-center">Qté</th>';
+        if (ctx.amu) entete += '<th class="text-center">PBR AMU</th><th class="text-center">Part AMU</th>';
+        if (ctx.privee) entete += '<th class="text-center">PBR ' + ctx.nomPrivee + '</th><th class="text-center">Part ' + ctx.nomPrivee + '</th>';
+        entete += '<th class="text-center">Patient</th><th></th></tr>';
+
+        const lignesHtml = panier.map((a, i) => {
+            const l = t.lignes[i];
+            let libelle = '';
+            if (l.source === 'prive') libelle = '<div class="small text-info">Tarif ' + ctx.nomPrivee + '</div>';
+            else if (l.source === 'non_assure') libelle = '<div class="small text-secondary">Tarif non assuré</div>';
+            else if (a.prix_modifie && !a.libre) libelle = '<div class="small text-warning">Prix modifié</div>';
+            let h = '<tr><td>' + a.nom + (a.libre ? ' <span class="badge bg-secondary">libre</span>' : '') + '</td>';
+            // Prix clinique modifiable (prime sur tout tarif automatique)
+            h += '<td class="text-center"><input type="number" class="form-control form-control-sm mx-auto" style="width: 95px;" value="' + Math.round(l.tarif) + '" onchange="modifierPrixOffline(' + i + ', this.value)">' + libelle + '</td>';
+            h += '<td class="text-center"><input type="number" min="1" class="form-control form-control-sm mx-auto" style="width: 60px;" value="' + (a.quantite || 1) + '" onchange="modifierQuantiteOffline(' + i + ', this.value)"></td>';
+            if (ctx.amu) {
+                // PBR AMU : jamais modifiable
+                h += '<td class="text-center">' + (a.prise_en_charge_amu !== false ? '<span class="badge bg-primary">' + fmt(l.pbrAMU) + ' F</span>' : '<span class="text-muted">-</span>') + '</td>';
+                h += '<td class="text-center">' + (l.partAMU > 0 ? '<span class="badge bg-success">' + fmt(l.partAMU) + ' F</span>' : '<span class="text-muted">-</span>') + '</td>';
+            }
+            if (ctx.privee) {
+                // PBR privé : enregistré chez la compagnie = affiché tel quel ;
+                // sinon saisissable (vide = le taux s'applique au prix)
+                let cellePbr;
+                if (a.prise_en_charge_cac === false) cellePbr = '<span class="text-muted">-</span>';
+                else if (l.pbrPriveEnregistre !== null && l.pbrPriveEnregistre !== undefined) cellePbr = '<span class="badge bg-info text-dark">' + fmt(l.pbrPriveEnregistre) + ' F</span><div class="small text-muted">enregistré</div>';
+                else cellePbr = '<input type="number" class="form-control form-control-sm mx-auto" style="width: 95px;" placeholder="vide = prix" value="' + (a.pbr_prive_modifie ? Math.round(a.pbr_prive_modifie) : '') + '" title="Base de remboursement de ' + ctx.nomPrivee + ' pour cette ligne — vide : le taux s\'applique au prix" onchange="modifierPbrPriveOffline(' + i + ', this.value)">' + (a.pbr_prive_modifie ? '<div class="small text-warning">PBR saisi</div>' : '<div class="small text-muted">vide = taux sur le prix</div>');
+                h += '<td class="text-center">' + cellePbr + '</td>';
+                h += '<td class="text-center">' + (l.partPrivee > 0 ? '<span class="badge bg-info">' + fmt(l.partPrivee) + ' F</span>' : '<span class="text-muted">-</span>') + '</td>';
+            }
+            h += '<td class="text-center"><span class="badge bg-warning text-dark">' + fmt(l.partPatient) + ' F</span></td>';
+            h += '<td><button class="btn btn-sm btn-outline-danger" onclick="retirerArticle(' + i + ')">Retirer</button></td></tr>';
+            return h;
+        }).join('');
+        zone.innerHTML = '<div class="table-responsive"><table class="table table-sm align-middle"><thead>' + entete + '</thead><tbody>' + lignesHtml + '</tbody></table></div>';
     }
 
-    const t = calculerTotaux();
     document.getElementById('ligneSousTotal').textContent = t.sousTotal.toLocaleString('fr-FR');
     document.getElementById('ligneNetAPayer').textContent = t.netAPayer.toLocaleString('fr-FR') + ' FCFA';
 
@@ -334,6 +395,34 @@ function afficherPanier() {
     document.getElementById('montantDonne').value = t.netAPayer;
 }
 function retirerArticle(i) { panier.splice(i, 1); afficherPanier(); }
+
+// Prix clinique saisi à la main : fixe le prix de la ligne (prime sur le
+// tarif privé / non assuré automatique). Le PBR AMU ne change pas.
+function modifierPrixOffline(i, valeur) {
+    const prix = parseFloat(valeur);
+    if (isNaN(prix) || prix <= 0) { afficherPanier(); return; }
+    panier[i].prix = prix;
+    panier[i].prix_unitaire = prix;
+    panier[i].prix_modifie = true;
+    afficherPanier();
+}
+
+function modifierQuantiteOffline(i, valeur) {
+    let qte = parseInt(valeur, 10);
+    if (isNaN(qte) || qte < 1) qte = 1;
+    panier[i].quantite = qte;
+    afficherPanier();
+}
+
+// PBR de l'assurance privée saisi pour UNE ligne (patron, 2026-10-05) —
+// proposé seulement quand la compagnie n'a pas de PBR enregistré pour cet
+// article ; vide = le taux s'applique au prix (règle normale).
+function modifierPbrPriveOffline(i, valeur) {
+    const pbr = parseFloat(valeur);
+    if (isNaN(pbr) || pbr <= 0) delete panier[i].pbr_prive_modifie;
+    else panier[i].pbr_prive_modifie = pbr;
+    afficherPanier();
+}
 
 document.getElementById('btnValider').addEventListener('click', function() {
     if (!patientChoisi) { alert('Choisissez un patient.'); return; }
@@ -381,7 +470,17 @@ document.getElementById('btnValider').addEventListener('click', function() {
     // enregistrée SANS aucun article : le reçu n'affiche que les totaux,
     // et le stock n'est jamais décrémenté à la synchro (bug réel trouvé le
     // 2026-09-29, cf. panier envoyé sous la mauvaise clé 'pharmacie').
-    data[typeVente === 'pharmacie' ? 'produits' : 'actes'] = panier;
+    data[typeVente === 'pharmacie' ? 'produits' : 'actes'] = panier.map((a, i) => Object.assign({}, a, {
+        prix: t.lignes[i].tarif,                 // tarif réellement appliqué (privé / non assuré / base / modifié)
+        prix_unitaire: t.lignes[i].tarif,
+        prix_base: (a.prix_base !== undefined && a.prix_base !== null) ? a.prix_base : a.prix,
+        source_tarif: t.lignes[i].source,
+        prix_modifie: !!a.prix_modifie,
+        total: t.lignes[i].total,
+        pbr_variante: null,
+        pbr_prive_modifie: a.pbr_prive_modifie || null,
+        quantite: a.quantite || 1,
+    }));
 
     const url = typeVente === 'actes' ? '/api/offline/ventes/actes' : '/api/offline/ventes/pharma';
     fetch(url, {
@@ -406,6 +505,7 @@ document.getElementById('btnValider').addEventListener('click', function() {
 });
 
 afficherPanier();
+chargerPrixNonAssure();
 
 // ⭐ Arrivée depuis la liste des patients (bouton « Vendre ») ou juste après
 // la création d'un patient : /ventes?patient=<uuid> présélectionne ce

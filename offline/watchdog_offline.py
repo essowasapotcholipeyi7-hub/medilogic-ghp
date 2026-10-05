@@ -44,7 +44,7 @@ def _cycle():
     from offline.catalog_sync import (
         rafraichir_catalogue, rafraichir_utilisateurs, rafraichir_numeros_locaux,
         rafraichir_patients_existants, rafraichir_structure_info,
-        rafraichir_pbr_complementaires,
+        rafraichir_pbr_complementaires, rafraichir_prix_non_assure,
     )
 
     conn = get_connection()
@@ -132,6 +132,7 @@ def _cycle():
                     ('numéros locaux', rafraichir_numeros_locaux),
                     ('infos structure', rafraichir_structure_info),
                     ('plafonds PBR complémentaires (CAC)', rafraichir_pbr_complementaires),
+                    ('prix non assuré', rafraichir_prix_non_assure),
                     ('patients existants', rafraichir_patients_existants),
                 ):
                     try:
