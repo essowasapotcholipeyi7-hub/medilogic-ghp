@@ -154,7 +154,8 @@ un navigateur :
     (rien de visible ne change pour le personnel).
   - Pour tester le mode hors-ligne SANS couper internet pour de vrai :
     fermer (Ctrl+C), relancer en tapant avant la commande :
-        set OFFLINE_FORCE=1
+        set OFFLINE_FORCE=1            (invite de commandes "cmd")
+        $env:OFFLINE_FORCE="1"         (PowerShell)
     puis la même commande "python -m waitress...". Le programme se
     comporte alors exactement comme si internet était coupé, sans le
     couper réellement. NE JAMAIS laisser OFFLINE_FORCE=1 activé en

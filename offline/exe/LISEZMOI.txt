@@ -40,10 +40,15 @@ Si un message d'erreur s'affiche a la place, il dit quoi corriger.
 Ouvrir http://127.0.0.1:5100/ dans le navigateur :
   - internet OK  -> redirection vers le site en ligne (normal)
   - pour simuler une coupure sans couper internet : fermer la fenetre,
-    ouvrir une invite de commandes dans ce dossier et taper
+    puis dans l'Explorateur, Maj + clic droit dans ce dossier,
+    "Ouvrir dans le Terminal" / "Ouvrir PowerShell ici", et taper :
+        $env:OFFLINE_FORCE="1"
+        .\MediLogicOffline.exe
+    (si la fenetre est une invite de commandes classique "cmd" :
         set OFFLINE_FORCE=1
-        MediLogicOffline.exe
-    (uniquement pour tester — jamais en usage reel).
+        MediLogicOffline.exe  )
+    Uniquement pour tester — jamais en usage reel : fermer cette fenetre
+    completement a la fin du test, le reglage disparait avec elle.
 Fermer la fenetre quand c'est bon.
 
 ----------------------------------------------------------------
