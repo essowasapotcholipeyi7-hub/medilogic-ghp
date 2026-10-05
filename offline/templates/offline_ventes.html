@@ -1,12 +1,17 @@
 {% extends "offline_base.html" %}
 {% block titre %}Vente{% endblock %}
 {% block contenu %}
-<div class="container mt-4" style="max-width:760px;">
+<!-- Pleine largeur (patron, 2026-10-05 : « trop serré alors qu'il y a de la place
+     aux bords ») : articles/panier à gauche, encaissement à droite qui suit le
+     défilement ; sur petit écran les blocs se remettent l'un sous l'autre. -->
+<div class="container-fluid mt-4 px-3 px-lg-4" style="max-width: 1700px;">
     <div class="alert alert-warning">
         Connexion internet indisponible. Catalogue local : {{ nb_actes }} acte(s), {{ nb_produits }} produit(s)
         (dernière mise à jour pendant que le réseau fonctionnait — les prix et stocks peuvent être légèrement obsolètes).
     </div>
 
+    <div class="row g-3">
+    <div class="col-xl-8">
     <div class="card mb-3">
         <div class="card-header">Patient</div>
         <div class="card-body">
@@ -46,7 +51,9 @@
         </div>
     </div>
 
-    <div class="card">
+    </div>
+    <div class="col-xl-4">
+    <div class="card position-sticky" style="top: 12px;">
         <div class="card-header">Encaissement</div>
         <div class="card-body">
             <table class="table table-sm mb-3" id="tableauTotaux">
@@ -66,7 +73,7 @@
                 <tr class="fw-bold"><td>NET À PAYER</td><td class="text-end" id="ligneNetAPayer">0 FCFA</td></tr>
             </table>
             <div class="row g-3 mb-3">
-                <div class="col-md-6">
+                <div class="col-12">
                     <label class="form-label text-warning">Aide hospitalière</label>
                     <div class="input-group">
                         <input type="number" id="tauxAideHospitaliere" class="form-control" value="0" min="0" step="5">
@@ -78,11 +85,11 @@
                 </div>
             </div>
             <div class="row g-3">
-                <div class="col-md-6">
+                <div class="col-12">
                     <label class="form-label">Montant donné (FCFA)</label>
                     <input type="number" id="montantDonne" class="form-control" min="0" step="1">
                 </div>
-                <div class="col-md-6">
+                <div class="col-12">
                     <label class="form-label">Mode de paiement</label>
                     <select id="modePaiement" class="form-select">
                         <option value="especes">Espèces</option>
@@ -90,9 +97,11 @@
                     </select>
                 </div>
             </div>
-            <button id="btnValider" class="btn btn-success mt-3">Enregistrer la vente</button>
+            <button id="btnValider" class="btn btn-success btn-lg w-100 mt-3">Enregistrer la vente</button>
             <div id="messageVente" class="mt-2"></div>
         </div>
+    </div>
+    </div>
     </div>
 </div>
 
