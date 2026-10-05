@@ -1,22 +1,6 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<title>Mode hors-ligne — Patients</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body style="background:#f5f7fa;">
-<nav class="navbar navbar-dark bg-warning-emphasis" style="background:#b45309;">
-    <div class="container">
-        <span class="navbar-brand text-white">⚠ Mode hors-ligne — {{ nom_utilisateur }}</span>
-            <span id="badgeSynchro" class="badge bg-secondary ms-2"></span>
-        <div>
-            <a href="/ventes" class="btn btn-sm btn-light me-2">Ventes</a>
-            <a href="/historique" class="btn btn-sm btn-light me-2">Historique du jour</a>
-            <a href="/logout" class="btn btn-sm btn-outline-light">Déconnexion</a>
-        </div>
-    </div>
-</nav>
+{% extends "offline_base.html" %}
+{% block titre %}Patients{% endblock %}
+{% block contenu %}
 <div class="container mt-4">
     <div class="alert alert-warning">
         Connexion internet indisponible. Vos actions sont enregistrées localement
@@ -175,6 +159,11 @@ document.querySelectorAll('#ongletsPatient .nav-link').forEach(a => {
         document.getElementById('ongletNouveau').classList.toggle('d-none', onglet !== 'nouveau');
     });
 });
+// Ancre #nouveau (raccourci « Nouveau patient » de la page d'accueil).
+if (location.hash === '#nouveau') {
+    const lien = document.querySelector('#ongletsPatient .nav-link[data-onglet="nouveau"]');
+    if (lien) lien.click();
+}
 
 function afficherResultats(patients) {
     const zone = document.getElementById('resultats');
@@ -282,25 +271,4 @@ document.getElementById('formPatient').addEventListener('submit', function(e) {
     });
 });
 </script>
-<script>
-function rafraichirBadgeSynchro() {
-    fetch('/api/offline/sync/status').then(r => r.json()).then(d => {
-        const badge = document.getElementById('badgeSynchro');
-        if (!badge) return;
-        if (d.en_attente > 0) {
-            badge.className = 'badge bg-warning text-dark ms-2';
-            badge.textContent = d.en_attente + ' en attente de synchro';
-        } else if (d.erreurs > 0) {
-            badge.className = 'badge bg-danger ms-2';
-            badge.textContent = d.erreurs + ' erreur(s) de synchro';
-        } else {
-            badge.className = 'badge bg-success ms-2';
-            badge.textContent = 'Tout synchronisé';
-        }
-    }).catch(() => {});
-}
-rafraichirBadgeSynchro();
-setInterval(rafraichirBadgeSynchro, 15000);
-</script>
-</body>
-</html>
+{% endblock %}

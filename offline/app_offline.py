@@ -129,7 +129,7 @@ def accueil():
         return redirect(ONLINE_APP_URL)
     if not utilisateur_connecte():
         return redirect('/login')
-    return redirect('/patients')
+    return redirect('/accueil')
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -141,7 +141,7 @@ def login():
             request.form.get('mot_de_passe') or ''
         )
         if ok:
-            return redirect('/patients')
+            return redirect('/accueil')
         erreur = resultat
     return render_template('offline_login.html', erreur=erreur)
 
@@ -152,11 +152,31 @@ def logout():
     return redirect('/login')
 
 
+@app.route('/accueil')
+def page_accueil():
+    """Page d'accueil hors-ligne (patron, 2026-10-05) : comme dans le grand
+    système, une porte d'entrée avec les grandes actions (patients, vente,
+    historique) et l'état de la synchro — plus une barre de navigation
+    identique sur toutes les pages (offline_base.html)."""
+    if not utilisateur_connecte():
+        return redirect('/login')
+    conn = get_connection()
+    compter = lambda table: conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()['n']  # noqa: E731
+    return render_template(
+        'offline_accueil.html',
+        nom_utilisateur=nom_utilisateur(),
+        page_active='accueil',
+        nb_actes=compter('catalogue_actes'),
+        nb_produits=compter('catalogue_produits'),
+        nb_patients=compter('offline_patients'),
+    )
+
+
 @app.route('/patients')
 def page_patients():
     if not utilisateur_connecte():
         return redirect('/login')
-    return render_template('offline_patients.html', nom_utilisateur=nom_utilisateur())
+    return render_template('offline_patients.html', nom_utilisateur=nom_utilisateur(), page_active='patients')
 
 
 @app.route('/ventes')
@@ -169,6 +189,7 @@ def page_ventes():
     return render_template(
         'offline_ventes.html',
         nom_utilisateur=nom_utilisateur(),
+        page_active='ventes',
         nb_actes=len(actes),
         nb_produits=len(produits),
     )
@@ -275,7 +296,7 @@ def historique():
             'assurance2_nom': v['assurance2_nom'],
             'prise_en_charge_totale': prise_en_charge_totale,
         })
-    return render_template('offline_historique.html', ventes=lignes, nom_utilisateur=nom_utilisateur())
+    return render_template('offline_historique.html', ventes=lignes, nom_utilisateur=nom_utilisateur(), page_active='historique')
 
 
 @app.route('/recu/<vente_uuid>')

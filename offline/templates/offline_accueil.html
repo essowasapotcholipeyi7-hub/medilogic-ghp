@@ -1,0 +1,123 @@
+{% extends "offline_base.html" %}
+{% block titre %}Accueil{% endblock %}
+{% block extra_css %}
+<style>
+    /* Page d'accueil hors-ligne — même logique que l'accueil du grand
+       système (bandeau + grandes tuiles « par où commencer »), en orange. */
+    .hero {
+        background: linear-gradient(135deg, #9a3412 0%, #b45309 60%, #d97706 100%);
+        border-radius: 18px; padding: 22px 24px; color: #fff; margin: 22px 0 18px;
+    }
+    .hero h1 { font-size: 24px; font-weight: 700; margin: 0 0 4px; }
+    .hero p { margin: 0; opacity: .92; font-size: 14.5px; }
+    .tuiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-bottom: 18px; }
+    .tuile {
+        display: block; background: #fff; border: 1px solid #e3e8ec; border-radius: 14px; padding: 18px 18px 16px;
+        color: #1f3340; text-decoration: none; box-shadow: 0 2px 8px rgba(10,61,92,.06); transition: transform .08s, box-shadow .08s;
+    }
+    .tuile:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(10,61,92,.14); color: #1f3340; }
+    .tuile .ico { font-size: 28px; line-height: 1; margin-bottom: 10px; }
+    .tuile .titre { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+    .tuile .sous { font-size: 13px; color: #51636D; }
+    .tuile.principale { border-color: #b45309; background: #fff7ed; }
+    .raccourcis { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .raccourcis a { font-size: 12.5px; font-weight: 600; padding: 5px 12px; border-radius: 999px; text-decoration: none;
+        background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.35); }
+    .raccourcis a:hover { background: #fff; color: #b45309; }
+    .etat dt { font-weight: 600; color: #51636D; font-size: 12.5px; }
+    .etat dd { margin-bottom: 8px; }
+</style>
+{% endblock %}
+{% block contenu %}
+<div class="container" style="max-width: 1000px;">
+    <div class="hero">
+        <h1>Bonjour {{ nom_utilisateur }}</h1>
+        <p>Internet est coupé : vous travaillez sur ce poste. Tout ce que vous enregistrez ici sera envoyé
+           automatiquement au système dès le retour du réseau.</p>
+        <div class="raccourcis">
+            <a href="/patients">Rechercher un patient</a>
+            <a href="/patients#nouveau">Nouveau patient</a>
+            <a href="/ventes">Nouvelle vente</a>
+            <a href="/historique">Reçus du jour</a>
+        </div>
+    </div>
+
+    <div class="tuiles">
+        <a class="tuile principale" href="/patients">
+            <div class="ico">🧑‍⚕️</div>
+            <div class="titre">Patients</div>
+            <div class="sous">Rechercher un patient déjà connu ou en créer un nouveau, puis lancer sa vente.</div>
+        </a>
+        <a class="tuile principale" href="/ventes">
+            <div class="ico">🧾</div>
+            <div class="titre">Vente</div>
+            <div class="sous">Actes ou pharmacie, encaissement et impression du reçu.</div>
+        </a>
+        <a class="tuile" href="/historique">
+            <div class="ico">📋</div>
+            <div class="titre">Historique du jour</div>
+            <div class="sous">Retrouver et réimprimer les ventes faites depuis ce poste aujourd'hui.</div>
+        </a>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Synchronisation</div>
+                <div class="card-body">
+                    <dl class="etat mb-2">
+                        <dt>Opérations en attente d'envoi</dt><dd id="etatAttente">…</dd>
+                        <dt>Erreurs d'envoi</dt><dd id="etatErreurs">…</dd>
+                        <dt>Dernier envoi réussi</dt><dd id="etatDernierEnvoi">…</dd>
+                    </dl>
+                    <button class="btn btn-sm btn-outline-secondary" id="btnForcerSynchro">Réessayer l'envoi maintenant</button>
+                    <div class="form-text" id="msgForcerSynchro"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Catalogue local</div>
+                <div class="card-body">
+                    <dl class="etat mb-0">
+                        <dt>Actes disponibles</dt><dd>{{ nb_actes }}</dd>
+                        <dt>Produits de pharmacie</dt><dd>{{ nb_produits }}</dd>
+                        <dt>Patients connus sur ce poste</dt><dd>{{ nb_patients }}</dd>
+                        <dt>Dernière mise à jour du catalogue</dt><dd id="etatCatalogue">…</dd>
+                    </dl>
+                    <div class="form-text">Prix et stocks datent de la dernière fois où internet fonctionnait.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function dateLisible(iso) {
+    if (!iso) return 'jamais';
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'});
+}
+function surEtatSynchro(d) {
+    document.getElementById('etatAttente').textContent = d.en_attente > 0 ? d.en_attente : 'aucune';
+    const err = document.getElementById('etatErreurs');
+    err.textContent = d.erreurs > 0 ? d.erreurs + (d.last_error ? ' — ' + d.last_error : '') : 'aucune';
+    err.className = d.erreurs > 0 ? 'text-danger' : '';
+    document.getElementById('etatDernierEnvoi').textContent = dateLisible(d.last_successful_push_at);
+    document.getElementById('etatCatalogue').textContent = dateLisible(d.last_successful_catalog_refresh_at);
+}
+document.getElementById('btnForcerSynchro').addEventListener('click', function () {
+    const btn = this, msg = document.getElementById('msgForcerSynchro');
+    btn.disabled = true; msg.textContent = 'Envoi en cours…';
+    fetch('/api/offline/sync/forcer', {method: 'POST'}).then(r => r.json()).then(d => {
+        msg.textContent = d.success
+            ? (d.synchronises + ' envoyée(s), ' + d.differes + ' reportée(s), ' + d.erreurs + ' en erreur.')
+            : ('Impossible pour le moment : ' + (d.error || 'réseau indisponible'));
+        rafraichirBadgeSynchro();
+    }).catch(() => { msg.textContent = 'Impossible pour le moment : réseau indisponible.'; })
+      .finally(() => { btn.disabled = false; });
+});
+</script>
+{% endblock %}

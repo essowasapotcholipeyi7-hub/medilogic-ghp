@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mode hors-ligne — {% block titre %}{% endblock %}</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+    /* Barre de navigation commune à TOUTES les pages hors-ligne (patron,
+       2026-10-05 : « quand on est dans la liste des patients on n'accède
+       pas facilement aux ventes ») — mêmes boutons partout, le bouton de
+       la page courante est mis en évidence. Orange volontairement
+       différent du bleu du grand système : on doit voir au premier coup
+       d'œil qu'on travaille hors-ligne. */
+    .nav-hl { background: #b45309; }
+    .nav-hl .navbar-brand { color: #fff; font-weight: 700; }
+    .nav-hl .liens { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .nav-hl .liens a {
+        display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 8px;
+        color: #fff; text-decoration: none; font-size: 14px; font-weight: 600;
+        border: 1px solid rgba(255,255,255,.45); background: rgba(255,255,255,.08);
+    }
+    .nav-hl .liens a:hover { background: #fff; color: #b45309; }
+    .nav-hl .liens a.actif { background: #fff; color: #b45309; }
+    .nav-hl .liens a.deconnexion { border-color: transparent; background: transparent; font-weight: 500; opacity: .9; }
+    .nav-hl .liens a.deconnexion:hover { background: rgba(255,255,255,.15); color: #fff; }
+    body { background: #f5f7fa; }
+</style>
+{% block extra_css %}{% endblock %}
+</head>
+<body>
+<nav class="navbar navbar-dark nav-hl">
+    <div class="container">
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <a class="navbar-brand m-0" href="/accueil">⚠ Mode hors-ligne</a>
+            <span class="text-white-50 small">{{ nom_utilisateur }}</span>
+            <span id="badgeSynchro" class="badge bg-secondary"></span>
+        </div>
+        <div class="liens">
+            <a href="/accueil" class="{{ 'actif' if page_active == 'accueil' else '' }}">Accueil</a>
+            <a href="/patients" class="{{ 'actif' if page_active == 'patients' else '' }}">Patients</a>
+            <a href="/ventes" class="{{ 'actif' if page_active == 'ventes' else '' }}">Vente</a>
+            <a href="/historique" class="{{ 'actif' if page_active == 'historique' else '' }}">Historique du jour</a>
+            <a href="/logout" class="deconnexion">Déconnexion</a>
+        </div>
+    </div>
+</nav>
+{% block contenu %}{% endblock %}
+<script>
+function rafraichirBadgeSynchro() {
+    fetch('/api/offline/sync/status').then(r => r.json()).then(d => {
+        const badge = document.getElementById('badgeSynchro');
+        if (!badge) return;
+        if (d.en_attente > 0) {
+            badge.className = 'badge bg-warning text-dark';
+            badge.textContent = d.en_attente + ' en attente de synchro';
+        } else if (d.erreurs > 0) {
+            badge.className = 'badge bg-danger';
+            badge.textContent = d.erreurs + ' erreur(s) de synchro';
+        } else {
+            badge.className = 'badge bg-success';
+            badge.textContent = 'Tout synchronisé';
+        }
+        if (typeof surEtatSynchro === 'function') surEtatSynchro(d);
+    }).catch(() => {});
+}
+rafraichirBadgeSynchro();
+setInterval(rafraichirBadgeSynchro, 15000);
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
