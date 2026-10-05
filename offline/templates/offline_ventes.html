@@ -406,5 +406,27 @@ document.getElementById('btnValider').addEventListener('click', function() {
 });
 
 afficherPanier();
+
+// ⭐ Arrivée depuis la liste des patients (bouton « Vendre ») ou juste après
+// la création d'un patient : /ventes?patient=<uuid> présélectionne ce
+// patient, plus besoin de le rechercher une seconde fois.
+(function preselectionnerPatientDepuisUrl() {
+    const uuid = new URLSearchParams(location.search).get('patient');
+    if (!uuid) return;
+    fetch('/api/offline/patients/recherche?uuid=' + encodeURIComponent(uuid))
+        .then(r => r.json())
+        .then(d => {
+            if (!d.success || !d.patients.length) {
+                document.getElementById('resultatsPatient').innerHTML =
+                    '<span class="text-danger small">Patient introuvable sur ce poste — recherchez-le ci-dessus.</span>';
+                return;
+            }
+            window._patientsTrouves = d.patients;
+            choisirPatient(0);
+            document.getElementById('rechercheInput').value = `${d.patients[0].nom} ${d.patients[0].prenom}`.trim();
+            document.getElementById('resultatsPatient').innerHTML = '';
+        })
+        .catch(() => {});
+})();
 </script>
 {% endblock %}

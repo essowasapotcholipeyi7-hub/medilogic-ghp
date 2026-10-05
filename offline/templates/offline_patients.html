@@ -260,7 +260,9 @@ document.getElementById('formPatient').addEventListener('submit', function(e) {
         body: JSON.stringify(data)
     }).then(r => r.json()).then(d => {
         if (d.success) {
-            document.getElementById('messageCreation').textContent = 'Patient enregistré (n° ' + d.numero_local + ')';
+            document.getElementById('messageCreation').innerHTML =
+                'Patient enregistré (n° ' + d.numero_local + ') ' +
+                '<a href="/ventes?patient=' + encodeURIComponent(d.uuid) + '" class="btn btn-sm btn-success ms-2">Vendre à ce patient</a>';
             e.target.reset();
             document.getElementById('numeroAssureDiv').style.display = 'none';
             document.getElementById('societeDiv').style.display = 'none';

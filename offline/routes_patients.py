@@ -56,10 +56,22 @@ def rechercher_patients():
         return jsonify({'success': False, 'error': 'Non connecté'}), 401
 
     terme = (request.args.get('q') or '').strip().lower()
-    lignes = requeter(
-        "SELECT * FROM offline_patients WHERE structure_id = ? ORDER BY created_at DESC",
-        (OFFLINE_STRUCTURE_ID,)
-    )
+    # ⭐ ?uuid= : un patient précis (bouton « Vendre » de la liste des
+    # patients → /ventes?patient=<uuid>, qui le présélectionne). Patron,
+    # 2026-10-05 : avant, arrivé sur la vente, il fallait rechercher à
+    # nouveau le patient sur lequel on était déjà.
+    uuid_demande = (request.args.get('uuid') or '').strip()
+    if uuid_demande:
+        lignes = requeter(
+            "SELECT * FROM offline_patients WHERE structure_id = ? AND uuid = ?",
+            (OFFLINE_STRUCTURE_ID, uuid_demande)
+        )
+        terme = ''
+    else:
+        lignes = requeter(
+            "SELECT * FROM offline_patients WHERE structure_id = ? ORDER BY created_at DESC",
+            (OFFLINE_STRUCTURE_ID,)
+        )
 
     resultats = []
     for ligne in lignes:
