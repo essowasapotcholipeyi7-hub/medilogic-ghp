@@ -1,0 +1,75 @@
+================================================================
+ MEDILOGIC — MODE HORS-LIGNE — INSTALLATION SANS PYTHON
+================================================================
+
+Ce dossier contient tout ce qu'il faut : rien d'autre a installer sur le
+PC (ni Python, ni dependances). Un seul PC par structure.
+
+  MediLogicOffline.exe          le programme
+  lancer_offline.bat            le lance et le relance s'il s'arrete
+  installer_sans_admin.bat      demarrage automatique (sans droits admin)
+  installer_tache_planifiee.bat demarrage automatique (avec droits admin)
+  env.exemple                   modele du fichier de reglages .env
+
+----------------------------------------------------------------
+ ETAPE 1 — Copier ce dossier sur le PC
+----------------------------------------------------------------
+Par exemple dans  C:\MediLogicOffline  (pas dans "Program Files").
+
+----------------------------------------------------------------
+ ETAPE 2 — Deposer les 2 fichiers de reglages a cote de l'exe
+----------------------------------------------------------------
+  a) credentials.json  (compte de service Google — demandez-le)
+  b) .env : copier env.exemple, le renommer EXACTEMENT ".env" (dans
+     l'Explorateur, activez "Extensions de noms de fichiers" pour
+     verifier qu'il ne s'appelle pas .env.txt), puis remplir :
+       DATABASE_URL, SPREADSHEET_ID, PATIENT_ENCRYPTION_KEY
+            -> copies EXACTEMENT depuis Render (service GHP > Environment)
+       OFFLINE_STRUCTURE_ID -> numero de la structure servie par ce PC
+
+  !! PATIENT_ENCRYPTION_KEY : si elle est absente ou differente de celle
+  de Render, les patients crees ici seront soit en clair (faille), soit
+  illisibles sur le serveur. Ne jamais l'improviser.
+
+----------------------------------------------------------------
+ ETAPE 3 — Tester
+----------------------------------------------------------------
+Double-cliquer MediLogicOffline.exe. Une fenetre noire s'ouvre ; la
+derniere ligne doit dire "En ecoute sur http://127.0.0.1:5100/".
+Si un message d'erreur s'affiche a la place, il dit quoi corriger.
+Ouvrir http://127.0.0.1:5100/ dans le navigateur :
+  - internet OK  -> redirection vers le site en ligne (normal)
+  - pour simuler une coupure sans couper internet : fermer la fenetre,
+    ouvrir une invite de commandes dans ce dossier et taper
+        set OFFLINE_FORCE=1
+        MediLogicOffline.exe
+    (uniquement pour tester — jamais en usage reel).
+Fermer la fenetre quand c'est bon.
+
+----------------------------------------------------------------
+ ETAPE 4 — Demarrage automatique a chaque ouverture de session
+----------------------------------------------------------------
+  Sans droits administrateur : double-cliquer installer_sans_admin.bat
+  Avec droits administrateur : clic droit sur
+      installer_tache_planifiee.bat > "Executer en tant qu'administrateur"
+
+----------------------------------------------------------------
+ ETAPE 5 — Favori du personnel
+----------------------------------------------------------------
+Remplacer le favori habituel par  http://127.0.0.1:5100/  sur ce poste.
+Si une page semble bloquee pendant une coupure, revenir sur ce favori :
+l'aiguillage se refait et bascule en mode hors-ligne.
+
+----------------------------------------------------------------
+ MISE A JOUR
+----------------------------------------------------------------
+Remplacer MediLogicOffline.exe par le nouveau (les fichiers .env et
+credentials.json restent), puis redemarrer le PC (ou fermer la fenetre
+noire et relancer lancer_offline.bat).
+
+----------------------------------------------------------------
+ EN CAS DE PROBLEME
+----------------------------------------------------------------
+Le journal complet est dans  C:\ProgramData\MediLogicOffline\MediLogicOffline.log
+Les donnees locales et sauvegardes sont dans  C:\ProgramData\MediLogicOffline\
+Etat de la synchronisation :  http://127.0.0.1:5100/api/offline/sync/status

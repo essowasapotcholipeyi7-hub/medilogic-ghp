@@ -14,3 +14,7 @@ credentials.json
 *.sqlite3-shm
 *.sqlite3-wal
 .secret_key
+
+# Executable hors-ligne (PyInstaller) — produit par offline/exe/construire_exe.bat
+dist/
+build/

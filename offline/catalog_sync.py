@@ -18,9 +18,20 @@ hors-ligne (voir auth_offline.py).
 import json
 from datetime import datetime, timezone
 
-from sheets_helper import sheets_helper
 from offline.config_offline import OFFLINE_STRUCTURE_ID, DATABASE_URL, OFFLINE_FORCE
 from offline.db_offline import get_connection
+
+
+def _sheets():
+    """⭐ Import PARESSEUX de sheets_helper : son instance globale se connecte
+    à Google Sheets dès l'import (open_by_key). Importé en tête de module,
+    l'appli hors-ligne ne pouvait donc pas DÉMARRER si le réseau était déjà
+    coupé (ou credentials.json absent) au lancement — par exemple un PC
+    redémarré en pleine coupure, soit exactement le moment où on a besoin
+    d'elle. Trouvé le 2026-10-05 en testant l'exécutable Windows. L'échec,
+    s'il arrive, se produit maintenant dans le try/except de l'appelant."""
+    from sheets_helper import sheets_helper
+    return sheets_helper
 
 
 class ReseauSimuleCoupe(Exception):
@@ -54,6 +65,7 @@ def _valeur_sqlite(v):
 def _rafraichir_table(nom_table, base_sheet, cle_champ):
     if OFFLINE_FORCE:
         raise ReseauSimuleCoupe()
+    sheets_helper = _sheets()
     sheets_helper.set_structure(OFFLINE_STRUCTURE_ID)
     lignes = sheets_helper.get_all_records(base_sheet, use_prefix=True, force_refresh=True)
     if lignes is None:
@@ -279,6 +291,7 @@ def rafraichir_utilisateurs():
     connexion en ligne (feuille struct_{id}_users, voir index() app.py)."""
     if OFFLINE_FORCE:
         raise ReseauSimuleCoupe()
+    sheets_helper = _sheets()
     sheets_helper.set_structure(OFFLINE_STRUCTURE_ID)
     lignes = sheets_helper.get_all_records('users', use_prefix=True, force_refresh=True)
     if lignes is None:

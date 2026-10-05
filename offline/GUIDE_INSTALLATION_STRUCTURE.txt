@@ -13,6 +13,23 @@ solution — regardez-y en premier si quelque chose bloque.
 
 
 ----------------------------------------------------------------
+ DEUX FAÇONS D'INSTALLER — CHOISIR D'ABORD
+----------------------------------------------------------------
+
+  A) SANS PYTHON (recommandé pour un PC de structure) : un seul dossier
+     à copier, contenant MediLogicOffline.exe. Rien à installer sur le
+     PC. Marche à suivre : fichier LISEZMOI.txt dans ce dossier. Le
+     dossier se fabrique sur le PC de développement avec
+         offline\exe\construire_exe.bat     (résultat : dist\MediLogicOffline\)
+     Les sections "AVANT DE COMMENCER" (3 valeurs Render) et "ÉTAPE 7"
+     (favori du personnel) ci-dessous s'appliquent aussi à cette voie.
+     Pour mettre à jour : remplacer le fichier .exe, redémarrer le PC.
+
+  B) AVEC PYTHON (PC de développement, ou si l'exe ne peut pas être
+     utilisé) : suivre toutes les étapes ci-dessous.
+
+
+----------------------------------------------------------------
  AVANT DE COMMENCER — 3 valeurs à récupérer sur Render
 ----------------------------------------------------------------
 

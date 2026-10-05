@@ -22,6 +22,32 @@ Si le PC client démarre avec une clé différente (ou absente) :
 **Ne jamais démarrer l'appli hors-ligne en production sans avoir vérifié
 que cette clé est bien la même qu'en production.**
 
+## Voie rapide : exécutable sans Python (recommandée chez le client)
+
+Depuis le 2026-10-05, le mode hors-ligne existe aussi en **un seul
+exécutable Windows** (`MediLogicOffline.exe`, ~30 Mo) qui embarque Python et
+toutes les dépendances : le PC client n'a **rien** à installer.
+
+Sur le PC de développement (PyInstaller installé une fois avec
+`pip install pyinstaller`) :
+
+```bat
+offline\exe\construire_exe.bat
+```
+
+produit `dist\MediLogicOffline\` : l'exe, `lancer_offline.bat` (relance
+automatique), les deux scripts d'installation du démarrage automatique,
+`env.exemple` et `LISEZMOI.txt` (la marche à suivre côté client). À copier
+tel quel sur le PC client, par ex. `C:\MediLogicOffline`, puis y déposer
+`.env` (modèle `env.exemple`) et `credentials.json`. L'avertissement sur
+`PATIENT_ENCRYPTION_KEY` ci-dessus s'applique à l'identique.
+
+Au lancement, l'exe vérifie le `.env` et explique en clair ce qui manque ;
+tout ce qu'il affiche est aussi écrit dans
+`C:\ProgramData\MediLogicOffline\MediLogicOffline.log`. Mise à jour :
+remplacer le `.exe`, redémarrer le PC. Les étapes ci-dessous (venv, pip)
+ne concernent que l'installation **avec** Python.
+
 ## Prérequis sur le PC client
 
 - Windows (10/11).
