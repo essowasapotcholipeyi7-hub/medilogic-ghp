@@ -88,6 +88,7 @@
         background-color: #f8f9fa;
         transform: translateX(2px);
     }
+
 </style>
 {% endblock %}
 
@@ -233,33 +234,6 @@
             </div>
         </div>
 
-        <!-- Boutons action rapide -->
-        <div class="row g-3 mt-2">
-            <div class="col-md-3 col-6">
-                <a href="{{ url_for('actes_vente') }}" class="btn btn-primary w-100 quick-action-btn py-3 rounded-3 shadow-sm">
-                    <i class="fas fa-stethoscope fa-lg d-block mb-2"></i>
-                    <span class="fw-semibold">Nouvel acte</span>
-                </a>
-            </div>
-            <div class="col-md-3 col-6">
-                <a href="{{ url_for('pharma_vente') }}" class="btn btn-success w-100 quick-action-btn py-3 rounded-3 shadow-sm">
-                    <i class="fas fa-pills fa-lg d-block mb-2"></i>
-                    <span class="fw-semibold">Vente pharmacie</span>
-                </a>
-            </div>
-            <div class="col-md-3 col-6">
-                <a href="{{ url_for('patients') }}" class="btn btn-info w-100 quick-action-btn py-3 rounded-3 shadow-sm text-white">
-                    <i class="fas fa-user-plus fa-lg d-block mb-2"></i>
-                    <span class="fw-semibold">Nouveau patient</span>
-                </a>
-            </div>
-            <div class="col-md-3 col-6">
-                <a href="{{ url_for('historique_ventes') }}" class="btn btn-secondary w-100 quick-action-btn py-3 rounded-3 shadow-sm">
-                    <i class="fas fa-history fa-lg d-block mb-2"></i>
-                    <span class="fw-semibold">Historique</span>
-                </a>
-            </div>
-        </div>
     </div>
 </div>
 

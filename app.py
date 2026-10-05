@@ -191,6 +191,49 @@ def _menu_lateral_actif_session():
     return bool(param and param.menu_lateral_actif)
 
 app.jinja_env.globals['menu_lateral_actif'] = _menu_lateral_actif_session
+
+
+# ⭐ Navigation guidée (patron, 2026-10-04 : "on ne sait pas par où
+# commencer [...] accès facile entre les onglets") — page d'accueil et
+# barre de liens en haut de chaque page, toutes deux alimentées par le
+# même registre (utils/navigation.py) et filtrées avec les mêmes
+# conditions que le menu. Calculé une seule fois par requête (flask.g).
+def _navigation_session():
+    from flask import g
+    if hasattr(g, '_navigation_cache'):
+        return g._navigation_cache
+    from utils.navigation import ContexteNavigation, domaines_visibles, parcours_visible, onglet_courant
+    ctx = ContexteNavigation(
+        role=session.get('role'),
+        is_admin=bool(session.get('is_admin')),
+        a_acces=a_acces,
+        onglet_cache=lambda cle: onglet_cache(session.get('structure_id'), cle),
+        bloque=bool(_abonnement_statut_session().get('bloque_effectif')),
+    )
+    domaines = domaines_visibles(ctx)
+
+    def _vers_dict(o, domaine):
+        return {'id': o.id, 'libelle': o.libelle, 'icone': o.icone, 'description': o.description,
+                'mots_cles': o.mots_cles, 'domaine': domaine.libelle,
+                'url': url_for(o.endpoint, **o.kwargs)}
+
+    arguments = {**(request.view_args or {}), **request.args.to_dict()}
+    domaine_actif, onglet_actif = onglet_courant(domaines, request.endpoint, arguments)
+    g._navigation_cache = {
+        'domaines': [
+            {'id': d.id, 'libelle': d.libelle, 'icone': d.icone, 'onglets': [_vers_dict(o, d) for o in onglets]}
+            for d, onglets in domaines
+        ],
+        'parcours': [
+            {**e, 'onglets': [_vers_dict(o, next(d for d, os in domaines if o in os)) for o in e['onglets']]}
+            for e in parcours_visible(domaines)
+        ],
+        'domaine_actif': domaine_actif.id if domaine_actif else None,
+        'onglet_actif': onglet_actif.id if onglet_actif else None,
+    }
+    return g._navigation_cache
+
+app.jinja_env.globals['navigation'] = _navigation_session
 app.jinja_env.globals['ABONNEMENT_WHATSAPP_NUMERO'] = ABONNEMENT_WHATSAPP_NUMERO
 # ⭐ Variante prenant un structure_id explicite — pour admin_global.html
 # (session super-admin, pas de session structure) : un badge de statut par
@@ -1888,7 +1931,7 @@ def health():
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if 'user_id' in session:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('page_accueil'))
     
     if request.method == 'POST':
         email = request.form.get('email')
@@ -1996,7 +2039,7 @@ def index():
 
                                 print(f"✅ Connexion réussie pour {row.get('nom')} (rôle: {role})")
                                 flash(f'Bienvenue {row.get("nom")}', 'success')
-                                return redirect(url_for('dashboard'))
+                                return redirect(url_for('page_accueil'))
                             else:
                                 print("❌ Structure non active")
                                 flash('Structure non activée', 'warning')
@@ -2044,7 +2087,7 @@ def index():
                             _reinitialiser_medecin_du_jour_connexion(structure.get('ID'))
 
                             flash(f'Bienvenue {structure.get("nom")}', 'success')
-                            return redirect(url_for('dashboard'))
+                            return redirect(url_for('page_accueil'))
                         else:
                             flash('Structure en attente d\'activation', 'warning')
                             return redirect(url_for('index'))
@@ -2185,7 +2228,7 @@ def login_qr():
     db.session.commit()
 
     flash(f'Bienvenue {nom_bienvenue}', 'success')
-    return jsonify({'success': True, 'redirect': url_for('dashboard')})
+    return jsonify({'success': True, 'redirect': url_for('page_accueil')})
 
 
 @app.route('/api/admin/qr/statut/<type_compte>/<int:utilisateur_id>', methods=['GET'])
@@ -2393,7 +2436,7 @@ def login_webauthn_verifier():
         return erreur
 
     flash(f'Bienvenue {nom_bienvenue}', 'success')
-    return jsonify({'success': True, 'redirect': url_for('dashboard')})
+    return jsonify({'success': True, 'redirect': url_for('page_accueil')})
 
 
 # MODIFIER la route d'inscription
@@ -2828,6 +2871,59 @@ def register():
         return redirect(url_for('index'))
     
     return render_template('register.html')
+
+@app.route('/accueil')
+@login_required
+def page_accueil():
+    """Page d'accueil guidée, point d'arrivée après la connexion — patron,
+    2026-10-04 : "on va séparer page d'accueil [...] et tableau de bord
+    [...] actuellement la page qui s'affiche est trop longue". Recherche,
+    parcours du patient et onglets par domaine (utils/navigation.py) ; les
+    chiffres restent sur /dashboard. Même redirection que dashboard() pour
+    le laborantin/radiologue, dont l'accueil EST leur file de demandes."""
+    if session.get('role') == 'laborantin':
+        return redirect(url_for('page_laboratoire'))
+    if session.get('role') == 'radiologue':
+        return redirect(url_for('page_radiologie'))
+
+    # ⭐ "À traiter" (patron : page d'accueil "plus jolie, attirante") —
+    # mêmes requêtes que les badges du menu, et seulement si l'onglet
+    # correspondant est visible pour cet utilisateur (même registre que
+    # le reste de la page). Une pastille n'apparaît que s'il y a quelque
+    # chose à traiter.
+    structure_id = session.get('structure_id')
+    visibles = {o['id'] for d in _navigation_session()['domaines'] for o in d['onglets']}
+    a_traiter = []
+    if 'ventes_attente' in visibles:
+        n = VenteEnAttente.query.filter_by(structure_id=structure_id, statut='en_attente').count()
+        if n:
+            a_traiter.append({'texte': f"{n} vente{'s' if n > 1 else ''} en attente", 'icone': 'fa-hourglass-half',
+                              'url': url_for('page_ventes_en_attente'), 'urgent': True})
+    if 'validations' in visibles:
+        n = ValidationDemande.query.filter_by(structure_id=structure_id, statut='en_attente').count()
+        if n:
+            a_traiter.append({'texte': f"{n} demande{'s' if n > 1 else ''} à valider", 'icone': 'fa-circle-check',
+                              'url': url_for('page_validations'), 'urgent': True})
+    if 'rendez_vous' in visibles:
+        n = RendezVous.query.filter_by(structure_id=structure_id, date_rendez_vous=date.today()).filter(
+            RendezVous.statut.in_(RendezVousService.VUES_STATUTS['actifs']),
+            db.or_(RendezVous.archive.is_(False), RendezVous.archive.is_(None)),
+        ).count()
+        if n:
+            a_traiter.append({'texte': f"{n} rendez-vous aujourd'hui", 'icone': 'fa-calendar-day',
+                              'url': url_for('rendez_vous'), 'urgent': False})
+
+    # Heure serveur = heure du Togo (GMT, comme Render).
+    maintenant = datetime.now()
+    jours = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+    mois = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet',
+            'août', 'septembre', 'octobre', 'novembre', 'décembre']
+    return render_template(
+        'accueil.html',
+        a_traiter=a_traiter,
+        salutation='Bonsoir' if maintenant.hour >= 18 else 'Bonjour',
+        date_du_jour=f"{jours[maintenant.weekday()]} {maintenant.day} {mois[maintenant.month - 1]} {maintenant.year}",
+    )
 
 @app.route('/dashboard')
 @login_required

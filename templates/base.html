@@ -1151,6 +1151,40 @@
             align-items: center;
             justify-content: center;
         }
+
+        /* ===== BARRE DE LIENS DU DOMAINE (voir utils/navigation.py) ===== */
+        .nav-domaine {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow-x: auto;
+            white-space: nowrap;
+            padding: 6px 2px 10px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #e3e8ec;
+            scrollbar-width: thin;
+        }
+        .nav-domaine-titre {
+            font-size: 12px;
+            font-weight: 600;
+            color: #51636D;
+            margin-right: 4px;
+            flex-shrink: 0;
+        }
+        .nav-domaine a {
+            flex-shrink: 0;
+            font-size: 13px;
+            padding: 5px 12px;
+            border-radius: 999px;
+            border: 1px solid #e3e8ec;
+            background: #fff;
+            color: #0A3D5C;
+            text-decoration: none;
+        }
+        .nav-domaine a:hover { border-color: #0E9D67; color: #0E9D67; }
+        .nav-domaine a:focus-visible { outline: 2px solid #0E9D67; outline-offset: 2px; }
+        .nav-domaine a.actif { background: #0A3D5C; border-color: #0A3D5C; color: #fff; }
+        .nav-domaine a.nav-domaine-accueil { margin-left: auto; border-style: dashed; color: #51636D; }
         
         .loader {
             width: 60px;
@@ -2079,7 +2113,7 @@
             <span style="color: #0E9D67;">SI</span> <span id="siAcronymeTexte" style="color: #0056a7;">{{ structure_acronyme }}</span>
         </a>
         {% elif session.user_id %}
-        <a class="navbar-brand" href="{{ url_for('dashboard') }}">
+        <a class="navbar-brand" href="{{ url_for('page_accueil') }}">
             <span style="color: #0E9D67;">SI</span> <span id="siAcronymeTexte" style="color: #0056a7;">{{ structure_acronyme }}</span>
         </a>
         {% else %}
@@ -2235,11 +2269,20 @@
 {% set _bloq = _ab.bloque_effectif %}
 <div class="top-nav">
     <ul class="nav-group">
+        <!-- ⭐ Accueil (guide : recherche, parcours, onglets par domaine) et
+             Tableau de bord (chiffres) séparés — patron, 2026-10-04. -->
         <li class="nav-item nav-item-accueil">
-            <a class="nav-link-top" href="{{ url_for('dashboard') }}">
+            <a class="nav-link-top" href="{{ url_for('page_accueil') }}">
                 Accueil
             </a>
         </li>
+        {% if session.role not in ['laborantin', 'radiologue'] %}
+        <li class="nav-item">
+            <a class="nav-link-top" href="{{ url_for('dashboard') }}">
+                Tableau de bord
+            </a>
+        </li>
+        {% endif %}
         <!-- ⭐ Laborantin/Radiologue : cette barre du haut contournait
              complètement la restriction posée sur le sidebar (elle n'a
              jamais été gardée par rôle) — un labo/radio pouvait rouvrir
@@ -2841,9 +2884,43 @@
             {% endwith %}
         </div>
 
+        <!-- ===== BARRE DE LIENS DU DOMAINE (patron, 2026-10-04 : "accès
+             facile entre les onglets") — les autres onglets du même domaine
+             que la page ouverte, mêmes conditions d'affichage que le menu
+             (utils/navigation.py). Absente sur l'accueil (qui montre déjà
+             tout) et sur les pages hors registre. ===== -->
+        {% if not (cacher_navigation is defined and cacher_navigation) and request.endpoint not in ['dashboard', 'page_accueil'] %}
+        {% set _nav = navigation() %}
+        {% set _dom = (_nav.domaines | selectattr('id', 'equalto', _nav.domaine_actif) | list | first) if _nav.domaine_actif else none %}
+        {% if _dom and _dom.onglets | length > 1 %}
+        <nav class="nav-domaine" aria-label="Onglets {{ _dom.libelle }}">
+            <span class="nav-domaine-titre"><i class="fas {{ _dom.icone }} me-1" aria-hidden="true"></i>{{ _dom.libelle }}</span>
+            {% for o in _dom.onglets %}
+            <a href="{{ o.url }}" class="{{ 'actif' if o.id == _nav.onglet_actif }}" {% if o.id == _nav.onglet_actif %}aria-current="page"{% endif %}>{{ o.libelle }}</a>
+            {% endfor %}
+            {% if session.role not in ['laborantin', 'radiologue'] %}{# leur accueil les renvoie au labo/radio #}
+            <a href="{{ url_for('page_accueil') }}" class="nav-domaine-accueil"><i class="fas fa-table-cells-large me-1" aria-hidden="true"></i>Tous les onglets</a>
+            {% endif %}
+        </nav>
+        {% endif %}
+        {% if _nav.onglet_actif %}
+        <script>
+        // "Récemment ouverts" de la page d'accueil : mémorise cet onglet dans
+        // le navigateur (clé propre à la structure et à l'utilisateur).
+        try {
+            const cle = 'ongletsRecents_' + {{ session.structure_id | tojson }} + '_' + {{ session.user_id | tojson }};
+            const actuel = {{ _nav.onglet_actif | tojson }};
+            const liste = JSON.parse(localStorage.getItem(cle) || '[]').filter(id => id !== actuel);
+            liste.unshift(actuel);
+            localStorage.setItem(cle, JSON.stringify(liste.slice(0, 6)));
+        } catch (e) { /* stockage indisponible : sans conséquence */ }
+        </script>
+        {% endif %}
+        {% endif %}
+
         <!-- ===== CONTENU ===== -->
         {% block content %}{% endblock %}
-        
+
     </main>
     
 </div>
