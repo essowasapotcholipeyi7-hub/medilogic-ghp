@@ -3,6 +3,54 @@
 {% block title %}Admin Global{% endblock %}
 
 {% block content %}
+<!-- ⭐ Présentation clients par Google Meet (patron, 2026-10-07 : "le bouton
+     pour Google Meet, c'est plus simple"). Google génère le lien à la
+     création de la réunion : on l'ouvre, on colle le lien ici, et
+     l'invitation WhatsApp part toute prête. Visible uniquement en
+     administration globale (super admin). -->
+<div class="card mb-3 border-success">
+    <div class="card-body py-2">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <strong class="me-2"><i class="fas fa-video text-success me-1"></i>Présentation client</strong>
+            <a class="btn btn-success btn-sm fw-semibold" href="https://meet.google.com/new" target="_blank" rel="noopener">
+                <i class="fas fa-plus me-1"></i> Nouvelle réunion Google Meet
+            </a>
+            <input type="text" id="meetLien" class="form-control form-control-sm" placeholder="Collez ici le lien meet.google.com/…" style="max-width:280px;">
+            <input type="text" id="meetNomClient" class="form-control form-control-sm" placeholder="Nom du client / de la structure" style="max-width:220px;">
+            <input type="text" id="meetWhatsApp" class="form-control form-control-sm" placeholder="N° WhatsApp du client (ex. 90123456)" style="max-width:230px;">
+            <button type="button" class="btn btn-outline-success btn-sm" onclick="envoyerInvitationMeet()">
+                <i class="fab fa-whatsapp me-1"></i> Envoyer l'invitation
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copierInvitationMeet()" title="Copier le texte de l'invitation (mail, SMS…)">
+                <i class="fas fa-copy"></i> Copier
+            </button>
+        </div>
+        <div class="small text-muted mt-1">1. Cliquez « Nouvelle réunion » : Google ouvre la salle et affiche son lien. 2. Copiez ce lien ici, indiquez le client. 3. « Envoyer l'invitation » ouvre WhatsApp avec le message prêt. Vous restez organisateur de la réunion : vous admettez les participants et vous partagez votre écran.</div>
+    </div>
+</div>
+<script>
+function texteInvitationMeet() {
+    const lien = (document.getElementById('meetLien').value || '').trim();
+    const client = (document.getElementById('meetNomClient').value || '').trim();
+    if (!/^https?:\/\/meet\.google\.com\//i.test(lien)) return null;
+    return `Bonjour${client ? ' ' + client : ''}, voici le lien de notre présentation de MediLogic en visio : ${lien}
+Cliquez dessus à l'heure convenue (navigateur ou application Google Meet sur téléphone, pas besoin de compte). À tout à l'heure.`;
+}
+async function envoyerInvitationMeet() {
+    const texte = texteInvitationMeet();
+    if (!texte) { await afficherMessage("Collez d'abord le lien de la réunion (il commence par meet.google.com).", {type: 'warning'}); return; }
+    let numero = (document.getElementById('meetWhatsApp').value || '').replace(/\D/g, '');
+    if (!numero) { await afficherMessage('Indiquez le numéro WhatsApp du client.', {type: 'warning'}); return; }
+    if (numero.length === 8) numero = '228' + numero;
+    window.open('https://wa.me/' + numero + '?text=' + encodeURIComponent(texte), '_blank');
+}
+async function copierInvitationMeet() {
+    const texte = texteInvitationMeet();
+    if (!texte) { await afficherMessage("Collez d'abord le lien de la réunion (il commence par meet.google.com).", {type: 'warning'}); return; }
+    try { await navigator.clipboard.writeText(texte); await afficherMessage('Invitation copiée.', {type: 'success'}); }
+    catch (e) { await afficherMessage(texte); }
+}
+</script>
 <div class="card">
     <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
     <h4><i class="fas fa-globe"></i> Administration Globale</h4>
