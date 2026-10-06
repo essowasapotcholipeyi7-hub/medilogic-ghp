@@ -71,8 +71,21 @@ async function copierInvitationMeet() {
     </div>
 </div>
     <div class="card-body">
+        <!-- ⭐ Patron (2026-10-07) : sur un écran moins large, le tableau débordait
+             de la carte (boutons d'actions coupés, nom de structure écrasé). Les
+             actions passent à la ligne et le nom garde une largeur minimale. -->
+        <style>
+            #tableStructures .btn-group { display: flex; flex-wrap: wrap; gap: 4px; min-width: 220px; }
+            #tableStructures .btn-group > .btn, #tableStructures .btn-group > select,
+            #tableStructures .btn-group > .form-select, #tableStructures .btn-group > .btn-group { border-radius: .25rem !important; margin: 0; }
+            #tableStructures select, #tableStructures .form-select { max-width: 150px; }
+            #tableStructures td:nth-child(2) { min-width: 170px; }
+            #tableStructures td, #tableStructures th { padding: .35rem .4rem; }
+            #tableStructures td, #tableStructures th { vertical-align: middle; }
+            #tableStructures { table-layout: auto; }
+        </style>
         <div class="table-responsive">
-            <table class="table table-bordered table-hover">
+            <table class="table table-bordered table-hover" id="tableStructures">
                 <thead class="table-dark">
                     <tr>
                         <th>ID</th>
