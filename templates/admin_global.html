@@ -3,6 +3,12 @@
 {% block title %}Admin Global{% endblock %}
 
 {% block content %}
+<!-- ⭐ Patron (2026-10-07) : "que ça occupe les bords" — sur cette page le
+     contenu va jusqu'aux bords de l'écran (marges intérieures réduites). -->
+<style>
+    .main-content { padding: 8px 10px !important; }
+    #tableStructures { width: 100% !important; }
+</style>
 <!-- ⭐ Présentation clients par Google Meet (patron, 2026-10-07 : "le bouton
      pour Google Meet, c'est plus simple"). Google génère le lien à la
      création de la réunion : on l'ouvre, on colle le lien ici, et
