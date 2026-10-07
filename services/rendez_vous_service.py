@@ -10,7 +10,7 @@ from crypto_helper import dechiffrer_patients_orm
 class RendezVousService:
     """Service pour la gestion des rendez-vous"""
     
-    STATUTS_VALIDES = ['programme', 'confirme', 'termine', 'annule', 'reporte', 'absent']
+    STATUTS_VALIDES = ['programme', 'confirme', 'termine', 'annule', 'reporte', 'absent', 'demande']
     STATUTS_ACTIFS = ['programme', 'confirme']
     DUREE_MIN = 15
     DUREE_MAX = 120
@@ -38,6 +38,7 @@ class RendezVousService:
         'depasses': ['programme', 'confirme', 'reporte'],
         'termines': ['termine', 'absent'],
         'annules': ['annule'],
+        'demandes': ['demande'],   # ⭐ demandes reçues du portail patient (2026-10-07)
         'tous': None,
     }
     VUE_DEFAUT = 'actifs'
@@ -290,7 +291,8 @@ class RendezVousService:
                 'termine': [],
                 'annule': [],
                 'reporte': ['confirme', 'annule', 'programme'],
-                'absent': []
+                'absent': [],
+                'demande': ['confirme', 'annule', 'programme'],   # ⭐ demande du portail
             }
             
             if nouveau_statut not in transitions.get(rdv.statut, []):
