@@ -8156,12 +8156,19 @@ def _rdv_calendrier_json(structure_id, debut, fin, avec_telephone=True):
     } for r in rdvs]
 
 
+def _url_partage_rdv(token):
+    """Lien absolu en https en production (derrière le proxy de Render le
+    schéma vu par Flask peut être http) ; http seulement en local."""
+    local = request.host.startswith(('localhost', '127.0.0.1'))
+    return url_for('page_rdv_partage', token=token, _external=True, _scheme='http' if local else 'https')
+
+
 @app.route('/rendez_vous/api/lien-partage', methods=['GET'])
 @login_required
 @permission_requise('rendez_vous')
 def api_rdv_lien_partage():
     lien = LienPartageRendezVous.obtenir_ou_creer(session.get('structure_id'), session.get('user_name'))
-    return jsonify({'success': True, 'url': url_for('page_rdv_partage', token=lien.token, _external=True),
+    return jsonify({'success': True, 'url': _url_partage_rdv(lien.token),
                     'regenere_le': lien.regenere_le.strftime('%d/%m/%Y %H:%M') if lien.regenere_le else None})
 
 
@@ -8170,7 +8177,7 @@ def api_rdv_lien_partage():
 @permission_requise('rendez_vous')
 def api_rdv_lien_partage_regenerer():
     lien = LienPartageRendezVous.obtenir_ou_creer(session.get('structure_id'), session.get('user_name')).regenerer()
-    return jsonify({'success': True, 'url': url_for('page_rdv_partage', token=lien.token, _external=True)})
+    return jsonify({'success': True, 'url': _url_partage_rdv(lien.token)})
 
 
 def _lien_partage_valide(token):
